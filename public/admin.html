@@ -45,6 +45,15 @@
     .auth-overlay { position:fixed; inset:0; display:grid; place-items:center; background:rgba(244,246,248,.92); z-index:1000; }
     .auth-dialog { width:min(92vw,380px); background:#fff; border:1px solid var(--border); border-radius:10px; padding:1.4rem; box-shadow:0 18px 50px rgba(16,24,40,.18); }
     .auth-error { color:var(--red); min-height:1.2rem; }
+    .ms-sign-in-button { width:100%; min-height:2.75rem; display:inline-flex; align-items:center; justify-content:center; gap:.75rem; border:1px solid #8c8c8c; border-radius:2px; background:#fff; color:#1f1f1f; font-weight:600; box-shadow:none; }
+    .ms-sign-in-button:hover { background:#f5f5f5; }
+    .ms-sign-in-button:disabled { cursor:progress; opacity:.72; }
+    .ms-sign-in-button:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
+    .ms-logo { width:1.25rem; height:1.25rem; display:grid; grid-template-columns:1fr 1fr; gap:2px; flex:0 0 auto; }
+    .ms-logo span:nth-child(1) { background:#f25022; }
+    .ms-logo span:nth-child(2) { background:#7fba00; }
+    .ms-logo span:nth-child(3) { background:#00a4ef; }
+    .ms-logo span:nth-child(4) { background:#ffb900; }
   </style>
 </head>
 <body>
@@ -52,7 +61,10 @@
     <div class="auth-dialog" role="dialog" aria-modal="true">
       <h2>Sign in</h2>
       <p>Use your provisioned Microsoft account.</p>
-      <button type="button" id="ms-sign-in" class="primary">Sign in with Microsoft</button>
+      <button type="button" id="ms-sign-in" class="ms-sign-in-button">
+        <span class="ms-logo" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+        <span>Sign in with Microsoft</span>
+      </button>
       <p id="auth-error" class="auth-error" aria-live="polite"></p>
     </div>
   </div>

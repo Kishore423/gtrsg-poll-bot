@@ -68,6 +68,20 @@ async function startMicrosoftSignIn(config) {
     if (authError) authError.textContent = 'Microsoft sign-in is not configured on this deployment.';
     return;
   }
+  if (authError) authError.textContent = '';
+  if (msSignInBtn) msSignInBtn.disabled = true;
+  const status = await nativeFetch('/api/auth/provider-status?provider=azure')
+    .then((response) => response.json())
+    .catch((error) => ({ enabled: false, error: error.message }));
+  if (!status.enabled) {
+    if (authError) {
+      authError.textContent = status.error_code === 'validation_failed'
+        ? 'Microsoft sign-in is not enabled in Supabase yet. Enable the Azure provider in Supabase Authentication > Providers.'
+        : `Microsoft sign-in is not available: ${status.error || 'provider is not enabled'}`;
+    }
+    if (msSignInBtn) msSignInBtn.disabled = false;
+    return;
+  }
   window.location.href = supabaseAuthUrl(config, 'authorize', {
     provider: 'azure',
     redirect_to: window.location.origin + window.location.pathname,

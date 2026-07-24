@@ -84,6 +84,34 @@ function createServer(db, telegram, options = {}) {
     }
   });
 
+  app.get('/api/auth/provider-status', async (req, res) => {
+    const provider = String(req.query.provider || '').trim();
+    if (!provider) return res.status(400).json({ error: 'Provider is required' });
+    if (!options.supabaseUrl) return res.json({ provider, enabled: false, error: 'Supabase Auth is not configured' });
+
+    try {
+      const origin = options.appUrl || `${req.protocol}://${req.get('host')}`;
+      const authUrl = new URL('/auth/v1/authorize', options.supabaseUrl);
+      authUrl.searchParams.set('provider', provider);
+      authUrl.searchParams.set('redirect_to', `${origin.replace(/\/$/, '')}/`);
+      authUrl.searchParams.set('scopes', 'openid email profile');
+
+      const response = await fetch(authUrl, { redirect: 'manual' });
+      if ((response.status >= 300 && response.status < 400) || response.ok) {
+        return res.json({ provider, enabled: true });
+      }
+      const body = await response.json().catch(() => ({}));
+      res.json({
+        provider,
+        enabled: false,
+        error: body.msg || body.error_description || body.error || 'Provider is not enabled',
+        error_code: body.error_code,
+      });
+    } catch (error) {
+      res.status(502).json({ provider, enabled: false, error: error.message });
+    }
+  });
+
   // Tells the caller who they are, so the UI can scope itself and decide whether to
   // show the Admin link. Unprovisioned callers get the 403 from requireUser.
   app.get('/api/me', requireUser(options.verifyUser || (async () => null)), (req, res) => {

@@ -32,6 +32,30 @@ function supabaseAuthUrl(config, path, params = {}) {
   return url.toString();
 }
 
+async function startMicrosoftSignIn(config) {
+  if (!config?.supabaseUrl) {
+    authError.textContent = 'Microsoft sign-in is not configured on this deployment.';
+    return;
+  }
+  authError.textContent = '';
+  if (msSignInBtn) msSignInBtn.disabled = true;
+  const status = await nativeFetch('/api/auth/provider-status?provider=azure')
+    .then((response) => response.json())
+    .catch((error) => ({ enabled: false, error: error.message }));
+  if (!status.enabled) {
+    authError.textContent = status.error_code === 'validation_failed'
+      ? 'Microsoft sign-in is not enabled in Supabase yet. Enable the Azure provider in Supabase Authentication > Providers.'
+      : `Microsoft sign-in is not available: ${status.error || 'provider is not enabled'}`;
+    if (msSignInBtn) msSignInBtn.disabled = false;
+    return;
+  }
+  window.location.href = supabaseAuthUrl(config, 'authorize', {
+    provider: 'azure',
+    redirect_to: window.location.origin + window.location.pathname,
+    scopes: 'openid email profile',
+  });
+}
+
 function captureSessionFromRedirect() {
   if (!window.location.hash.includes('access_token')) return false;
   const params = new URLSearchParams(window.location.hash.slice(1));
@@ -152,13 +176,7 @@ async function bootstrap() {
   captureSessionFromRedirect();
   const config = await (await nativeFetch('/api/auth-config')).json();
   if (msSignInBtn) {
-    msSignInBtn.addEventListener('click', () => {
-      window.location.href = supabaseAuthUrl(config, 'authorize', {
-        provider: 'azure',
-        redirect_to: window.location.origin + window.location.pathname,
-        scopes: 'openid email profile',
-      });
-    });
+    msSignInBtn.addEventListener('click', () => startMicrosoftSignIn(config));
   }
   if (config.required && !authSession?.access_token) return showLogin();
   if (!config.required) {
