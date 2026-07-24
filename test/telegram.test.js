@@ -24,3 +24,23 @@ test('Telegram client does not retry permanent API errors', async () => {
   await assert.rejects(client.call('PRIMARY', 'sendPoll', {}), /400 bad request/);
   assert.equal(calls, 1);
 });
+
+test('Telegram client resolves dynamic bot tokens and supports name sync calls', async () => {
+  const seen = [];
+  const client = createTelegramClient({
+    resolveToken: async (botId) => `token-for-${botId}`,
+    fetchImpl: async (url, init) => {
+      seen.push({ url, body: JSON.parse(init.body) });
+      const method = /\/([^/]+)$/.exec(url)[1];
+      const result = method === 'getMyName' ? { name: 'User bot' } : true;
+      return new Response(JSON.stringify({ ok: true, result }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  });
+
+  assert.deepEqual(await client.getMyName('bot-123'), { name: 'User bot' });
+  assert.equal(await client.setMyName('bot-123', 'New bot name'), true);
+  assert.match(seen[0].url, /bottoken-for-bot-123\/getMyName$/);
+  assert.deepEqual(seen[1].body, { name: 'New bot name' });
+});

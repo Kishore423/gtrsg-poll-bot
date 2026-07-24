@@ -6,6 +6,7 @@ const { createServer } = require('./server');
 const { createTelegramClient } = require('./telegram');
 const { createMemoryDb } = require('./db/memory');
 const { createSupabaseAuth } = require('./auth');
+const { decryptToken } = require('./crypto');
 
 function isUnconfiguredVercel() {
   const hasProductionCredential = Boolean(process.env.DATABASE_URL || process.env.TELEGRAM_BOT_TOKEN ||
@@ -29,6 +30,12 @@ function buildAppFromEnv() {
       PRIMARY: process.env.TELEGRAM_BOT_TOKEN,
       WHCL: process.env.TELEGRAM_TOKEN_WHCL || process.env.TELEGRAM_BOT_TOKEN,
       PSA: process.env.TELEGRAM_TOKEN_PSA || process.env.TELEGRAM_BOT_TOKEN,
+    },
+    resolveToken: async (botId) => {
+      if (!db.getBot) return null;
+      const bot = await db.getBot(botId);
+      if (!bot || bot.enabled === false) return null;
+      return decryptToken(bot.token_encrypted);
     },
   });
 

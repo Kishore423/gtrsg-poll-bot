@@ -1,17 +1,18 @@
 const { parseUpdate } = require('./telegramUpdates');
 const { NOT_AVAILABLE_OPTION } = require('./pollBuilder');
 
-function managedGroupRoute(service) {
+function managedGroupRoute(botKey, { botRef = null } = {}) {
   return {
-    service: ['WHCL', 'PSA'].includes(service) ? service : null,
-    bot_id: service || 'PRIMARY',
+    service: ['WHCL', 'PSA'].includes(botKey) ? botKey : null,
+    bot_id: botRef || botKey || 'PRIMARY',
+    bot_ref: botRef,
   };
 }
 
 // Applies one Telegram update to the data store. Shared by the production
 // webhook route (server.js) and the local long-polling dev harness
 // (scripts/dev-telegram.js) so both behave identically.
-async function processTelegramUpdate(db, service, update) {
+async function processTelegramUpdate(db, service, update, { botRef = null } = {}) {
   const event = parseUpdate(update);
   if (event.type === 'poll_vote' && db.getScheduledPollByTelegramId &&
       await db.getScheduledPollByTelegramId(event.pollId)) {
@@ -25,28 +26,29 @@ async function processTelegramUpdate(db, service, update) {
       displayName: event.user.name,
       optionIds: event.optionIds,
       rawPayload: update,
-      botId: service,
+      botId: botRef || service,
     });
     return { handled: accepted ? 'poll_vote' : 'duplicate' };
   }
   if (update.update_id !== undefined && db.beginWebhookEvent) {
-    const accepted = await db.beginWebhookEvent(update.update_id, service, event.type);
+    const accepted = await db.beginWebhookEvent(update.update_id, botRef || service, event.type);
     if (!accepted) return { handled: 'duplicate' };
   }
 
   try {
 
   if (event.type === 'group_membership') {
-    if (service !== 'PRIMARY') {
+    if (['WHCL', 'PSA'].includes(service)) {
       await db.setTarget(service, { chat_id: event.chatId, title: event.title, active: event.active });
     }
     if (event.active && db.upsertTelegramGroupFromWebhook) {
-      const route = managedGroupRoute(service);
+      const route = managedGroupRoute(service, { botRef });
       await db.upsertTelegramGroupFromWebhook({
         telegram_chat_id: event.chatId,
         group_name: event.title || `${service} group`,
         service: route.service,
         bot_id: route.bot_id,
+        bot_ref: route.bot_ref,
       });
     }
     const result = {
@@ -60,16 +62,17 @@ async function processTelegramUpdate(db, service, update) {
   }
 
   if (event.type === 'group_seen') {
-    if (service !== 'PRIMARY') {
+    if (['WHCL', 'PSA'].includes(service)) {
       await db.setTarget(service, { chat_id: event.chatId, title: event.title, active: true });
     }
     if (db.upsertTelegramGroupFromWebhook) {
-      const route = managedGroupRoute(service);
+      const route = managedGroupRoute(service, { botRef });
       await db.upsertTelegramGroupFromWebhook({
         telegram_chat_id: event.chatId,
         group_name: event.title || `${service} group`,
         service: route.service,
         bot_id: route.bot_id,
+        bot_ref: route.bot_ref,
       });
     }
     const result = {

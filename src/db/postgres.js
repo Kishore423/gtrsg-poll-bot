@@ -8,9 +8,101 @@ function createSql(connectionString = process.env.DATABASE_URL) {
 function createPostgresDb(sql = createSql()) {
   // Alter unique constraint on telegram_groups to allow duplicate chat_ids with different bot_ids
   const initPromise = (async () => {
+    await sql`alter table telegram_groups add column if not exists bot_ref uuid references bots(id) on delete cascade`;
+    await sql`create index if not exists telegram_groups_bot_ref_idx on telegram_groups(bot_ref)`;
+    await sql`create unique index if not exists telegram_groups_chat_bot_ref_key
+      on telegram_groups(telegram_chat_id, bot_ref) where bot_ref is not null`;
+    await sql`alter table telegram_groups drop constraint if exists telegram_groups_bot_id_check`;
+    await sql`alter table telegram_groups alter column bot_id drop default`;
     await sql`ALTER TABLE telegram_groups DROP CONSTRAINT IF EXISTS telegram_groups_telegram_chat_id_key`;
     await sql`ALTER TABLE telegram_groups DROP CONSTRAINT IF EXISTS telegram_groups_telegram_chat_id_unique`;
-    await sql`ALTER TABLE telegram_groups ADD CONSTRAINT telegram_groups_chat_id_bot_id_key UNIQUE (telegram_chat_id, bot_id)`;
+    await sql`
+      do $$
+      begin
+        if not exists (
+          select 1 from pg_constraint where conname = 'telegram_groups_chat_id_bot_id_key'
+        ) then
+          alter table telegram_groups add constraint telegram_groups_chat_id_bot_id_key
+            unique (telegram_chat_id, bot_id);
+        end if;
+      end $$`;
+    await sql`
+      create or replace function public.apply_poll_response(
+        p_update_id bigint, p_poll_id text, p_user_id bigint, p_username text,
+        p_first_name text, p_last_name text, p_display_name text,
+        p_option_ids integer[], p_raw_payload jsonb, p_bot_id text default 'PRIMARY'
+      ) returns boolean language plpgsql security definer set search_path = public as $$
+      declare
+        v_poll scheduled_polls%rowtype;
+        v_group_bot text;
+        v_shift event_shifts%rowtype;
+        v_selected boolean;
+        v_now timestamptz := clock_timestamp();
+      begin
+        insert into webhook_events(telegram_update_id, bot_id, update_type)
+        values (p_update_id, p_bot_id, 'poll_answer')
+        on conflict (telegram_update_id) do nothing;
+        if not found then return false; end if;
+
+        select * into v_poll from scheduled_polls where telegram_poll_id = p_poll_id for update;
+        if not found then
+          update webhook_events set processing_status='ignored', processed_at=clock_timestamp()
+          where telegram_update_id=p_update_id;
+          return true;
+        end if;
+        select coalesce(bot_ref::text, bot_id) into v_group_bot
+        from telegram_groups where id=v_poll.telegram_group_id;
+        if p_bot_id is distinct from v_group_bot then
+          update webhook_events set processing_status='ignored', processed_at=clock_timestamp(),
+            error='poll belongs to a different bot' where telegram_update_id=p_update_id;
+          return true;
+        end if;
+
+        insert into telegram_users(telegram_user_id, telegram_username, first_name, last_name, display_name)
+        values (p_user_id, p_username, p_first_name, p_last_name, p_display_name)
+        on conflict (telegram_user_id) do update set telegram_username=excluded.telegram_username,
+          first_name=excluded.first_name, last_name=excluded.last_name,
+          display_name=excluded.display_name, updated_at=now();
+
+        insert into poll_response_events(event_id, scheduled_poll_id, telegram_poll_id,
+          telegram_user_id, selected_option_ids, selected_shift_ids, qualifying_response,
+          received_at, telegram_update_id, raw_payload)
+        select v_poll.event_id, v_poll.id, p_poll_id, p_user_id, p_option_ids,
+          coalesce(array_agg(s.id order by s.display_order) filter (where s.id is not null), '{}'),
+          cardinality(p_option_ids) > 0, v_now, p_update_id, p_raw_payload
+        from event_shifts s where s.event_id=v_poll.event_id
+          and s.display_order = any(p_option_ids);
+
+        for v_shift in select * from event_shifts where event_id=v_poll.event_id for update loop
+          v_selected := v_shift.display_order = any(p_option_ids);
+          insert into poll_participants(event_id, shift_id, telegram_user_id, current_response,
+            qualifying_since, status)
+          values (v_poll.event_id, v_shift.id, p_user_id, v_selected,
+            case when v_selected then v_now end, case when v_selected then 'not_qualified' else 'withdrawn' end)
+          on conflict (event_id, shift_id, telegram_user_id) do update set
+            current_response=excluded.current_response,
+            qualifying_since=case
+              when excluded.current_response and not poll_participants.current_response then excluded.qualifying_since
+              when excluded.current_response then poll_participants.qualifying_since
+              else null end,
+            status=case when excluded.current_response then poll_participants.status else 'withdrawn' end,
+            confirmed_position=case when excluded.current_response then poll_participants.confirmed_position end,
+            waiting_list_position=case when excluded.current_response then poll_participants.waiting_list_position end,
+            updated_at=now();
+          perform recalculate_shift_allocation(v_shift.id, 'telegram_response');
+        end loop;
+
+        update webhook_events set processing_status='processed', processed_at=clock_timestamp()
+        where telegram_update_id=p_update_id;
+        update confirmation_messages set status='scheduled', resolved_send_at=clock_timestamp(), updated_at=now()
+        where scheduled_poll_id=v_poll.id and status in ('sent','updated');
+        return true;
+      exception when others then
+        update webhook_events set processing_status='failed', processed_at=clock_timestamp(), error=sqlerrm
+        where telegram_update_id=p_update_id;
+        return false;
+      end $$;
+    `;
     await sql`
       create or replace function public.claim_due_polls(p_limit integer default 10)
       returns table (
@@ -34,7 +126,7 @@ function createPostgresDb(sql = createSql()) {
           from candidates c where sp.id=c.id
           returning sp.*
         )
-        select c.id, c.event_id, c.telegram_group_id, g.bot_id,
+        select c.id, c.event_id, c.telegram_group_id, coalesce(g.bot_ref::text, g.bot_id),
           g.telegram_chat_id, c.poll_question, c.poll_options, c.claim_token
         from claimed c
         join events e on e.id=c.event_id
@@ -62,7 +154,7 @@ function createPostgresDb(sql = createSql()) {
             claimed_at=now(), updated_at=now()
           from candidates c where cm.id=c.id returning cm.*
         )
-        select c.id, c.event_id, c.scheduled_poll_id, g.bot_id,
+        select c.id, c.event_id, c.scheduled_poll_id, coalesce(g.bot_ref::text, g.bot_id),
           g.telegram_chat_id, c.telegram_message_id, c.header_text, c.footer_text, c.resolved_send_at,
           c.show_waiting_list, c.show_empty_shifts, c.claim_token
         from claimed c join telegram_groups g on g.id=c.telegram_group_id and g.enabled;
@@ -168,10 +260,14 @@ function createPostgresDb(sql = createSql()) {
     // botId scopes the list to one user's bot; admins pass nothing to see all.
     async listTelegramGroups({ botId = null } = {}) {
       if (botId) {
-        return sql`select id,telegram_chat_id::text,group_name,service,bot_id,enabled
-          from telegram_groups where bot_id = ${botId} order by group_name`;
+        return sql`select id,telegram_chat_id::text,group_name,service,
+            coalesce(bot_ref::text, bot_id) as bot_id, bot_ref, enabled
+          from telegram_groups
+          where coalesce(bot_ref::text, bot_id) = ${String(botId)}
+          order by group_name`;
       }
-      return sql`select id,telegram_chat_id::text,group_name,service,bot_id,enabled
+      return sql`select id,telegram_chat_id::text,group_name,service,
+          coalesce(bot_ref::text, bot_id) as bot_id, bot_ref, enabled
         from telegram_groups order by group_name`;
     },
 
@@ -200,6 +296,19 @@ function createPostgresDb(sql = createSql()) {
       const [row] = await sql`
         update bots set bot_name = ${botName}, name_synced_at = now(), updated_at = now()
         where id = ${id} returning id, bot_name, telegram_username, name_synced_at`;
+      return row || null;
+    },
+
+    async setBotTelegramIdentity(id, { bot_name, telegram_username, telegram_bot_id }) {
+      const [row] = await sql`
+        update bots set
+          bot_name = coalesce(${bot_name ?? null}, bot_name),
+          telegram_username = coalesce(${telegram_username ?? null}, telegram_username),
+          telegram_bot_id = coalesce(${telegram_bot_id ?? null}, telegram_bot_id),
+          name_synced_at = now(),
+          updated_at = now()
+        where id = ${id}
+        returning id, bot_name, telegram_username, telegram_bot_id, name_synced_at`;
       return row || null;
     },
 
@@ -251,12 +360,25 @@ function createPostgresDb(sql = createSql()) {
       const [row] = await sql`delete from app_users where id = ${id} returning id, bot_id`;
       return row || null;
     },
-    async createTelegramGroup({ telegram_chat_id, group_name, service = null, bot_id = 'PRIMARY' }) {
-      const [row] = await sql`insert into telegram_groups(telegram_chat_id,group_name,service,bot_id)
-        values (${telegram_chat_id},${group_name},${service},${bot_id}) returning id`;
+    async createTelegramGroup({ telegram_chat_id, group_name, service = null, bot_id = 'PRIMARY', bot_ref = null }) {
+      const [row] = await sql`insert into telegram_groups(telegram_chat_id,group_name,service,bot_id,bot_ref)
+        values (${telegram_chat_id},${group_name},${service},${bot_ref || bot_id},${bot_ref}::uuid) returning id`;
       return row.id;
     },
-    async upsertTelegramGroupFromWebhook({ telegram_chat_id, group_name, service, bot_id }) {
+    async upsertTelegramGroupFromWebhook({ telegram_chat_id, group_name, service, bot_id, bot_ref = null }) {
+      if (bot_ref) {
+        const [row] = await sql`
+          insert into telegram_groups(telegram_chat_id,group_name,service,bot_id,bot_ref,enabled)
+          values (${telegram_chat_id},${group_name},${service},${bot_ref},${bot_ref}::uuid,true)
+          on conflict (telegram_chat_id,bot_ref) where bot_ref is not null do update set
+            group_name=excluded.group_name,
+            service=excluded.service,
+            bot_id=excluded.bot_id,
+            enabled=true,
+            updated_at=now()
+          returning id`;
+        return row.id;
+      }
       const [row] = await sql`
         insert into telegram_groups(telegram_chat_id,group_name,service,bot_id,enabled)
         values (${telegram_chat_id},${group_name},${service},${bot_id},true)
@@ -269,7 +391,8 @@ function createPostgresDb(sql = createSql()) {
       return row.id;
     },
     async getTelegramGroup(id) {
-      const [row] = await sql`select id,telegram_chat_id::text,group_name,service,bot_id,enabled
+      const [row] = await sql`select id,telegram_chat_id::text,group_name,service,
+          coalesce(bot_ref::text, bot_id) as bot_id, bot_ref, enabled
         from telegram_groups where id=${id}::uuid`;
       return row || null;
     },
@@ -325,7 +448,7 @@ function createPostgresDb(sql = createSql()) {
       });
     },
     async listManagedWeeklySchedules() {
-      return sql`select w.*,g.group_name,g.service,g.bot_id from weekly_poll_schedules w
+      return sql`select w.*,g.group_name,g.service,coalesce(g.bot_ref::text, g.bot_id) as bot_id,g.bot_ref from weekly_poll_schedules w
         join telegram_groups g on g.id=w.telegram_group_id order by g.group_name,w.event_category nulls first`;
     },
     async upsertManagedWeeklySchedule(value) {
@@ -492,7 +615,7 @@ function createPostgresDb(sql = createSql()) {
           where id=${id}::uuid and status in ('draft','scheduled','failed')
           returning *
         )
-        select c.id, c.event_id, c.telegram_group_id, g.bot_id as service,
+        select c.id, c.event_id, c.telegram_group_id, coalesce(g.bot_ref::text, g.bot_id) as service,
           g.telegram_chat_id, c.poll_question, c.poll_options, c.claim_token
         from claimed c join telegram_groups g on g.id=c.telegram_group_id and g.enabled
       `;
@@ -529,7 +652,7 @@ function createPostgresDb(sql = createSql()) {
             and cm.resolved_send_at <= now()
           returning cm.*
         )
-        select c.id, c.event_id, c.scheduled_poll_id, g.bot_id as service,
+        select c.id, c.event_id, c.scheduled_poll_id, coalesce(g.bot_ref::text, g.bot_id) as service,
           g.telegram_chat_id, c.telegram_message_id, c.header_text, c.footer_text, c.resolved_send_at,
           c.show_waiting_list, c.show_empty_shifts, c.claim_token
         from claimed c join telegram_groups g on g.id=c.telegram_group_id and g.enabled
@@ -539,13 +662,13 @@ function createPostgresDb(sql = createSql()) {
     async claimSpecificConfirmationBatch(pollId) {
       return sql`
         with target as (
-          select cm.resolved_send_at, cm.telegram_group_id, g.bot_id
+          select cm.resolved_send_at, cm.telegram_group_id, coalesce(g.bot_ref::text, g.bot_id) as bot_id
           from confirmation_messages cm
           join telegram_groups g on g.id=cm.telegram_group_id and g.enabled
           where cm.scheduled_poll_id=${pollId}::uuid
             and cm.status in ('scheduled','failed')
             and cm.resolved_send_at <= now()
-            and g.bot_id='PSA'
+            and coalesce(g.service, g.bot_id)='PSA'
           limit 1
         ), claimed as (
           update confirmation_messages cm set status='sending', claim_token=gen_random_uuid(),
@@ -556,7 +679,7 @@ function createPostgresDb(sql = createSql()) {
             and cm.status in ('scheduled','failed')
           returning cm.*
         )
-        select c.id, c.event_id, c.scheduled_poll_id, g.bot_id as service,
+        select c.id, c.event_id, c.scheduled_poll_id, coalesce(g.bot_ref::text, g.bot_id) as service,
           g.telegram_chat_id, c.telegram_message_id, c.header_text, c.footer_text, c.resolved_send_at,
           c.show_waiting_list, c.show_empty_shifts, c.claim_token
         from claimed c join telegram_groups g on g.id=c.telegram_group_id and g.enabled

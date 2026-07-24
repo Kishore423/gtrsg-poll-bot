@@ -24,9 +24,10 @@ mid-change and concurrent edits will clobber each other:
 Everything else (schedulers, pollBuilder, confirmation, scheduleRules, tests for
 those) is free. If you must touch an owned file, note it here first.
 
-**Codex note (2026-07-24):** touched `src/server.js` for Task 4 only, wiring
-tenant group scoping/RBAC checks through existing managed routes. The non-server
-change is the new `src/tenancy.js` helper plus focused server tests.
+**Codex note (2026-07-24):** touched owned Task 5 files to add UUID bot webhook
+routing and token resolution while preserving legacy WHCL/PSA routes. Updated
+`src/server.js`, `src/telegram.js`, `src/processUpdate.js`, both DB adapters,
+webhook scripts, and focused tests.
 
 ### Goal (one line)
 
@@ -59,8 +60,8 @@ user only sees the groups **their own bot** is in. Sign-in becomes **Microsoft
 | 2 | `bots` + `app_users` schema & repo methods | ✅ **done** |
 | 3 | Microsoft SSO + `app_users` allow-list | ✅ **done** (7 tests green) |
 | 4 | RBAC + per-user tenancy scoping | ✅ **done** (92 tests green) |
-| 5 | Per-bot Telegram routing + name sync | ⬜ next |
-| 6 | Admin page (`/admin`) + admin APIs | ⬜ |
+| 5 | Per-bot Telegram routing + name sync | ✅ **backend done** (94 tests green) |
+| 6 | Admin page (`/admin`) + admin APIs | ⬜ next |
 | 7 | Main UI → group-popup flow | ⬜ |
 | 8 | Migration script + docs | ⬜ |
 
@@ -78,6 +79,15 @@ user only sees the groups **their own bot** is in. Sign-in becomes **Microsoft
   `assertGroupAccess(db, user, groupId)`, returning 404 for groups outside a
   non-admin user's bot. `src/server.js` applies this to managed groups, weekly
   schedules, skip dates, scheduled poll creation/list/details/actions/deletes.
+- Task 5 backend routing: `src/telegram.js` can resolve bot tokens dynamically
+  with `resolveToken(botId)` and exposes `getMyName` / `setMyName`; `src/app.js`
+  decrypts DB-stored bot tokens for UUID bot keys. `src/server.js` accepts both
+  legacy `/api/telegram/whcl|psa|primary` routes and new `/api/telegram/:botId`
+  routes, validating UUID routes against `bots.webhook_secret`. Webhook group
+  detection writes `telegram_groups.bot_ref` for UUID bots while keeping legacy
+  `bot_id` fallback. `scripts/set-webhook.js` reads enabled DB bots, registers
+  `/api/telegram/<bot id>`, and syncs `getMe()` / `getMyName()` into the bot
+  cache. Admin APIs/UI for adding, renaming, and deleting bots are still Task 6.
 
 **⚠️ Key migration decision — expand/contract, no flag day.** `bot_id` is read inside
 `claim_due_polls`, `claim_due_confirmations` and `apply_scheduled_poll_response`, so
@@ -105,13 +115,11 @@ WHCL/PSA bots keep running until `scripts/migrate-to-multi-tenant.js` backfills
   URL fragment and then stripped from the address bar. Elements marked
   `data-admin-only` are unhidden only when `/api/me` says `role === 'admin'`.
 
-### If picking this up cold, do task 5 next
+### If picking this up cold, do task 6 next
 
-Task 4 is done. Next: per-bot Telegram routing + name sync. Replace the static
-`/api/telegram/:service` path with per-bot UUID routing, resolve encrypted bot
-tokens from the `bots` table, register each bot's webhook, and add `getMyName` /
-`setMyName` synchronization while preserving the legacy `bot_id` text column
-until the migration script backfills `telegram_groups.bot_ref`.
+Task 5 backend plumbing is done. Next: admin page (`/admin`) and admin APIs for
+creating app users/bots, validating pasted BotFather tokens, registering the
+new bot webhook, and exposing explicit bot rename through `setMyName`.
 
 ---
 

@@ -8,18 +8,28 @@
 const API_BASE = 'https://api.telegram.org';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function createTelegramClient({ tokens = {}, fetchImpl = fetch } = {}) {
-  function tokenFor(service) {
-    const token = tokens[service];
-    if (!token) throw new Error(`No Telegram bot token configured for service ${service}`);
-    return token;
+function createTelegramClient({ tokens = {}, resolveToken = null, fetchImpl = fetch } = {}) {
+  const tokenCache = new Map();
+
+  async function tokenFor(botKey) {
+    if (tokens[botKey]) return tokens[botKey];
+    if (tokenCache.has(botKey)) return tokenCache.get(botKey);
+    if (resolveToken) {
+      const token = await resolveToken(botKey);
+      if (token) {
+        tokenCache.set(botKey, token);
+        return token;
+      }
+    }
+    throw new Error(`No Telegram bot token configured for bot ${botKey}`);
   }
 
-  async function call(service, method, params, { maxAttempts = 3 } = {}) {
+  async function call(botKey, method, params, { maxAttempts = 3 } = {}) {
     let lastError;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
-        const res = await fetchImpl(`${API_BASE}/bot${tokenFor(service)}/${method}`, {
+        const token = await tokenFor(botKey);
+        const res = await fetchImpl(`${API_BASE}/bot${token}/${method}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(params || {}),
@@ -48,8 +58,8 @@ function createTelegramClient({ tokens = {}, fetchImpl = fetch } = {}) {
   // first-come-first-served allocation depends on. allows_multiple_answers lets
   // a person bid on several timeslots, matching the old "select one or more".
   // Returns { poll_id, message_id } - poll_id links later votes back to us.
-  async function sendPoll(service, chatId, question, options) {
-    const message = await call(service, 'sendPoll', {
+  async function sendPoll(botKey, chatId, question, options) {
+    const message = await call(botKey, 'sendPoll', {
       chat_id: chatId,
       question,
       options,
@@ -61,8 +71,8 @@ function createTelegramClient({ tokens = {}, fetchImpl = fetch } = {}) {
 
   // text is HTML (parse_mode HTML). Mentions are <a href="tg://user?id=..">,
   // which tag a user by id even when they have no @username.
-  async function sendMessage(service, chatId, html) {
-    return call(service, 'sendMessage', {
+  async function sendMessage(botKey, chatId, html) {
+    return call(botKey, 'sendMessage', {
       chat_id: chatId,
       text: html,
       parse_mode: 'HTML',
@@ -70,8 +80,8 @@ function createTelegramClient({ tokens = {}, fetchImpl = fetch } = {}) {
     });
   }
 
-  async function editMessage(service, chatId, messageId, html) {
-    return call(service, 'editMessageText', {
+  async function editMessage(botKey, chatId, messageId, html) {
+    return call(botKey, 'editMessageText', {
       chat_id: chatId,
       message_id: messageId,
       text: html,
@@ -80,23 +90,31 @@ function createTelegramClient({ tokens = {}, fetchImpl = fetch } = {}) {
     });
   }
 
-  async function stopPoll(service, chatId, messageId) {
-    return call(service, 'stopPoll', { chat_id: chatId, message_id: messageId });
+  async function stopPoll(botKey, chatId, messageId) {
+    return call(botKey, 'stopPoll', { chat_id: chatId, message_id: messageId });
   }
 
-  async function setWebhook(service, url, secretToken) {
-    return call(service, 'setWebhook', {
+  async function setWebhook(botKey, url, secretToken) {
+    return call(botKey, 'setWebhook', {
       url,
       secret_token: secretToken,
       allowed_updates: ['poll_answer', 'my_chat_member', 'message'],
     });
   }
 
-  async function getMe(service) {
-    return call(service, 'getMe');
+  async function getMe(botKey) {
+    return call(botKey, 'getMe');
   }
 
-  return { sendPoll, sendMessage, editMessage, stopPoll, setWebhook, getMe, call };
+  async function getMyName(botKey) {
+    return call(botKey, 'getMyName');
+  }
+
+  async function setMyName(botKey, name) {
+    return call(botKey, 'setMyName', { name });
+  }
+
+  return { sendPoll, sendMessage, editMessage, stopPoll, setWebhook, getMe, getMyName, setMyName, call };
 }
 
 module.exports = { createTelegramClient };

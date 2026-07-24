@@ -17,14 +17,20 @@
 > **Tasks 1–2 are done** (`src/crypto.js` + `bots`/`app_users` schema & repo methods;
 > 81 tests green). Historical note only; current status is below.
 >
-> **Current status:** Tasks 1-4 are done (`src/crypto.js`, `bots`/`app_users`,
-> Microsoft SSO allow-list, and tenant group scoping/RBAC; 92 tests green).
-> **Task 5 is next:** per-bot Telegram routing + name sync.
+> **Current status:** Tasks 1-5 backend are done (`src/crypto.js`, `bots`/
+> `app_users`, Microsoft SSO allow-list, tenant group scoping/RBAC, and UUID
+> bot webhook routing/token resolution; 94 tests green). **Task 6 is next:**
+> admin page (`/admin`) + admin APIs.
 >
 > Task 4 added `src/tenancy.js` and scoped existing managed routes in
 > `src/server.js`: managed groups, weekly schedules, skip dates, and scheduled
 > poll list/create/details/actions/deletes. Non-admin users get only rows for
 > their `app_users.bot_id`; direct access to another bot's group returns 404.
+>
+> Task 5 backend added dynamic Telegram token resolution, UUID bot webhooks
+> (`/api/telegram/:botId`) with per-bot webhook secrets, `bot_ref` group capture,
+> `getMyName`/`setMyName` client methods, DB bot identity sync, and DB-backed
+> webhook registration. Legacy WHCL/PSA/PRIMARY routes remain during migration.
 >
 > ⚠️ Two things not to "tidy up":
 > 1. `telegram_groups.bot_ref` (uuid) was added **alongside** the legacy `bot_id`

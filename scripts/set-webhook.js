@@ -5,6 +5,7 @@
 //   TELEGRAM_WEBHOOK_SECRET=... node scripts/set-webhook.js
 require('dotenv').config();
 const { createTelegramClient } = require('../src/telegram');
+const { decryptToken } = require('../src/crypto');
 
 function getConfiguredBots(env) {
   const configured = [
@@ -25,13 +26,58 @@ function getConfiguredBots(env) {
 async function main() {
   const publicUrl = process.env.APP_URL;
   if (!publicUrl) throw new Error('Set APP_URL to your deployed https URL.');
-  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (!secret) throw new Error('Set TELEGRAM_WEBHOOK_SECRET.');
+
+  let db = null;
+  if (process.env.DATABASE_URL) {
+    const { createPostgresDb } = require('../src/db/postgres');
+    db = createPostgresDb();
+  }
 
   const telegram = createTelegramClient({
     tokens: { PRIMARY: process.env.TELEGRAM_BOT_TOKEN,
       WHCL: process.env.TELEGRAM_TOKEN_WHCL, PSA: process.env.TELEGRAM_TOKEN_PSA },
+    resolveToken: async (botId) => {
+      if (!db?.getBot) return null;
+      const bot = await db.getBot(botId);
+      if (!bot || bot.enabled === false) return null;
+      return decryptToken(bot.token_encrypted);
+    },
   });
+
+  if (db?.listBots) {
+    try {
+      const bots = (await db.listBots()).filter((bot) => bot.enabled !== false);
+      if (bots.length) {
+        for (const bot of bots) {
+          if (!bot.webhook_secret && db.getBot) {
+            const full = await db.getBot(bot.id);
+            bot.webhook_secret = full?.webhook_secret;
+          }
+          if (!bot.webhook_secret) throw new Error(`Bot ${bot.id} has no webhook secret.`);
+          const url = `${publicUrl.replace(/\/$/, '')}/api/telegram/${bot.id}`;
+          await telegram.setWebhook(bot.id, url, bot.webhook_secret);
+          const [me, name] = await Promise.all([
+            telegram.getMe(bot.id),
+            telegram.getMyName(bot.id).catch(() => null),
+          ]);
+          if (db.setBotTelegramIdentity) {
+            await db.setBotTelegramIdentity(bot.id, {
+              bot_name: name?.name || bot.bot_name || me.first_name,
+              telegram_username: me.username || null,
+              telegram_bot_id: me.id,
+            });
+          }
+          console.log(`${bot.id}: webhook set to ${url} (bot @${me.username})`);
+        }
+        return;
+      }
+    } finally {
+      if (db.close) await db.close();
+    }
+  }
+
+  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  if (!secret) throw new Error('Set TELEGRAM_WEBHOOK_SECRET.');
 
   // Register a webhook for EVERY configured token. A service token that merely
   // falls back to the PRIMARY token is skipped: the same bot must not have two

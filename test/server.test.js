@@ -308,6 +308,44 @@ test('webhook rejects a wrong secret token when configured', async () => {
   }, { telegramWebhookSecret: 'sec' });
 });
 
+test('webhook: per-user bot route validates its own secret and captures the group for that bot', async () => {
+  await withServer(async ({ db, baseUrl }) => {
+    const botId = await db.createBot({
+      bot_name: 'User bot',
+      telegram_username: 'user_test_bot',
+      telegram_bot_id: 12345,
+      token_encrypted: 'encrypted',
+      webhook_secret: 'bot-secret',
+    });
+
+    const wrong = await fetch(`${baseUrl}/api/telegram/${botId}`, json('POST', {
+      update_id: 32,
+      my_chat_member: {
+        chat: { id: -100321, type: 'supergroup', title: 'Tenant Group' },
+        new_chat_member: { status: 'member' },
+      },
+    }, { 'X-Telegram-Bot-Api-Secret-Token': 'wrong' }));
+    assert.equal(wrong.status, 401);
+
+    const good = await fetch(`${baseUrl}/api/telegram/${botId}`, json('POST', {
+      update_id: 33,
+      my_chat_member: {
+        chat: { id: -100321, type: 'supergroup', title: 'Tenant Group' },
+        new_chat_member: { status: 'member' },
+      },
+    }, { 'X-Telegram-Bot-Api-Secret-Token': 'bot-secret' }));
+    assert.equal(good.status, 200);
+
+    const groups = await db.listTelegramGroups({ botId });
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].telegram_chat_id, '-100321');
+    assert.equal(groups[0].group_name, 'Tenant Group');
+    assert.equal(groups[0].bot_id, botId);
+    assert.equal(groups[0].bot_ref, botId);
+    assert.equal(groups[0].service, null);
+  });
+});
+
 test('verify group prefers WHCL service over stale PRIMARY bot_id', async () => {
   let verifiedService = null;
   const db = {

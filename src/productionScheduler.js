@@ -258,7 +258,7 @@ async function sendPsaBatchConfirmation(db, telegram, confirmations) {
     header: confirmations[0]?.header_text || 'Confirmed slots',
     footer: confirmations[0]?.footer_text || 'take note pls',
   });
-  const message = await telegram.sendMessage('PSA', confirmations[0].telegram_chat_id, html);
+  const message = await telegram.sendMessage(confirmations[0].service, confirmations[0].telegram_chat_id, html);
   const completed = [];
   for (const confirmation of confirmations) {
     if (!await db.completeConfirmationSend(confirmation.id, confirmation.claim_token,

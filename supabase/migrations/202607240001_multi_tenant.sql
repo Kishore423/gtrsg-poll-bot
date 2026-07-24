@@ -55,6 +55,82 @@ create unique index if not exists telegram_groups_chat_bot_ref_key
 alter table public.telegram_groups drop constraint if exists telegram_groups_bot_id_check;
 alter table public.telegram_groups alter column bot_id drop default;
 
+create or replace function public.apply_poll_response(
+  p_update_id bigint, p_poll_id text, p_user_id bigint, p_username text,
+  p_first_name text, p_last_name text, p_display_name text,
+  p_option_ids integer[], p_raw_payload jsonb, p_bot_id text default 'PRIMARY'
+) returns boolean language plpgsql security definer set search_path = public as $$
+declare
+  v_poll scheduled_polls%rowtype;
+  v_group_bot text;
+  v_shift event_shifts%rowtype;
+  v_selected boolean;
+  v_now timestamptz := clock_timestamp();
+begin
+  insert into webhook_events(telegram_update_id, bot_id, update_type)
+  values (p_update_id, p_bot_id, 'poll_answer')
+  on conflict (telegram_update_id) do nothing;
+  if not found then return false; end if;
+
+  select * into v_poll from scheduled_polls where telegram_poll_id = p_poll_id for update;
+  if not found then
+    update webhook_events set processing_status='ignored', processed_at=clock_timestamp()
+    where telegram_update_id=p_update_id;
+    return true;
+  end if;
+  select coalesce(bot_ref::text, bot_id) into v_group_bot
+  from telegram_groups where id=v_poll.telegram_group_id;
+  if p_bot_id is distinct from v_group_bot then
+    update webhook_events set processing_status='ignored', processed_at=clock_timestamp(),
+      error='poll belongs to a different bot' where telegram_update_id=p_update_id;
+    return true;
+  end if;
+
+  insert into telegram_users(telegram_user_id, telegram_username, first_name, last_name, display_name)
+  values (p_user_id, p_username, p_first_name, p_last_name, p_display_name)
+  on conflict (telegram_user_id) do update set telegram_username=excluded.telegram_username,
+    first_name=excluded.first_name, last_name=excluded.last_name,
+    display_name=excluded.display_name, updated_at=now();
+
+  insert into poll_response_events(event_id, scheduled_poll_id, telegram_poll_id,
+    telegram_user_id, selected_option_ids, selected_shift_ids, qualifying_response,
+    received_at, telegram_update_id, raw_payload)
+  select v_poll.event_id, v_poll.id, p_poll_id, p_user_id, p_option_ids,
+    coalesce(array_agg(s.id order by s.display_order) filter (where s.id is not null), '{}'),
+    cardinality(p_option_ids) > 0, v_now, p_update_id, p_raw_payload
+  from event_shifts s where s.event_id=v_poll.event_id
+    and s.display_order = any(p_option_ids);
+
+  for v_shift in select * from event_shifts where event_id=v_poll.event_id for update loop
+    v_selected := v_shift.display_order = any(p_option_ids);
+    insert into poll_participants(event_id, shift_id, telegram_user_id, current_response,
+      qualifying_since, status)
+    values (v_poll.event_id, v_shift.id, p_user_id, v_selected,
+      case when v_selected then v_now end, case when v_selected then 'not_qualified' else 'withdrawn' end)
+    on conflict (event_id, shift_id, telegram_user_id) do update set
+      current_response=excluded.current_response,
+      qualifying_since=case
+        when excluded.current_response and not poll_participants.current_response then excluded.qualifying_since
+        when excluded.current_response then poll_participants.qualifying_since
+        else null end,
+      status=case when excluded.current_response then poll_participants.status else 'withdrawn' end,
+      confirmed_position=case when excluded.current_response then poll_participants.confirmed_position end,
+      waiting_list_position=case when excluded.current_response then poll_participants.waiting_list_position end,
+      updated_at=now();
+    perform recalculate_shift_allocation(v_shift.id, 'telegram_response');
+  end loop;
+
+  update webhook_events set processing_status='processed', processed_at=clock_timestamp()
+  where telegram_update_id=p_update_id;
+  update confirmation_messages set status='scheduled', resolved_send_at=clock_timestamp(), updated_at=now()
+  where scheduled_poll_id=v_poll.id and status in ('sent','updated');
+  return true;
+exception when others then
+  update webhook_events set processing_status='failed', processed_at=clock_timestamp(), error=sqlerrm
+  where telegram_update_id=p_update_id;
+  return false;
+end $$;
+
 -- Re-declare the claim functions so the `service` column they return is the bot key
 -- the app resolves a token with: the new bot uuid once backfilled, else the legacy
 -- text. Bodies are otherwise unchanged from 202607160001 / 202607170001.

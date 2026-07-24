@@ -173,8 +173,9 @@ function createMemoryDb() {
     async listTelegramGroups({ botId = null } = {}) {
       // botId scopes the list to one user's bot; admins pass nothing to see all.
       return telegramGroups
-        .filter((group) => !botId || String(group.bot_id) === String(botId))
-        .map((group) => ({ ...group }));
+        .filter((group) => !botId ||
+          String(group.bot_ref || group.bot_id) === String(botId))
+        .map((group) => ({ ...group, bot_id: group.bot_ref || group.bot_id }));
     },
 
     // ---- Bots (one per user) -------------------------------------------------
@@ -208,6 +209,16 @@ function createMemoryDb() {
       const bot = bots.find((item) => item.id === String(id));
       if (!bot) return null;
       bot.bot_name = botName;
+      bot.name_synced_at = new Date().toISOString();
+      return { ...bot };
+    },
+
+    async setBotTelegramIdentity(id, { bot_name, telegram_username, telegram_bot_id }) {
+      const bot = bots.find((item) => item.id === String(id));
+      if (!bot) return null;
+      if (bot_name !== undefined) bot.bot_name = bot_name;
+      if (telegram_username !== undefined) bot.telegram_username = telegram_username;
+      if (telegram_bot_id !== undefined) bot.telegram_bot_id = telegram_bot_id;
       bot.name_synced_at = new Date().toISOString();
       return { ...bot };
     },
@@ -298,22 +309,40 @@ function createMemoryDb() {
         item.telegram_group_id === String(telegramGroupId) && item.event_date === eventDate);
     },
 
-    async upsertTelegramGroupFromWebhook({ telegram_chat_id, group_name, service, bot_id }) {
+    async createTelegramGroup({ telegram_chat_id, group_name, service = null, bot_id = 'PRIMARY', bot_ref = null }) {
+      const id = await this.upsertTelegramGroupFromWebhook({
+        telegram_chat_id,
+        group_name,
+        service,
+        bot_id,
+        bot_ref,
+      });
+      return id;
+    },
+
+    async getTelegramGroup(id) {
+      const group = telegramGroups.find((item) => item.id === String(id));
+      return group ? { ...group, bot_id: group.bot_ref || group.bot_id } : null;
+    },
+
+    async upsertTelegramGroupFromWebhook({ telegram_chat_id, group_name, service, bot_id, bot_ref = null }) {
       const chatId = String(telegram_chat_id);
-      const route = bot_id || service || 'PRIMARY';
-      let group = telegramGroups.find((item) => item.telegram_chat_id === chatId && item.bot_id === route);
+      const route = bot_ref || bot_id || service || 'PRIMARY';
+      let group = telegramGroups.find((item) =>
+        item.telegram_chat_id === chatId && String(item.bot_ref || item.bot_id) === String(route));
       if (!group) {
         group = {
           id: `managed-group-${++telegramGroupSeq}`,
           telegram_chat_id: chatId,
           group_name,
           service,
-          bot_id: route,
+          bot_id: bot_id || route,
+          bot_ref,
           enabled: true,
         };
         telegramGroups.push(group);
       } else {
-        Object.assign(group, { group_name, service, enabled: true });
+        Object.assign(group, { group_name, service, bot_ref: bot_ref || group.bot_ref, enabled: true });
       }
       return group.id;
     },

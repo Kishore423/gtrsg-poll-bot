@@ -584,20 +584,33 @@ function createServer(db, telegram, options = {}) {
   }));
 
   // ---- Telegram webhook -----------------------------------------------------
-  // One endpoint per service (bot). Telegram authenticates with the secret token
-  // header set at setWebhook time.
+  // Legacy service routes remain supported during migration. New per-user bots
+  // use /api/telegram/:botId and validate against that bot's own webhook secret.
   app.post('/api/telegram/:service', wrap(async (req, res) => {
-    const service = req.params.service.toUpperCase();
-    if (!SERVICES.includes(service)) return res.status(404).end();
-    if (options.telegramWebhookSecret) {
+    const routeParam = String(req.params.service || '');
+    const legacyService = routeParam.toUpperCase();
+    let service = legacyService;
+    let botRef = null;
+    let webhookSecret = options.telegramWebhookSecret;
+
+    if (!SERVICES.includes(legacyService)) {
+      if (!db.getBot) return res.status(404).end();
+      const bot = await db.getBot(routeParam);
+      if (!bot || bot.enabled === false) return res.status(404).end();
+      service = bot.id;
+      botRef = bot.id;
+      webhookSecret = bot.webhook_secret;
+    }
+
+    if (webhookSecret) {
       const got = req.headers['x-telegram-bot-api-secret-token'];
-      if (!got || !safeEqual(got, options.telegramWebhookSecret)) return res.status(401).end();
+      if (!got || !safeEqual(got, webhookSecret)) return res.status(401).end();
     }
     if (!Number.isSafeInteger(req.body?.update_id)) {
       return res.status(400).json({ error: 'Invalid Telegram update' });
     }
 
-    const result = await processTelegramUpdate(db, service, req.body);
+    const result = await processTelegramUpdate(db, service, req.body, { botRef });
     if (result.summary) console.log(result.summary);
     // Always 200 so Telegram doesn't retry.
     res.status(200).json({ ok: true });
