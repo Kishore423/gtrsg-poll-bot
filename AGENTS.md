@@ -126,7 +126,9 @@ Vercel Cron** for hosting/scheduling.
   `app_users`, and `/api/auth/verify-otp` stores the Supabase session in browser
   session storage. Supabase sends a numeric code only when the **Magic Link / OTP**
   email template includes `{{ .Token }}`; otherwise it sends a magic link. Repeat
-  sends can hit Supabase's default 60-second email rate limit.
+  sends can hit Supabase's default 60-second email rate limit. `sendOtp` maps
+  Supabase email rate-limit errors to 429, and the UI disables **Send code** with
+  a 60-second countdown.
 - Webhook updates are de-duplicated (`beginWebhookEvent`/`finishWebhookEvent`);
   preserve that. Any configured webhook bot route (`PRIMARY`, `WHCL`, `PSA`)
   auto-captures a managed Telegram group from bot membership updates or received

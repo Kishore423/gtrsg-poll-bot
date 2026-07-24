@@ -71,7 +71,14 @@ function createSupabaseAuth({ url, anonKey, serviceRoleKey, db, client, adminCli
       email: normalizedEmail,
       options: { shouldCreateUser: true },
     });
-    if (error) throw error;
+    if (error) {
+      if (/rate limit/i.test(error.message || '')) {
+        const rateError = new Error('Please wait 60 seconds before requesting another code.');
+        rateError.statusCode = 429;
+        throw rateError;
+      }
+      throw error;
+    }
     return { email: normalizedEmail };
   }
 

@@ -38,10 +38,26 @@ const authTokenInput = document.getElementById('auth-token');
 const otpStep = document.getElementById('otp-step');
 const sendOtpBtn = document.getElementById('send-otp');
 const verifyOtpBtn = document.getElementById('verify-otp');
+let otpCooldownTimer = null;
 
 function setAuthMessage(message = '', kind = 'error') {
   authError.textContent = message;
   authError.className = `auth-error ${message && kind === 'success' ? 'success' : ''}`.trim();
+}
+
+function startOtpCooldown(seconds = 60) {
+  if (!sendOtpBtn) return;
+  clearInterval(otpCooldownTimer);
+  let remaining = seconds;
+  const label = sendOtpBtn.textContent.includes('Resend') ? 'Resend code' : 'Send code';
+  const tick = () => {
+    sendOtpBtn.disabled = remaining > 0;
+    sendOtpBtn.textContent = remaining > 0 ? `${label} (${remaining}s)` : label;
+    remaining -= 1;
+    if (remaining < 0) clearInterval(otpCooldownTimer);
+  };
+  tick();
+  otpCooldownTimer = setInterval(tick, 1000);
 }
 
 function showLogin() {
@@ -68,7 +84,8 @@ async function sendEmailOtp() {
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
     setAuthMessage(result.error || 'Unable to send code.');
-    if (sendOtpBtn) sendOtpBtn.disabled = false;
+    if (response.status === 429) startOtpCooldown(60);
+    else if (sendOtpBtn) sendOtpBtn.disabled = false;
     return;
   }
   if (otpStep) otpStep.hidden = false;
@@ -77,6 +94,7 @@ async function sendEmailOtp() {
     sendOtpBtn.textContent = 'Resend code';
     sendOtpBtn.disabled = false;
   }
+  startOtpCooldown(60);
   authTokenInput?.focus();
   setAuthMessage('Code sent. Check your email inbox. You can resend after 60 seconds if it does not arrive.', 'success');
 }

@@ -136,7 +136,8 @@ WHCL/PSA bots keep running until `scripts/migrate-to-multi-tenant.js` backfills
   Supabase sends a numeric code only when the **Magic Link / OTP** email template
   contains `{{ .Token }}`; a template with only `{{ .ConfirmationURL }}` sends a
   link instead. Repeat send requests can hit Supabase's built-in email rate limit
-  (default 60 seconds).
+  (default 60 seconds). `sendOtp` maps Supabase email rate-limit errors to 429,
+  and the UI disables **Send code** with a 60-second countdown.
 
 ### If picking this up cold, do task 6 next
 

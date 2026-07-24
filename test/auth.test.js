@@ -17,6 +17,7 @@ function fakeSupabase() {
       },
       async signInWithOtp({ email }) {
         if (email === 'fail@example.com') return { data: {}, error: new Error('send failed') };
+        if (email === 'limited@example.com') return { data: {}, error: new Error('email rate limit exceeded') };
         return { data: { user: null, session: null }, error: null };
       },
       async verifyOtp({ email, token }) {
@@ -137,6 +138,21 @@ test('sendOtp only emails provisioned enabled users', async () => {
   await assert.rejects(
     () => auth.sendOtp('stranger@example.com'),
     /not provisioned/i
+  );
+});
+
+test('sendOtp maps Supabase email rate limits to a retryable 429', async () => {
+  const db = createMemoryDb();
+  await db.createAppUser({ email: 'limited@example.com', role: 'admin' });
+  const auth = createSupabaseAuth({ db, client: fakeSupabase(), adminClient: {} });
+
+  await assert.rejects(
+    () => auth.sendOtp('limited@example.com'),
+    (error) => {
+      assert.equal(error.statusCode, 429);
+      assert.match(error.message, /wait 60 seconds/i);
+      return true;
+    }
   );
 });
 
