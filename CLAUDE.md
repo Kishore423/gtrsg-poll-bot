@@ -36,14 +36,15 @@ request: admin APIs/page, dashboard managed-group popup workflow, and
 ### Goal (one line)
 
 One Telegram bot **per user**: admin maps a BotFather token to a user's email; that
-user only sees the groups **their own bot** is in. Sign-in becomes **Microsoft
-(Entra ID) SSO**; roles are **admin | user**.
+user only sees the groups **their own bot** is in. Sign-in uses **Supabase email
+OTP** checked against the `app_users` allow-list; roles are **admin | user**.
 
 ### Confirmed decisions
 
-- **Entra app is MULTI-TENANT** → any Microsoft work account can pass the login step.
-  The `app_users` email allow-list is therefore the **only** authorisation boundary:
-  it must **fail closed** (no row ⇒ 403 "not provisioned").
+- Supabase Auth proves the caller controls an email inbox. The `app_users` email
+  allow-list is therefore the **only** authorisation boundary: it must **fail
+  closed** (no row ⇒ 403 "not provisioned"). OTP emails are only sent after the
+  requested email is found enabled in `app_users`.
 - Bot tokens: admin pastes BotFather token → **encrypted** in DB (never sent to browser).
 - Admins see **all** groups/bots; an admin may have **no bot** (`bot_id` nullable).
 - Bot name is **bidirectional**: UI edit → `setMyName` (shows in BotFather);
@@ -62,7 +63,7 @@ user only sees the groups **their own bot** is in. Sign-in becomes **Microsoft
 | --- | --- | --- |
 | 1 | `src/crypto.js` token encryption | ✅ **done** (7 tests green) |
 | 2 | `bots` + `app_users` schema & repo methods | ✅ **done** |
-| 3 | Microsoft SSO + `app_users` allow-list | ✅ **done** (7 tests green) |
+| 3 | Email OTP + `app_users` allow-list | ✅ **done** (9 tests green) |
 | 4 | RBAC + per-user tenancy scoping | ✅ **done** (92 tests green) |
 | 5 | Per-bot Telegram routing + name sync | ✅ **done** (94 tests green before Task 6-8) |
 | 6 | Admin page (`/admin`) + admin APIs | ✅ **done** |
@@ -119,17 +120,18 @@ WHCL/PSA bots keep running until `scripts/migrate-to-multi-tenant.js` backfills
   email from the Supabase JWT, backfills `auth_user_id`, returns
   `{id,email,role,bot_id}`); `adminAuth` → **`requireUser`** / **`requireAdmin`**.
   Password `signIn` **removed** — SSO only. Tests: `test/auth.test.js`.
-- Denial codes are deliberate: **403 "not provisioned"** (valid Microsoft login, not on
+- Denial codes are deliberate: **403 "not provisioned"** (valid Supabase login, not on
   the allow-list) vs **401** (no/invalid token). The UI must not bounce a 403 back to
   the login button — that would loop forever; it shows "ask an admin" instead.
-- `src/server.js`: `/api/auth/sign-in` removed, **`GET /api/me`** added (returns
+- `src/server.js`: `/api/auth/sign-in` removed, **`/api/auth/send-otp`** and
+  **`/api/auth/verify-otp`** added for email OTP login, **`GET /api/me`** added (returns
   email/role/bot_id), and the global gate now routes `/api/admin/*` through
   `requireAdmin` and everything else through `requireUser`.
 - `src/app.js`: passes `db` into `createSupabaseAuth` (the allow-list lookup needs it)
   and `verifyUser` into server options.
-- `public/`: password form replaced by a **Sign in with Microsoft** button which hits
-  Supabase `/auth/v1/authorize?provider=azure`; the session is read back out of the
-  URL fragment and then stripped from the address bar. Elements marked
+- `public/`: password/Microsoft sign-in forms replaced by an email OTP flow.
+  The session returned by `/api/auth/verify-otp` is stored in session storage.
+  Elements marked
   `data-admin-only` are unhidden only when `/api/me` says `role === 'admin'`.
 
 ### If picking this up cold, do task 6 next
@@ -198,11 +200,11 @@ The app currently ships BOTH, selected at runtime:
   `DATABASE_URL`) and `src/db/memory.js` (tests + local). `scripts/migrate.js`
   creates the schema; `scripts/verify-migration.js` checks it. `pollBuilder.js`
   and `confirmation.js` are pure.
-- **Auth**: `src/auth.js` (Supabase). Users sign in with Microsoft/Entra ID via
-  Supabase Auth, then `verifyUser` looks up the normalized email in
-  `app_users`. `requireAdmin` gates `/api/admin/*`; `requireUser` gates the rest
-  of `/api/*` except `/api/auth/*`, `/api/telegram/*`, `/api/cron/*`. Because
-  the Entra app is multi-tenant, the `app_users` allow-list must fail closed.
+- **Auth**: `src/auth.js` (Supabase). Users sign in with email OTP via Supabase
+  Auth, then `verifyUser` looks up the normalized email in `app_users`.
+  `requireAdmin` gates `/api/admin/*`; `requireUser` gates the rest of `/api/*`
+  except `/api/auth/*`, `/api/telegram/*`, `/api/cron/*`. The `app_users`
+  allow-list must fail closed.
 - **Vercel**: `vercel.json` uses explicit `builds` (not zero-config rewrites) to avoid Vercel
   auto-discovering `src/server.js` as a function. Only `api/index.js` is the serverless entry;
   `public/**` is served as static. Routes: `/api/*` → function, static assets → `public/`, all
@@ -336,7 +338,7 @@ live only in Vercel env + the local (gitignored) `.env`.
   claim functions, so production rows should still have the correct `bot_id`.
 - **Deploy order**: (1) `npx supabase db push`; (2) set Vercel env including
   `BOT_TOKEN_ENC_KEY`; (3) Vercel redeploy (env vars apply only to new
-  deployments); (4) run `npm run migrate:multi-tenant`; (5) verify Microsoft
+  deployments); (4) run `npm run migrate:multi-tenant`; (5) verify email OTP
   login loads the dashboard/admin page; (6) run `npm run set-webhook` locally
   ONLY after the redeploy is live (Telegram must hit a deployment that has the
   secret + DB); (7) add each user's bot to its group as admin.

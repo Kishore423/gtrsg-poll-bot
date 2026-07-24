@@ -70,8 +70,26 @@ function createServer(db, telegram, options = {}) {
       supabaseAnonKey: options.supabaseAnonKey });
   });
 
-  // Password sign-in is retired: the browser completes Microsoft SSO directly with
-  // Supabase (signInWithOAuth) and sends the resulting access token as a Bearer.
+  app.post('/api/auth/send-otp', async (req, res) => {
+    if (!options.requireAdminAuth) return res.json({ disabled: true });
+    try {
+      const result = await options.sendOtp(req.body?.email);
+      res.json({ ok: true, email: result.email });
+    } catch (error) {
+      res.status(error.statusCode || 400).json({ error: error.message || 'Unable to send OTP' });
+    }
+  });
+
+  app.post('/api/auth/verify-otp', async (req, res) => {
+    if (!options.requireAdminAuth) return res.json({ disabled: true });
+    try {
+      const session = await options.verifyOtp(req.body?.email, req.body?.token);
+      res.json({ access_token: session.access_token, refresh_token: session.refresh_token,
+        expires_at: session.expires_at });
+    } catch (error) {
+      res.status(error.statusCode || 401).json({ error: error.message || 'Invalid or expired OTP' });
+    }
+  });
 
   app.post('/api/auth/refresh', async (req, res) => {
     if (!options.requireAdminAuth) return res.json({ disabled: true });

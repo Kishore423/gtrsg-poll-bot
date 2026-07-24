@@ -2,7 +2,7 @@
 
 > # ⛔ HANDS OFF (2026-07-24) — Claude Code is mid-rework
 >
-> A **multi-tenant rework** is in flight (per-user Telegram bots, Microsoft SSO,
+> A **multi-tenant rework** is in flight (per-user Telegram bots, email OTP auth,
 > RBAC). **Read the "🚧 IN PROGRESS" section at the top of `CLAUDE.md`** for full
 > status, decisions and the next step. Approved plan:
 > `C:\Users\kirub\.claude\plans\authentication-using-each-sleepy-hollerith.md`
@@ -18,7 +18,7 @@
 > 81 tests green). Historical note only; current status is below.
 >
 > **Current status:** Tasks 1-8 are done (`src/crypto.js`, `bots`/
-> `app_users`, Microsoft SSO allow-list, tenant group scoping/RBAC, UUID bot
+> `app_users`, email OTP allow-list, tenant group scoping/RBAC, UUID bot
 > webhook routing/token resolution, admin APIs/page, dashboard group-popup flow,
 > and migration script). Validate with `npm test` and `npm run check`.
 >
@@ -50,7 +50,7 @@
 >    text column on purpose — expand/contract, so the live bots keep working. The
 >    claim functions return `coalesce(g.bot_ref::text, g.bot_id)`. Don't drop
 >    `bot_id` until `scripts/migrate-to-multi-tenant.js` has backfilled.
-> 2. The Entra app is **multi-tenant**, so the `app_users` allow-list is the only
+> 2. Supabase Auth only proves the caller controls an email inbox, so the `app_users` allow-list is the only
 >    thing gating access. It must fail closed — never let "authenticated ⇒ allowed"
 >    creep into any endpoint.
 

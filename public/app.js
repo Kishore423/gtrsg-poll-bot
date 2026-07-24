@@ -20,7 +20,7 @@ window.fetch = async (input, init = {}) => {
     }
   }
   if (isManagementApi && response.status === 401) showLogin();
-  // 403 means the Microsoft sign-in worked but the account isn't on the allow-list.
+  // 403 means the Supabase session is valid but the account isn't on the allow-list.
   // That is a different failure from "not signed in" and must not loop the user
   // back through login -- tell them to ask an admin instead.
   if (isManagementApi && response.status === 403) {
@@ -35,6 +35,12 @@ window.fetch = async (input, init = {}) => {
 const authOverlay = document.getElementById('auth-overlay');
 const authError = document.getElementById('auth-error');
 const msSignInBtn = document.getElementById('ms-sign-in');
+const authForm = document.getElementById('auth-form');
+const authEmailInput = document.getElementById('auth-email');
+const authTokenInput = document.getElementById('auth-token');
+const otpStep = document.getElementById('otp-step');
+const sendOtpBtn = document.getElementById('send-otp');
+const verifyOtpBtn = document.getElementById('verify-otp');
 
 // Current user, from /api/me: { email, role, bot_id }. Drives admin-link visibility.
 let currentUser = null;
@@ -45,51 +51,21 @@ function showLogin(message = '') {
   sessionStorage.removeItem('gtrsg-auth');
   authOverlay.hidden = false;
   if (authError) authError.textContent = message;
-  if (msSignInBtn) msSignInBtn.hidden = false;
+  if (sendOtpBtn) sendOtpBtn.disabled = false;
+  if (verifyOtpBtn) verifyOtpBtn.disabled = false;
 }
 
 function showNotProvisioned(message) {
   authOverlay.hidden = false;
   if (authError) authError.textContent = message;
-  // Signing in again won't help until an admin provisions the email.
+  // Requesting another code won't help until an admin provisions the email.
   if (msSignInBtn) msSignInBtn.hidden = true;
+  if (sendOtpBtn) sendOtpBtn.hidden = true;
+  if (verifyOtpBtn) verifyOtpBtn.hidden = true;
 }
 
-// Supabase's Azure (Entra ID) provider handles the redirect; we only need the
-// resulting access token, which the fetch wrapper above already attaches.
-function supabaseAuthUrl(config, path, params = {}) {
-  const url = new URL(`/auth/v1/${path}`, config.supabaseUrl);
-  Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
-  return url.toString();
-}
-
-async function startMicrosoftSignIn(config) {
-  if (!config?.supabaseUrl) {
-    if (authError) authError.textContent = 'Microsoft sign-in is not configured on this deployment.';
-    return;
-  }
-  if (authError) authError.textContent = '';
-  if (msSignInBtn) msSignInBtn.disabled = true;
-  const status = await nativeFetch('/api/auth/provider-status?provider=azure')
-    .then((response) => response.json())
-    .catch((error) => ({ enabled: false, error: error.message }));
-  if (!status.enabled) {
-    if (authError) {
-      authError.textContent = status.error_code === 'validation_failed'
-        ? 'Microsoft sign-in is not enabled in Supabase yet. Enable the Azure provider in Supabase Authentication > Providers.'
-        : `Microsoft sign-in is not available: ${status.error || 'provider is not enabled'}`;
-    }
-    if (msSignInBtn) msSignInBtn.disabled = false;
-    return;
-  }
-  window.location.href = supabaseAuthUrl(config, 'authorize', {
-    provider: 'azure',
-    redirect_to: window.location.origin + window.location.pathname,
-    scopes: 'openid email profile',
-  });
-}
-
-// Supabase returns the session in the URL fragment after the Microsoft redirect.
+// Older OAuth redirects can still leave tokens in the URL fragment.
+// Keep this parser so returning users are not stranded during the transition.
 function captureSessionFromRedirect() {
   if (!window.location.hash.includes('access_token')) return false;
   const params = new URLSearchParams(window.location.hash.slice(1));
@@ -104,6 +80,61 @@ function captureSessionFromRedirect() {
   // Strip the tokens out of the address bar so they aren't left in history.
   history.replaceState(null, '', window.location.pathname + window.location.search);
   return true;
+}
+
+async function sendEmailOtp() {
+  const email = authEmailInput?.value.trim();
+  if (!email) {
+    if (authError) authError.textContent = 'Enter your approved email address.';
+    return;
+  }
+  if (authError) authError.textContent = '';
+  if (sendOtpBtn) sendOtpBtn.disabled = true;
+  const response = await nativeFetch('/api/auth/send-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (authError) authError.textContent = result.error || 'Unable to send code.';
+    if (sendOtpBtn) sendOtpBtn.disabled = false;
+    return;
+  }
+  if (otpStep) otpStep.hidden = false;
+  if (verifyOtpBtn) verifyOtpBtn.hidden = false;
+  if (sendOtpBtn) {
+    sendOtpBtn.textContent = 'Resend code';
+    sendOtpBtn.disabled = false;
+  }
+  authTokenInput?.focus();
+  if (authError) authError.textContent = 'Code sent. Check your email inbox.';
+}
+
+async function verifyEmailOtp() {
+  const email = authEmailInput?.value.trim();
+  const token = authTokenInput?.value.trim();
+  if (!email || !token) {
+    if (authError) authError.textContent = 'Enter your email and one-time code.';
+    return;
+  }
+  if (authError) authError.textContent = '';
+  if (verifyOtpBtn) verifyOtpBtn.disabled = true;
+  const response = await nativeFetch('/api/auth/verify-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, token }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (authError) authError.textContent = result.error || 'Invalid or expired code.';
+    if (verifyOtpBtn) verifyOtpBtn.disabled = false;
+    return;
+  }
+  authSession = result;
+  sessionStorage.setItem('gtrsg-auth', JSON.stringify(result));
+  authOverlay.hidden = true;
+  await loadDashboard(legacyWorkflowEnabled);
 }
 
 const form = document.getElementById('slot-form');
@@ -1641,7 +1672,7 @@ async function loadDashboard(includeLegacy = legacyWorkflowEnabled) {
 async function bootstrap() {
   ensureTemplatePreviewPlacement();
   hideManagedWorkflowSections();
-  // Returning from the Microsoft redirect? Pick the session out of the fragment
+  // Older OAuth redirects can leave a session in the URL fragment; pick it up
   // before anything else decides we're signed out.
   captureSessionFromRedirect();
 
@@ -1652,9 +1683,11 @@ async function bootstrap() {
   }
   if (!config.legacyEnabled) document.querySelectorAll('.legacy-workflow').forEach((element) => element.remove());
 
-  if (msSignInBtn) {
-    msSignInBtn.addEventListener('click', () => startMicrosoftSignIn(config));
-  }
+  sendOtpBtn?.addEventListener('click', sendEmailOtp);
+  authForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    await verifyEmailOtp();
+  });
 
   if (config.required && !authSession?.access_token) {
     showLogin();
@@ -1662,7 +1695,7 @@ async function bootstrap() {
   }
 
   if (config.required) {
-    // Confirms the signed-in Microsoft account is actually on the allow-list, and
+    // Confirms the signed-in account is actually on the allow-list, and
     // tells us the role so the Admin link can be shown only to admins.
     const meResponse = await fetch('/api/me');
     if (meResponse.status === 403) {

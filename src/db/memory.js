@@ -259,7 +259,7 @@ function createMemoryDb() {
       return appUsers.map((user) => ({ ...user }));
     },
 
-    // Email is the join key between the Microsoft identity and the allow-list.
+    // Email is the join key between the Supabase identity and the allow-list.
     async getAppUserByEmail(email) {
       const user = appUsers.find(
         (item) => item.email === String(email).toLowerCase() && item.enabled);

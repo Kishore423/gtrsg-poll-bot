@@ -666,6 +666,24 @@
     .auth-dialog h2 { margin-top: 0; }
     .auth-dialog form { display: grid; gap: 0.85rem; }
     .auth-error { color: var(--red); min-height: 1.25rem; margin: 0; }
+    .auth-dialog > p.hint,
+    #ms-sign-in {
+      display: none;
+    }
+    .otp-auth-actions {
+      display: flex;
+      gap: 0.65rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .otp-auth-actions button {
+      flex: 1 1 10rem;
+    }
+    .otp-code-input {
+      font-size: 1.15rem;
+      letter-spacing: 0.16em;
+      text-align: center;
+    }
     .ms-sign-in-button {
       width: 100%;
       min-height: 2.75rem;
@@ -790,12 +808,25 @@
   <div id="auth-overlay" class="auth-overlay" hidden>
     <div class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title">
       <h2 id="auth-title">Sign in</h2>
-      <p class="hint">Use your work Microsoft account. Access is granted by an admin —
-        signing in alone does not create an account.</p>
+      <p class="hint">Legacy OAuth sign-in is disabled.</p>
       <button type="button" id="ms-sign-in" class="ms-sign-in-button">
         <span class="ms-logo" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
-        <span>Sign in with Microsoft</span>
+        <span>Legacy sign-in disabled</span>
       </button>
+      <form id="auth-form">
+        <label>Email
+          <input type="email" id="auth-email" name="email" autocomplete="email" required />
+        </label>
+        <div id="otp-step" hidden>
+          <label>One-time code
+            <input type="text" id="auth-token" name="token" class="otp-code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" />
+          </label>
+        </div>
+        <div class="otp-auth-actions">
+          <button type="button" id="send-otp" class="primary">Send code</button>
+          <button type="submit" id="verify-otp" class="secondary" hidden>Verify code</button>
+        </div>
+      </form>
       <p id="auth-error" class="auth-error" aria-live="polite"></p>
     </div>
   </div>

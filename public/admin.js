@@ -13,6 +13,12 @@ const statusEl = document.getElementById('status');
 const authOverlay = document.getElementById('auth-overlay');
 const authError = document.getElementById('auth-error');
 const msSignInBtn = document.getElementById('ms-sign-in');
+const authForm = document.getElementById('auth-form');
+const authEmailInput = document.getElementById('auth-email');
+const authTokenInput = document.getElementById('auth-token');
+const otpStep = document.getElementById('otp-step');
+const sendOtpBtn = document.getElementById('send-otp');
+const verifyOtpBtn = document.getElementById('verify-otp');
 const usersBody = document.getElementById('users-body');
 const addUserForm = document.getElementById('add-user-form');
 
@@ -26,34 +32,59 @@ function escapeHtml(value) {
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]));
 }
 
-function supabaseAuthUrl(config, path, params = {}) {
-  const url = new URL(`/auth/v1/${path}`, config.supabaseUrl);
-  Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
-  return url.toString();
-}
-
-async function startMicrosoftSignIn(config) {
-  if (!config?.supabaseUrl) {
-    authError.textContent = 'Microsoft sign-in is not configured on this deployment.';
+async function sendEmailOtp() {
+  const email = authEmailInput?.value.trim();
+  if (!email) {
+    authError.textContent = 'Enter your approved email address.';
     return;
   }
   authError.textContent = '';
-  if (msSignInBtn) msSignInBtn.disabled = true;
-  const status = await nativeFetch('/api/auth/provider-status?provider=azure')
-    .then((response) => response.json())
-    .catch((error) => ({ enabled: false, error: error.message }));
-  if (!status.enabled) {
-    authError.textContent = status.error_code === 'validation_failed'
-      ? 'Microsoft sign-in is not enabled in Supabase yet. Enable the Azure provider in Supabase Authentication > Providers.'
-      : `Microsoft sign-in is not available: ${status.error || 'provider is not enabled'}`;
-    if (msSignInBtn) msSignInBtn.disabled = false;
+  if (sendOtpBtn) sendOtpBtn.disabled = true;
+  const response = await nativeFetch('/api/auth/send-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    authError.textContent = result.error || 'Unable to send code.';
+    if (sendOtpBtn) sendOtpBtn.disabled = false;
     return;
   }
-  window.location.href = supabaseAuthUrl(config, 'authorize', {
-    provider: 'azure',
-    redirect_to: window.location.origin + window.location.pathname,
-    scopes: 'openid email profile',
+  if (otpStep) otpStep.hidden = false;
+  if (verifyOtpBtn) verifyOtpBtn.hidden = false;
+  if (sendOtpBtn) {
+    sendOtpBtn.textContent = 'Resend code';
+    sendOtpBtn.disabled = false;
+  }
+  authTokenInput?.focus();
+  authError.textContent = 'Code sent. Check your email inbox.';
+}
+
+async function verifyEmailOtp() {
+  const email = authEmailInput?.value.trim();
+  const token = authTokenInput?.value.trim();
+  if (!email || !token) {
+    authError.textContent = 'Enter your email and one-time code.';
+    return;
+  }
+  authError.textContent = '';
+  if (verifyOtpBtn) verifyOtpBtn.disabled = true;
+  const response = await nativeFetch('/api/auth/verify-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, token }),
   });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    authError.textContent = result.error || 'Invalid or expired code.';
+    if (verifyOtpBtn) verifyOtpBtn.disabled = false;
+    return;
+  }
+  authSession = result;
+  sessionStorage.setItem('gtrsg-auth', JSON.stringify(result));
+  authOverlay.hidden = true;
+  await loadAdminAfterAuth();
 }
 
 function captureSessionFromRedirect() {
@@ -72,6 +103,8 @@ function captureSessionFromRedirect() {
 function showLogin(message = '') {
   authOverlay.hidden = false;
   authError.textContent = message;
+  if (sendOtpBtn) sendOtpBtn.disabled = false;
+  if (verifyOtpBtn) verifyOtpBtn.disabled = false;
 }
 
 async function loadUsers() {
@@ -172,19 +205,7 @@ addUserForm.addEventListener('submit', async (event) => {
   await loadUsers();
 });
 
-async function bootstrap() {
-  captureSessionFromRedirect();
-  const config = await (await nativeFetch('/api/auth-config')).json();
-  if (msSignInBtn) {
-    msSignInBtn.addEventListener('click', () => startMicrosoftSignIn(config));
-  }
-  if (config.required && !authSession?.access_token) return showLogin();
-  if (!config.required) {
-    currentUser = { role: 'admin' };
-    authOverlay.hidden = true;
-    await loadUsers();
-    return;
-  }
+async function loadAdminAfterAuth() {
   const me = await fetch('/api/me');
   if (!me.ok) return showLogin('Admin access required.');
   currentUser = await me.json();
@@ -194,6 +215,24 @@ async function bootstrap() {
   }
   authOverlay.hidden = true;
   await loadUsers();
+}
+
+async function bootstrap() {
+  captureSessionFromRedirect();
+  const config = await (await nativeFetch('/api/auth-config')).json();
+  sendOtpBtn?.addEventListener('click', sendEmailOtp);
+  authForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    await verifyEmailOtp();
+  });
+  if (config.required && !authSession?.access_token) return showLogin();
+  if (!config.required) {
+    currentUser = { role: 'admin' };
+    authOverlay.hidden = true;
+    await loadUsers();
+    return;
+  }
+  await loadAdminAfterAuth();
 }
 
 bootstrap().catch((error) => setStatus(`Error: ${error.message}`, 'error'));

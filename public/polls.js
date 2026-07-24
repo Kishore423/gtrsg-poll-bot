@@ -33,26 +33,79 @@ window.fetch = async (input, init = {}) => {
 const authOverlay = document.getElementById('auth-overlay');
 const authForm    = document.getElementById('auth-form');
 const authError   = document.getElementById('auth-error');
+const authEmailInput = document.getElementById('auth-email');
+const authTokenInput = document.getElementById('auth-token');
+const otpStep = document.getElementById('otp-step');
+const sendOtpBtn = document.getElementById('send-otp');
+const verifyOtpBtn = document.getElementById('verify-otp');
 
 function showLogin() {
   authSession = null;
   sessionStorage.removeItem('gtrsg-auth');
   authOverlay.hidden = false;
+  if (sendOtpBtn) sendOtpBtn.disabled = false;
+  if (verifyOtpBtn) verifyOtpBtn.disabled = false;
 }
 
-authForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
+async function sendEmailOtp() {
+  const email = authEmailInput?.value.trim();
+  if (!email) {
+    authError.textContent = 'Enter your approved email address.';
+    return;
+  }
   authError.textContent = '';
-  const body = Object.fromEntries(new FormData(authForm).entries());
-  const response = await nativeFetch('/api/auth/sign-in', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  if (sendOtpBtn) sendOtpBtn.disabled = true;
+  const response = await nativeFetch('/api/auth/send-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
   });
-  const result = await response.json();
-  if (!response.ok) { authError.textContent = result.error || 'Sign-in failed'; return; }
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    authError.textContent = result.error || 'Unable to send code.';
+    if (sendOtpBtn) sendOtpBtn.disabled = false;
+    return;
+  }
+  if (otpStep) otpStep.hidden = false;
+  if (verifyOtpBtn) verifyOtpBtn.hidden = false;
+  if (sendOtpBtn) {
+    sendOtpBtn.textContent = 'Resend code';
+    sendOtpBtn.disabled = false;
+  }
+  authTokenInput?.focus();
+  authError.textContent = 'Code sent. Check your email inbox.';
+}
+
+async function verifyEmailOtp() {
+  const email = authEmailInput?.value.trim();
+  const token = authTokenInput?.value.trim();
+  if (!email || !token) {
+    authError.textContent = 'Enter your email and one-time code.';
+    return;
+  }
+  authError.textContent = '';
+  if (verifyOtpBtn) verifyOtpBtn.disabled = true;
+  const response = await nativeFetch('/api/auth/verify-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, token }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    authError.textContent = result.error || 'Invalid or expired code.';
+    if (verifyOtpBtn) verifyOtpBtn.disabled = false;
+    return;
+  }
   authSession = result;
   sessionStorage.setItem('gtrsg-auth', JSON.stringify(result));
   authOverlay.hidden = true;
   await loadPollsPage();
+}
+
+sendOtpBtn?.addEventListener('click', sendEmailOtp);
+authForm?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  await verifyEmailOtp();
 });
 
 /* ── Status bar ─────────────────────────────────────────────────── */

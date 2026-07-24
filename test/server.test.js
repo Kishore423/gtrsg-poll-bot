@@ -47,7 +47,7 @@ test('management APIs are open locally and require a provisioned user in product
   });
   await withServer(async ({ baseUrl }) => {
     // Unprovisioned (or absent) identity is refused -- the allow-list, not the
-    // Microsoft token, is what grants access.
+    // Supabase token, is what grants access.
     assert.equal((await fetch(`${baseUrl}/api/slots`)).status, 403);
     const ok = await fetch(`${baseUrl}/api/slots`, { headers: { Authorization: 'Bearer valid' } });
     assert.equal(ok.status, 200);
@@ -67,6 +67,40 @@ test('admin-only routes reject a provisioned non-admin', async () => {
     req.headers.authorization === 'Bearer user'
       ? { id: 'user-1', email: 'user@example.com', role: 'user', bot_id: null }
       : null });
+});
+
+test('auth OTP endpoints send and verify a provisioned email session', async () => {
+  const sent = [];
+  await withServer(async ({ baseUrl }) => {
+    const send = await fetch(`${baseUrl}/api/auth/send-otp`, json('POST', {
+      email: 'user@example.com',
+    }));
+    assert.equal(send.status, 200);
+    assert.deepEqual(sent, ['user@example.com']);
+
+    const verified = await fetch(`${baseUrl}/api/auth/verify-otp`, json('POST', {
+      email: 'user@example.com',
+      token: '123456',
+    }));
+    assert.equal(verified.status, 200);
+    const session = await verified.json();
+    assert.equal(session.access_token, 'access-user@example.com');
+    assert.equal(session.refresh_token, 'refresh-user@example.com');
+  }, {
+    requireAdminAuth: true,
+    sendOtp: async (email) => {
+      sent.push(String(email).toLowerCase());
+      return { email: String(email).toLowerCase() };
+    },
+    verifyOtp: async (email, token) => {
+      assert.equal(token, '123456');
+      return {
+        access_token: `access-${String(email).toLowerCase()}`,
+        refresh_token: `refresh-${String(email).toLowerCase()}`,
+        expires_at: 123,
+      };
+    },
+  });
 });
 
 test('admin APIs create a user bot mapping, register webhook, and sync bot rename', async () => {

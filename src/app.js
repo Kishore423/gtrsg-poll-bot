@@ -40,7 +40,7 @@ function buildAppFromEnv() {
   });
 
   // `db` is required: the allow-list lookup (app_users by email) is what actually
-  // authorises a caller, since the Entra registration is multi-tenant.
+  // authorises a caller after Supabase verifies the email OTP.
   const auth = createSupabaseAuth({
     url: process.env.SUPABASE_URL,
     anonKey: process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
@@ -53,6 +53,8 @@ function buildAppFromEnv() {
     confirmationTimezoneOffset: process.env.CONFIRMATION_TIMEZONE_OFFSET || '+08:00',
     verifyUser: auth.verifyUser,
     refreshSession: auth.refresh,
+    sendOtp: auth.sendOtp,
+    verifyOtp: auth.verifyOtp,
     requireAdminAuth: !unconfiguredPreview && process.env.REQUIRE_ADMIN_AUTH !== 'false' && process.env.DB_DRIVER !== 'memory',
     enableLegacyWorkflow: unconfiguredPreview || process.env.ENABLE_LEGACY_WORKFLOW === 'true' || process.env.DB_DRIVER === 'memory',
     demoPreview: unconfiguredPreview,

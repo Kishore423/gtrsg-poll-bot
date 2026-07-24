@@ -4,8 +4,8 @@ const { createSupabaseAuth, requireUser, requireAdmin } = require('../src/auth')
 const { createMemoryDb } = require('../src/db/memory');
 
 // Stands in for supabase.auth.getUser: any token of the form "tok:<email>" is a
-// VALID Microsoft login. That mirrors reality under a multi-tenant Entra app --
-// the identity provider happily authenticates strangers, so these tests prove the
+// VALID Supabase login. That mirrors reality with email OTP -- the identity
+// provider proves inbox control, so these tests prove the
 // app_users allow-list (not the token) is what actually grants access.
 function fakeSupabase() {
   return {
@@ -14,6 +14,18 @@ function fakeSupabase() {
         const match = /^tok:(.+)$/.exec(token || '');
         if (!match) return { data: { user: null }, error: new Error('bad token') };
         return { data: { user: { id: `auth-${match[1]}`, email: match[1] } }, error: null };
+      },
+      async signInWithOtp({ email }) {
+        if (email === 'fail@example.com') return { data: {}, error: new Error('send failed') };
+        return { data: { user: null, session: null }, error: null };
+      },
+      async verifyOtp({ email, token }) {
+        if (token !== '123456') return { data: { session: null }, error: new Error('bad code') };
+        return { data: { session: {
+          access_token: `tok:${email}`,
+          refresh_token: `refresh:${email}`,
+          expires_at: 123,
+        } }, error: null };
       },
     },
   };
@@ -53,7 +65,7 @@ test('a provisioned user is admitted and carries their role + bot', async () => 
 
 test('SECURITY: a validly-authenticated but UNPROVISIONED account is denied', async () => {
   const { auth } = await seeded();
-  // A real Microsoft account from any tenant -- the token verifies fine.
+  // A real Supabase session -- the token verifies fine.
   const user = await auth.verifyUser(reqWith('tok:stranger@some-other-company.com'));
   assert.equal(user, null);
 
@@ -99,7 +111,7 @@ test('requireAdmin lets an admin through and blocks a normal user', async () => 
   assert.match(asUser.body.error, /Admin access required/i);
 });
 
-test('first sign-in binds the Microsoft identity to the pre-provisioned row', async () => {
+test('first sign-in binds the Supabase identity to the pre-provisioned row', async () => {
   const { db, auth } = await seeded();
   const before = await db.getAppUserByEmail('Yidan_Wang@sats.com.sg');
   assert.equal(before.auth_user_id, null);
@@ -110,9 +122,31 @@ test('first sign-in binds the Microsoft identity to the pre-provisioned row', as
   assert.equal(after.auth_user_id, 'auth-Yidan_Wang@sats.com.sg');
 });
 
-test('email matching is case-insensitive so Entra casing cannot lock a user out', async () => {
+test('email matching is case-insensitive so address casing cannot lock a user out', async () => {
   const { auth } = await seeded();
   const user = await auth.verifyUser(reqWith('tok:YIDAN_WANG@SATS.COM.SG'));
   assert.ok(user, 'differently-cased email still resolves');
   assert.equal(user.role, 'user');
+});
+
+test('sendOtp only emails provisioned enabled users', async () => {
+  const { auth } = await seeded();
+  const sent = await auth.sendOtp('Yidan_Wang@sats.com.sg');
+  assert.equal(sent.email, 'yidan_wang@sats.com.sg');
+
+  await assert.rejects(
+    () => auth.sendOtp('stranger@example.com'),
+    /not provisioned/i
+  );
+});
+
+test('verifyOtp returns a session for a provisioned user code', async () => {
+  const { auth } = await seeded();
+  const session = await auth.verifyOtp('Yidan_Wang@sats.com.sg', '123456');
+  assert.equal(session.access_token, 'tok:yidan_wang@sats.com.sg');
+
+  await assert.rejects(
+    () => auth.verifyOtp('Yidan_Wang@sats.com.sg', '000000'),
+    /bad code/i
+  );
 });

@@ -1,10 +1,8 @@
 const { createClient } = require('@supabase/supabase-js');
 
-// Sign-in is Microsoft (Entra ID) SSO via Supabase's Azure provider. The Entra app
-// registration is MULTI-TENANT, so *any* Microsoft work/school account in the world
-// can complete the Microsoft login step. Authentication therefore grants nothing on
-// its own: the `app_users` table is the authorisation boundary, and it must fail
-// CLOSED -- no row (or a disabled row) means no access, full stop.
+// Sign-in uses Supabase email OTP. Authentication grants nothing on its own:
+// the `app_users` table is the authorisation boundary, and it must fail CLOSED
+// -- no row (or a disabled row) means no access, full stop.
 //
 // `db` is the repository (memory or postgres) used to look the caller up by email.
 function createSupabaseAuth({ url, anonKey, serviceRoleKey, db, client, adminClient } = {}) {
@@ -22,7 +20,7 @@ function createSupabaseAuth({ url, anonKey, serviceRoleKey, db, client, adminCli
 
   // Resolves the caller to a provisioned app user, or null. Returning null is what
   // every caller treats as "denied" -- there is deliberately no path that grants
-  // access purely because the Microsoft token was valid.
+  // access purely because the Supabase token was valid.
   async function verifyUser(req) {
     if (!supabase || !db) return null;
     const token = bearerToken(req);
@@ -31,14 +29,14 @@ function createSupabaseAuth({ url, anonKey, serviceRoleKey, db, client, adminCli
     const { data, error } = await supabase.auth.getUser(token);
     if (error || !data.user) return null;
 
-    // Email is the join key between the Microsoft identity and the allow-list.
+    // Email is the join key between the Supabase identity and the allow-list.
     const email = data.user.email;
     if (!email) return null;
 
     const appUser = await db.getAppUserByEmail(email);
     if (!appUser || appUser.enabled === false) return null;
 
-    // Bind the Microsoft identity to the pre-provisioned row on first sign-in.
+    // Bind the Supabase Auth identity to the pre-provisioned row on first sign-in.
     if (!appUser.auth_user_id && db.setAppUserAuthId) {
       await db.setAppUserAuthId(appUser.id, data.user.id);
     }
@@ -59,7 +57,44 @@ function createSupabaseAuth({ url, anonKey, serviceRoleKey, db, client, adminCli
     return data.session;
   }
 
-  return { verifyUser, refresh };
+  async function sendOtp(email) {
+    if (!supabase || !db) throw new Error('Supabase Auth is not configured');
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const appUser = await db.getAppUserByEmail(normalizedEmail);
+    if (!appUser || appUser.enabled === false) {
+      const error = new Error('Your account is not provisioned for this app. Ask an admin to add you.');
+      error.statusCode = 403;
+      throw error;
+    }
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email: normalizedEmail,
+      options: { shouldCreateUser: true },
+    });
+    if (error) throw error;
+    return { email: normalizedEmail };
+  }
+
+  async function verifyOtp(email, token) {
+    if (!supabase || !db) throw new Error('Supabase Auth is not configured');
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const appUser = await db.getAppUserByEmail(normalizedEmail);
+    if (!appUser || appUser.enabled === false) {
+      const error = new Error('Your account is not provisioned for this app. Ask an admin to add you.');
+      error.statusCode = 403;
+      throw error;
+    }
+
+    const { data, error } = await supabase.auth.verifyOtp({
+      email: normalizedEmail,
+      token: String(token || '').trim(),
+      type: 'email',
+    });
+    if (error) throw error;
+    return data.session;
+  }
+
+  return { verifyUser, refresh, sendOtp, verifyOtp };
 }
 
 // Any provisioned user.
@@ -82,7 +117,7 @@ function requireUser(verifyUser) {
 }
 
 // Admin-only. Runs the same lookup then checks role, so a non-admin can never reach
-// an admin route even with a perfectly valid Microsoft token.
+// an admin route even with a perfectly valid Supabase session.
 function requireAdmin(verifyUser) {
   const gate = requireUser(verifyUser);
   return (req, res, next) =>

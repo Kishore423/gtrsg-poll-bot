@@ -346,7 +346,7 @@ function createPostgresDb(sql = createSql()) {
         order by u.role desc, u.email`;
     },
 
-    // Email is the join key between the Microsoft identity and the allow-list.
+    // Email is the join key between the Supabase identity and the allow-list.
     async getAppUserByEmail(email) {
       const [row] = await sql`
         select id, email, role, enabled, bot_id, auth_user_id

@@ -447,6 +447,9 @@
     .auth-dialog h2 { margin-top: 0; }
     .auth-dialog form { display: grid; gap: 0.85rem; }
     .auth-error { color: var(--red); min-height: 1.25rem; margin: 0; font-size: 0.88rem; }
+    .otp-auth-actions { display: flex; gap: 0.65rem; align-items: center; flex-wrap: wrap; }
+    .otp-auth-actions button { flex: 1 1 10rem; }
+    .otp-code-input { font-size: 1.15rem; letter-spacing: 0.16em; text-align: center; }
   </style>
 </head>
 <body>
@@ -454,13 +457,19 @@
   <!-- Auth overlay -->
   <div id="auth-overlay" class="auth-overlay" hidden>
     <div class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title-polls">
-      <h2 id="auth-title-polls">Admin sign in</h2>
+      <h2 id="auth-title-polls">Sign in</h2>
+      <p class="hint">Enter your approved work email. We will send a one-time code to that inbox.</p>
       <form id="auth-form">
-        <label>Email<input name="email" type="email" autocomplete="username" required /></label>
-        <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
-        <button type="submit" class="primary">Sign in</button>
-        <p id="auth-error" class="auth-error" aria-live="polite"></p>
+        <label>Email<input id="auth-email" name="email" type="email" autocomplete="email" required /></label>
+        <div id="otp-step" hidden>
+          <label>One-time code<input id="auth-token" name="token" type="text" class="otp-code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" /></label>
+        </div>
+        <div class="otp-auth-actions">
+          <button type="button" id="send-otp" class="primary">Send code</button>
+          <button type="submit" id="verify-otp" class="secondary" hidden>Verify code</button>
+        </div>
       </form>
+      <p id="auth-error" class="auth-error" aria-live="polite"></p>
     </div>
   </div>
 
