@@ -443,12 +443,16 @@
       background: rgba(17,24,39,0.72);
     }
     .auth-overlay[hidden] { display: none !important; }
-    .auth-dialog { width: min(24rem, 100%); background: white; padding: 1.5rem; border-radius: 10px; }
-    .auth-dialog h2 { margin-top: 0; }
-    .auth-dialog form { display: grid; gap: 0.85rem; }
-    .auth-error { color: var(--red); min-height: 1.25rem; margin: 0; font-size: 0.88rem; }
+    .auth-dialog { width: min(32rem, 100%); background: white; padding: 1.8rem; border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,0.18); }
+    .auth-dialog h2 { margin: 0 0 0.35rem; }
+    .auth-dialog form { display: grid; gap: 1rem; margin-top: 1rem; }
+    .auth-dialog label { display: grid; gap: 0.45rem; font-weight: 700; color: var(--ink); }
+    .auth-dialog input { width: 100%; min-height: 3.1rem; border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 0.95rem; font: inherit; background: #fff; box-sizing: border-box; }
+    .auth-dialog input:focus { border-color: var(--green); outline: 3px solid rgba(44, 142, 93, 0.16); }
+    .auth-error { color: var(--red); min-height: 1.25rem; margin: 0.35rem 0 0; font-size: 0.88rem; }
+    .auth-error.success { color: var(--green-dark); }
     .otp-auth-actions { display: flex; gap: 0.65rem; align-items: center; flex-wrap: wrap; }
-    .otp-auth-actions button { flex: 1 1 10rem; }
+    .otp-auth-actions button { flex: 1 1 10rem; min-height: 3rem; }
     .otp-code-input { font-size: 1.15rem; letter-spacing: 0.16em; text-align: center; }
   </style>
 </head>

@@ -22,6 +22,11 @@ const verifyOtpBtn = document.getElementById('verify-otp');
 const usersBody = document.getElementById('users-body');
 const addUserForm = document.getElementById('add-user-form');
 
+function setAuthMessage(message = '', kind = 'error') {
+  authError.textContent = message;
+  authError.className = `auth-error ${message && kind === 'success' ? 'success' : ''}`.trim();
+}
+
 function setStatus(message, kind = '') {
   statusEl.textContent = message || '';
   statusEl.className = `status ${kind}`.trim();
@@ -35,10 +40,10 @@ function escapeHtml(value) {
 async function sendEmailOtp() {
   const email = authEmailInput?.value.trim();
   if (!email) {
-    authError.textContent = 'Enter your approved email address.';
+    setAuthMessage('Enter your approved email address.');
     return;
   }
-  authError.textContent = '';
+  setAuthMessage('');
   if (sendOtpBtn) sendOtpBtn.disabled = true;
   const response = await nativeFetch('/api/auth/send-otp', {
     method: 'POST',
@@ -47,7 +52,7 @@ async function sendEmailOtp() {
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
-    authError.textContent = result.error || 'Unable to send code.';
+    setAuthMessage(result.error || 'Unable to send code.');
     if (sendOtpBtn) sendOtpBtn.disabled = false;
     return;
   }
@@ -58,17 +63,17 @@ async function sendEmailOtp() {
     sendOtpBtn.disabled = false;
   }
   authTokenInput?.focus();
-  authError.textContent = 'Code sent. Check your email inbox.';
+  setAuthMessage('Code sent. Check your email inbox. You can resend after 60 seconds if it does not arrive.', 'success');
 }
 
 async function verifyEmailOtp() {
   const email = authEmailInput?.value.trim();
   const token = authTokenInput?.value.trim();
   if (!email || !token) {
-    authError.textContent = 'Enter your email and one-time code.';
+    setAuthMessage('Enter your email and one-time code.');
     return;
   }
-  authError.textContent = '';
+  setAuthMessage('');
   if (verifyOtpBtn) verifyOtpBtn.disabled = true;
   const response = await nativeFetch('/api/auth/verify-otp', {
     method: 'POST',
@@ -77,7 +82,7 @@ async function verifyEmailOtp() {
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
-    authError.textContent = result.error || 'Invalid or expired code.';
+    setAuthMessage(result.error || 'Invalid or expired code.');
     if (verifyOtpBtn) verifyOtpBtn.disabled = false;
     return;
   }
@@ -102,7 +107,7 @@ function captureSessionFromRedirect() {
 
 function showLogin(message = '') {
   authOverlay.hidden = false;
-  authError.textContent = message;
+  setAuthMessage(message);
   if (sendOtpBtn) sendOtpBtn.disabled = false;
   if (verifyOtpBtn) verifyOtpBtn.disabled = false;
 }

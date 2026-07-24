@@ -133,6 +133,10 @@ WHCL/PSA bots keep running until `scripts/migrate-to-multi-tenant.js` backfills
   The session returned by `/api/auth/verify-otp` is stored in session storage.
   Elements marked
   `data-admin-only` are unhidden only when `/api/me` says `role === 'admin'`.
+  Supabase sends a numeric code only when the **Magic Link / OTP** email template
+  contains `{{ .Token }}`; a template with only `{{ .ConfirmationURL }}` sends a
+  link instead. Repeat send requests can hit Supabase's built-in email rate limit
+  (default 60 seconds).
 
 ### If picking this up cold, do task 6 next
 

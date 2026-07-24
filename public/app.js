@@ -45,19 +45,25 @@ const verifyOtpBtn = document.getElementById('verify-otp');
 // Current user, from /api/me: { email, role, bot_id }. Drives admin-link visibility.
 let currentUser = null;
 
+function setAuthMessage(message = '', kind = 'error') {
+  if (!authError) return;
+  authError.textContent = message;
+  authError.className = `auth-error ${message && kind === 'success' ? 'success' : ''}`.trim();
+}
+
 function showLogin(message = '') {
   authSession = null;
   currentUser = null;
   sessionStorage.removeItem('gtrsg-auth');
   authOverlay.hidden = false;
-  if (authError) authError.textContent = message;
+  setAuthMessage(message);
   if (sendOtpBtn) sendOtpBtn.disabled = false;
   if (verifyOtpBtn) verifyOtpBtn.disabled = false;
 }
 
 function showNotProvisioned(message) {
   authOverlay.hidden = false;
-  if (authError) authError.textContent = message;
+  setAuthMessage(message);
   // Requesting another code won't help until an admin provisions the email.
   if (msSignInBtn) msSignInBtn.hidden = true;
   if (sendOtpBtn) sendOtpBtn.hidden = true;
@@ -85,10 +91,10 @@ function captureSessionFromRedirect() {
 async function sendEmailOtp() {
   const email = authEmailInput?.value.trim();
   if (!email) {
-    if (authError) authError.textContent = 'Enter your approved email address.';
+    setAuthMessage('Enter your approved email address.');
     return;
   }
-  if (authError) authError.textContent = '';
+  setAuthMessage('');
   if (sendOtpBtn) sendOtpBtn.disabled = true;
   const response = await nativeFetch('/api/auth/send-otp', {
     method: 'POST',
@@ -97,7 +103,7 @@ async function sendEmailOtp() {
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (authError) authError.textContent = result.error || 'Unable to send code.';
+    setAuthMessage(result.error || 'Unable to send code.');
     if (sendOtpBtn) sendOtpBtn.disabled = false;
     return;
   }
@@ -108,17 +114,17 @@ async function sendEmailOtp() {
     sendOtpBtn.disabled = false;
   }
   authTokenInput?.focus();
-  if (authError) authError.textContent = 'Code sent. Check your email inbox.';
+  setAuthMessage('Code sent. Check your email inbox. You can resend after 60 seconds if it does not arrive.', 'success');
 }
 
 async function verifyEmailOtp() {
   const email = authEmailInput?.value.trim();
   const token = authTokenInput?.value.trim();
   if (!email || !token) {
-    if (authError) authError.textContent = 'Enter your email and one-time code.';
+    setAuthMessage('Enter your email and one-time code.');
     return;
   }
-  if (authError) authError.textContent = '';
+  setAuthMessage('');
   if (verifyOtpBtn) verifyOtpBtn.disabled = true;
   const response = await nativeFetch('/api/auth/verify-otp', {
     method: 'POST',
@@ -127,7 +133,7 @@ async function verifyEmailOtp() {
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (authError) authError.textContent = result.error || 'Invalid or expired code.';
+    setAuthMessage(result.error || 'Invalid or expired code.');
     if (verifyOtpBtn) verifyOtpBtn.disabled = false;
     return;
   }

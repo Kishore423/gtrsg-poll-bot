@@ -43,11 +43,18 @@
     .muted { color:var(--ink-soft); }
     .row-actions { display:flex; gap:.4rem; flex-wrap:wrap; justify-content:flex-end; }
     .auth-overlay { position:fixed; inset:0; display:grid; place-items:center; background:rgba(244,246,248,.92); z-index:1000; }
-    .auth-dialog { width:min(92vw,380px); background:#fff; border:1px solid var(--border); border-radius:10px; padding:1.4rem; box-shadow:0 18px 50px rgba(16,24,40,.18); }
-    .auth-error { color:var(--red); min-height:1.2rem; }
-    .auth-dialog > p:not(.auth-error) { display:none; }
+    .auth-dialog { width:min(92vw,32rem); background:#fff; border:1px solid var(--border); border-radius:10px; padding:1.8rem; box-shadow:0 18px 50px rgba(16,24,40,.18); }
+    .auth-dialog h2 { margin:0 0 .35rem; }
+    .auth-dialog form { margin-top:1rem; display:grid; gap:1rem; }
+    .auth-dialog label { display:grid; gap:.45rem; font-weight:700; color:var(--ink); }
+    .auth-dialog input { width:100%; min-height:3.1rem; border:1px solid var(--border); border-radius:8px; padding:.8rem .95rem; font:inherit; background:#fff; box-sizing:border-box; }
+    .auth-dialog input:focus { border-color:var(--green); outline:3px solid rgba(44,142,93,.16); }
+    .auth-error { color:var(--red); min-height:1.2rem; margin:.35rem 0 0; font-size:.9rem; }
+    .auth-error.success { color:var(--green-dark); }
+    .otp-auth-copy { margin:0; color:var(--ink-soft); line-height:1.45; }
+    .auth-dialog > p:not(.auth-error):not(.otp-auth-copy) { display:none; }
     .otp-auth-actions { display:flex; gap:.65rem; align-items:center; flex-wrap:wrap; }
-    .otp-auth-actions button { flex:1 1 10rem; }
+    .otp-auth-actions button { flex:1 1 10rem; min-height:3rem; }
     .otp-code-input { font-size:1.15rem; letter-spacing:.16em; text-align:center; }
     .ms-sign-in-button { width:100%; min-height:2.75rem; display:inline-flex; align-items:center; justify-content:center; gap:.75rem; border:1px solid #8c8c8c; border-radius:2px; background:#fff; color:#1f1f1f; font-weight:600; box-shadow:none; }
     #ms-sign-in { display:none; }
@@ -66,6 +73,7 @@
     <div class="auth-dialog" role="dialog" aria-modal="true">
       <h2>Sign in</h2>
       <p>Legacy OAuth sign-in is disabled.</p>
+      <p class="otp-auth-copy">Enter your approved email. We will send a one-time code to that inbox.</p>
       <button type="button" id="ms-sign-in" class="ms-sign-in-button">
         <span class="ms-logo" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
         <span>Legacy sign-in disabled</span>

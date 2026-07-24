@@ -122,6 +122,11 @@ Vercel Cron** for hosting/scheduling.
 - Auth: Supabase (`src/auth.js`). `REQUIRE_ADMIN_AUTH` (default true in prod)
   protects `/api/*` except `/api/auth/*`, `/api/telegram/*`, `/api/cron/*`
   (those use the webhook secret / cron bearer instead).
+  The dashboard uses email OTP: `/api/auth/send-otp` sends only to enabled
+  `app_users`, and `/api/auth/verify-otp` stores the Supabase session in browser
+  session storage. Supabase sends a numeric code only when the **Magic Link / OTP**
+  email template includes `{{ .Token }}`; otherwise it sends a magic link. Repeat
+  sends can hit Supabase's default 60-second email rate limit.
 - Webhook updates are de-duplicated (`beginWebhookEvent`/`finishWebhookEvent`);
   preserve that. Any configured webhook bot route (`PRIMARY`, `WHCL`, `PSA`)
   auto-captures a managed Telegram group from bot membership updates or received
