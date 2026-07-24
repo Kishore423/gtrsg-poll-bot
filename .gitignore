@@ -1,0 +1,23 @@
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+
+# Vercel
+.vercel/
+
+# Codex developer-local overrides (shared config remains tracked)
+AGENTS.override.md
+.codex/config.local.toml
+.codex/*.override.toml
+
+.vercel
+.env*
+
+# Local test/browser artifacts
+.playwright-cli/
+.vercel-preview/
+output/
+
+!.env.example

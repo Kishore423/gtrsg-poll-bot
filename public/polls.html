@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" href="data:," />
+  <title>Polls — Gops poll</title>
+  <meta name="description" content="View, create and manage all Gops Telegram polls." />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --green: #128c7e;
+      --green-dark: #0d6b60;
+      --green-light: #e7f7f4;
+      --amber: #b7791f;
+      --amber-light: #fdf3e0;
+      --red: #c0392b;
+      --red-light: #fdecea;
+      --ink: #1c2230;
+      --ink-soft: #5b6472;
+      --border: #e3e7ed;
+      --bg: #f4f6f8;
+      --nav-h: 56px;
+    }
+
+    [hidden] { display: none !important; }
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, system-ui, sans-serif;
+      margin: 0;
+      padding: 0;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    /* ── Nav ─────────────────────────────────────────────── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      height: var(--nav-h);
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 1.5rem;
+      gap: 2rem;
+      box-shadow: 0 1px 3px rgba(16,24,40,0.06);
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--green-dark);
+      text-decoration: none;
+      letter-spacing: -0.01em;
+    }
+
+    .nav-brand::before {
+      content: '';
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--green);
+      flex-shrink: 0;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 0.25rem;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .nav-links a {
+      display: block;
+      padding: 0.4rem 0.85rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--ink-soft);
+      text-decoration: none;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .nav-links a:hover { background: var(--bg); color: var(--ink); }
+    .nav-links a.active { background: var(--green-light); color: var(--green-dark); font-weight: 600; }
+
+    .nav-spacer { flex: 1; }
+
+    #nav-status {
+      font-size: 0.82rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 8px;
+      font-weight: 500;
+    }
+    #nav-status.success { background: var(--green-light); color: var(--green-dark); }
+    #nav-status.error   { background: var(--red-light);   color: var(--red); }
+    #nav-status.pending { background: var(--amber-light);  color: var(--amber); }
+
+    /* ── Layout ──────────────────────────────────────────── */
+    main {
+      max-width: 1060px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 5rem;
+    }
+
+    .page-header {
+      margin-bottom: 1.75rem;
+    }
+
+    .page-header h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin: 0 0 0.3rem;
+    }
+
+    .page-header p {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 0.9rem;
+    }
+
+    /* ── Cards ───────────────────────────────────────────── */
+    .card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 1px 2px rgba(16,24,40,0.04);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .card-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 0.55rem;
+      flex-wrap: wrap;
+    }
+
+    .filter-bar {
+      display: flex;
+      align-items: flex-end;
+      gap: 0.85rem;
+      flex-wrap: wrap;
+      padding: 0.85rem;
+      background: #fafbfc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 1rem;
+    }
+
+    .filter-bar label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      font-size: 0.73rem;
+      font-weight: 700;
+      color: var(--ink-soft);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .filter-bar input,
+    .filter-bar select {
+      padding: 0.45rem 0.6rem;
+      font-size: 0.88rem;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--ink);
+      background: white;
+      font-family: inherit;
+    }
+
+    .card h2 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin: 0;
+      color: var(--ink);
+    }
+
+    /* ── Polls table ─────────────────────────────────────── */
+    .polls-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+
+    .polls-table th {
+      text-align: left;
+      font-size: 0.71rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--ink-soft);
+      padding: 0 0.75rem 0.65rem;
+      border-bottom: 2px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .polls-table td {
+      padding: 0.8rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+
+    .polls-table tbody tr:last-child td { border-bottom: none; }
+    .polls-table tbody tr:hover { background: #fafbfc; }
+
+    .polls-table td.col-actions {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .poll-title { font-weight: 600; color: var(--ink); }
+    .poll-meta  { font-size: 0.78rem; color: var(--ink-soft); margin-top: 0.15rem; }
+
+    .col-actions { display: flex; gap: 0.4rem; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+
+    /* ── Pills ───────────────────────────────────────────── */
+    .pill {
+      display: inline-block;
+      padding: 0.18rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+    .pill-whcl    { background: var(--green-light); color: var(--green-dark); }
+    .pill-psa     { background: #e8eefc; color: #3455a4; }
+    .pill-custom  { background: #4f46e5; color: white; }
+    .pill-test    { background: var(--red); color: white; }
+    .pill-muted   { background: #f4f6f8; color: var(--ink-soft); border: 1px solid var(--border); }
+
+    .status-pill-draft     { background: #f4f6f8; color: var(--ink-soft); border: 1px solid var(--border); }
+    .status-pill-scheduled { background: var(--amber-light); color: var(--amber); }
+    .status-pill-sending   { background: #e8eefc; color: #3455a4; }
+    .status-pill-sent      { background: var(--green-light); color: var(--green-dark); }
+    .status-pill-closed    { background: var(--green-light); color: var(--green-dark); }
+    .status-pill-cancelled { background: #f4f6f8; color: var(--ink-soft); border: 1px solid var(--border); }
+    .status-pill-failed    { background: var(--red-light); color: var(--red); }
+
+    /* ── Buttons ─────────────────────────────────────────── */
+    button {
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 0.5rem 0.9rem;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.05s;
+    }
+    button:active { transform: translateY(1px); }
+
+    .primary { background: var(--green); color: white; }
+    .primary:hover { background: var(--green-dark); }
+
+    .secondary { background: white; color: var(--green-dark); border: 1px solid var(--green); }
+    .secondary:hover { background: var(--green-light); }
+
+    .danger-link { background: none; color: var(--red); font-weight: 500; padding: 0.3rem 0.5rem; }
+    .danger-link:hover { background: var(--red-light); }
+
+    .danger { background: var(--red); color: white; }
+    .danger:hover { background: #9f2f24; }
+
+    .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.78rem; }
+
+    /* ── Forms ───────────────────────────────────────────── */
+    form {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 0.9rem;
+      align-items: end;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--ink-soft);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    input, select {
+      padding: 0.55rem 0.65rem;
+      font-size: 0.9rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--ink);
+      background: #fbfcfd;
+      font-family: inherit;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px var(--green-light);
+      background: white;
+    }
+
+    .hint { margin: -0.4rem 0 1rem; color: var(--ink-soft); font-size: 0.85rem; }
+
+    .timing-preview {
+      grid-column: 1 / -1;
+      background: #fafbfc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.85rem;
+      color: var(--ink-soft);
+      font-size: 0.86rem;
+      line-height: 1.5;
+    }
+    .timing-preview strong { color: var(--ink); }
+
+    .poll-actions {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 0.6rem;
+    }
+    .poll-actions button { flex: 1; }
+
+    .schedule-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+      flex-wrap: wrap;
+    }
+    .schedule-row:last-child { border-bottom: none; }
+
+    .shift-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 0.9rem;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .shift-row:last-child { border-bottom: none; }
+    .shift-row label { flex: 1 1 110px; text-transform: uppercase; font-size: 0.73rem; font-weight: 600; color: var(--ink-soft); gap: 0.3rem; }
+    .shift-actions { display: flex; align-items: center; gap: 0.4rem; padding-bottom: 0.15rem; }
+
+    .no-votes { color: var(--ink-soft); font-size: 0.85rem; }
+    .empty-state { text-align: center; color: var(--ink-soft); padding: 2rem 0; font-size: 0.9rem; }
+
+    /* ── Batch table ─────────────────────────────────────── */
+    .batch-controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 0.9rem;
+      align-items: end;
+    }
+    .batch-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: flex-end; }
+    .batch-table { width: 100%; margin-top: 1rem; border-collapse: collapse; font-size: 0.86rem; }
+    .batch-table th { text-align: left; font-size: 0.71rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); padding: 0 0.6rem 0.6rem; border-bottom: 2px solid var(--border); }
+    .batch-table td { padding: 0.65rem 0.6rem; border-bottom: 1px solid var(--border); }
+    .batch-table input[type="checkbox"] { width: 1rem; height: 1rem; }
+    .batch-row-disabled { opacity: 0.55; background: #fafbfc; }
+
+    /* ── Auth overlay ────────────────────────────────────── */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 900;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+      background: rgba(17,24,39,0.45);
+    }
+    .modal-backdrop[hidden] { display: none !important; }
+    .modal-panel {
+      width: min(38rem, 100%);
+      max-height: min(42rem, calc(100vh - 2rem));
+      overflow: auto;
+      background: white;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      box-shadow: 0 20px 48px rgba(16,24,40,0.24);
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-header h2 { margin: 0; font-size: 1rem; }
+    .modal-body { padding: 1rem 1.25rem 1.25rem; }
+    .details-list {
+      display: grid;
+      gap: 0.6rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .details-list li {
+      display: grid;
+      grid-template-columns: minmax(7rem, 0.8fr) minmax(10rem, 1fr) minmax(7rem, 0.8fr);
+      gap: 0.75rem;
+      align-items: center;
+      padding: 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fafbfc;
+      font-size: 0.86rem;
+    }
+    .details-muted { color: var(--ink-soft); font-size: 0.84rem; }
+    @media (max-width: 640px) {
+      .details-list li { grid-template-columns: 1fr; }
+    }
+
+    .auth-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+      background: rgba(17,24,39,0.72);
+    }
+    .auth-overlay[hidden] { display: none !important; }
+    .auth-dialog { width: min(24rem, 100%); background: white; padding: 1.5rem; border-radius: 10px; }
+    .auth-dialog h2 { margin-top: 0; }
+    .auth-dialog form { display: grid; gap: 0.85rem; }
+    .auth-error { color: var(--red); min-height: 1.25rem; margin: 0; font-size: 0.88rem; }
+  </style>
+</head>
+<body>
+
+  <!-- Auth overlay -->
+  <div id="auth-overlay" class="auth-overlay" hidden>
+    <div class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title-polls">
+      <h2 id="auth-title-polls">Admin sign in</h2>
+      <form id="auth-form">
+        <label>Email<input name="email" type="email" autocomplete="username" required /></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
+        <button type="submit" class="primary">Sign in</button>
+        <p id="auth-error" class="auth-error" aria-live="polite"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Nav bar -->
+  <nav>
+    <a href="/" class="nav-brand">Gops poll</a>
+    <ul class="nav-links">
+      <li><a href="/">Home</a></li>
+      <li><a href="/polls.html" class="active">Polls</a></li>
+    </ul>
+    <div class="nav-spacer"></div>
+    <span id="nav-status"></span>
+  </nav>
+
+  <main>
+    <div class="page-header">
+      <h1>Polls</h1>
+      <p>Monitor scheduled Telegram polls and review their current status.</p>
+    </div>
+
+    <!-- Polls table -->
+    <section class="card" id="polls-table-section">
+      <div class="card-header">
+        <h2>All polls</h2>
+        <div class="card-actions">
+          <button type="button" id="refresh-polls-btn" class="secondary btn-sm">↻ Refresh</button>
+        </div>
+      </div>
+      <div class="filter-bar">
+        <label>Filter by event date
+          <input type="date" id="filter-event-date" />
+        </label>
+        <label>Telegram group
+          <select id="filter-group">
+            <option value="">All groups</option>
+          </select>
+        </label>
+        <label>Type
+          <select id="filter-type">
+            <option value="">All types</option>
+            <option value="test">Test</option>
+            <option value="custom">Custom</option>
+            <option value="batch_default">Batch default</option>
+          </select>
+        </label>
+        <button type="button" id="clear-filters-btn" class="secondary btn-sm">Clear filters</button>
+      </div>
+      <div id="polls-table-container">
+        <p class="empty-state">Loading…</p>
+      </div>
+    </section>
+  </main>
+
+  <div id="details-modal" class="modal-backdrop" hidden>
+    <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="details-title">
+      <div class="modal-header">
+        <h2 id="details-title">Poll details</h2>
+        <button type="button" class="secondary btn-sm" id="details-close-btn">Close</button>
+      </div>
+      <div class="modal-body" id="details-modal-body"></div>
+    </section>
+  </div>
+
+  <script src="polls.js"></script>
+</body>
+</html>

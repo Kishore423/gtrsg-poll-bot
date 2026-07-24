@@ -1,0 +1,6 @@
+-- No schema change.
+-- Application-level telegram group deletion moves the group's confirmation
+-- messages, scheduled polls, events, and weekly templates to another enabled
+-- group on the same service route before deleting the telegram_groups row.
+-- Several managed tables intentionally use ON DELETE RESTRICT for operational
+-- safety, so poll data should be reassigned rather than deleted.

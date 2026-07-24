@@ -1,1 +1,0 @@
-# gtrsg-poll-bot

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "builds": [
+    {
+      "src": "api/index.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/index.js" },
+    { "src": "/(.*\\.(js|html|css|ico|png|svg|jpg|woff2?))", "dest": "/public/$1" },
+    { "src": "/(.*)", "dest": "/api/index.js" }
+  ],
+  "crons": [
+    { "path": "/api/cron/scheduler", "schedule": "0 0 * * *" }
+  ]
+}

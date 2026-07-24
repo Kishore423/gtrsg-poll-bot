@@ -1,0 +1,28 @@
+{
+  "name": "gtrsg-poll-bot",
+  "version": "2.0.0",
+  "description": "Automates weekly Telegram poll release for GTRSG flexi wheelchair/PSA slots",
+  "main": "src/localServer.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/localServer.js",
+    "dev-telegram": "node scripts/dev-telegram.js",
+    "migrate": "node scripts/migrate.js",
+    "set-webhook": "node scripts/set-webhook.js",
+    "delete-webhook": "node scripts/delete-webhook.js",
+    "check": "node scripts/check.js",
+    "build": "npm run check",
+    "lint": "npm run check",
+    "verify:migration": "node scripts/verify-migration.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.110.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "postgres": "^3.4.9"
+  },
+  "engines": {
+    "node": "24.x"
+  }
+}
