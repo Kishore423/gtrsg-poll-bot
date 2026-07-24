@@ -454,6 +454,9 @@
     .otp-auth-actions { display: flex; gap: 0.65rem; align-items: center; flex-wrap: wrap; }
     .otp-auth-actions button { flex: 1 1 10rem; min-height: 3rem; }
     .otp-code-input { font-size: 1.15rem; letter-spacing: 0.16em; text-align: center; }
+    .telegram-sign-in { width:100%; min-height:3.2rem; margin-top:1rem; border:0; border-radius:6px; background:#229ed9; color:#fff; font:inherit; font-weight:700; cursor:pointer; }
+    .telegram-sign-in:hover { background:#1688bd; }
+    .telegram-sign-in:disabled { cursor:progress; opacity:.72; }
   </style>
 </head>
 <body>
@@ -462,17 +465,8 @@
   <div id="auth-overlay" class="auth-overlay" hidden>
     <div class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title-polls">
       <h2 id="auth-title-polls">Sign in</h2>
-      <p class="hint">Enter your approved work email. We will send a one-time code to that inbox.</p>
-      <form id="auth-form">
-        <label>Email<input id="auth-email" name="email" type="email" autocomplete="email" required /></label>
-        <div id="otp-step" hidden>
-          <label>One-time code<input id="auth-token" name="token" type="text" class="otp-code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" /></label>
-        </div>
-        <div class="otp-auth-actions">
-          <button type="button" id="send-otp" class="primary">Send code</button>
-          <button type="submit" id="verify-otp" class="secondary" hidden>Verify code</button>
-        </div>
-      </form>
+      <p class="hint">Use your Telegram account to access your assigned polls and groups.</p>
+      <button type="button" id="telegram-sign-in" class="telegram-sign-in">Continue with Telegram</button>
       <p id="auth-error" class="auth-error" aria-live="polite"></p>
     </div>
   </div>
@@ -537,6 +531,7 @@
     </section>
   </div>
 
+  <script src="telegram-auth.js"></script>
   <script src="polls.js"></script>
 </body>
 </html>

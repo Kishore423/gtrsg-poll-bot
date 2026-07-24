@@ -1,165 +1,7 @@
-const nativeFetch = window.fetch.bind(window);
-let authSession = JSON.parse(sessionStorage.getItem('gtrsg-auth') || 'null');
+const nativeFetch = window.gtrsgAuth.nativeFetch;
 let legacyWorkflowEnabled = true;
-
-window.fetch = async (input, init = {}) => {
-  const url = typeof input === 'string' ? input : input.url;
-  const isManagementApi = url.startsWith('/api/') && !url.startsWith('/api/auth/');
-  const headers = new Headers(init.headers || (typeof input === 'string' ? undefined : input.headers));
-  if (isManagementApi && authSession?.access_token) headers.set('Authorization', `Bearer ${authSession.access_token}`);
-  let response = await nativeFetch(input, { ...init, headers });
-  if (isManagementApi && response.status === 401 && authSession?.refresh_token) {
-    const refreshed = await nativeFetch('/api/auth/refresh', { method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: authSession.refresh_token }) });
-    if (refreshed.ok) {
-      authSession = { ...authSession, ...await refreshed.json() };
-      sessionStorage.setItem('gtrsg-auth', JSON.stringify(authSession));
-      headers.set('Authorization', `Bearer ${authSession.access_token}`);
-      response = await nativeFetch(input, { ...init, headers });
-    }
-  }
-  if (isManagementApi && response.status === 401) showLogin();
-  // 403 means the Supabase session is valid but the account isn't on the allow-list.
-  // That is a different failure from "not signed in" and must not loop the user
-  // back through login -- tell them to ask an admin instead.
-  if (isManagementApi && response.status === 403) {
-    const copy = response.clone();
-    copy.json().then((body) => {
-      if (/not provisioned/i.test(body?.error || '')) showNotProvisioned(body.error);
-    }).catch(() => {});
-  }
-  return response;
-};
-
 const authOverlay = document.getElementById('auth-overlay');
-const authError = document.getElementById('auth-error');
-const msSignInBtn = document.getElementById('ms-sign-in');
-const authForm = document.getElementById('auth-form');
-const authEmailInput = document.getElementById('auth-email');
-const authTokenInput = document.getElementById('auth-token');
-const otpStep = document.getElementById('otp-step');
-const sendOtpBtn = document.getElementById('send-otp');
-const verifyOtpBtn = document.getElementById('verify-otp');
-let otpCooldownTimer = null;
-
-// Current user, from /api/me: { email, role, bot_id }. Drives admin-link visibility.
 let currentUser = null;
-
-function setAuthMessage(message = '', kind = 'error') {
-  if (!authError) return;
-  authError.textContent = message;
-  authError.className = `auth-error ${message && kind === 'success' ? 'success' : ''}`.trim();
-}
-
-function startOtpCooldown(seconds = 60) {
-  if (!sendOtpBtn) return;
-  clearInterval(otpCooldownTimer);
-  let remaining = seconds;
-  const label = sendOtpBtn.textContent.includes('Resend') ? 'Resend code' : 'Send code';
-  const tick = () => {
-    sendOtpBtn.disabled = remaining > 0;
-    sendOtpBtn.textContent = remaining > 0 ? `${label} (${remaining}s)` : label;
-    remaining -= 1;
-    if (remaining < 0) clearInterval(otpCooldownTimer);
-  };
-  tick();
-  otpCooldownTimer = setInterval(tick, 1000);
-}
-
-function showLogin(message = '') {
-  authSession = null;
-  currentUser = null;
-  sessionStorage.removeItem('gtrsg-auth');
-  authOverlay.hidden = false;
-  setAuthMessage(message);
-  if (sendOtpBtn) sendOtpBtn.disabled = false;
-  if (verifyOtpBtn) verifyOtpBtn.disabled = false;
-}
-
-function showNotProvisioned(message) {
-  authOverlay.hidden = false;
-  setAuthMessage(message);
-  // Requesting another code won't help until an admin provisions the email.
-  if (msSignInBtn) msSignInBtn.hidden = true;
-  if (sendOtpBtn) sendOtpBtn.hidden = true;
-  if (verifyOtpBtn) verifyOtpBtn.hidden = true;
-}
-
-// Older OAuth redirects can still leave tokens in the URL fragment.
-// Keep this parser so returning users are not stranded during the transition.
-function captureSessionFromRedirect() {
-  if (!window.location.hash.includes('access_token')) return false;
-  const params = new URLSearchParams(window.location.hash.slice(1));
-  const accessToken = params.get('access_token');
-  if (!accessToken) return false;
-  authSession = {
-    access_token: accessToken,
-    refresh_token: params.get('refresh_token'),
-    expires_at: Number(params.get('expires_at')) || null,
-  };
-  sessionStorage.setItem('gtrsg-auth', JSON.stringify(authSession));
-  // Strip the tokens out of the address bar so they aren't left in history.
-  history.replaceState(null, '', window.location.pathname + window.location.search);
-  return true;
-}
-
-async function sendEmailOtp() {
-  const email = authEmailInput?.value.trim();
-  if (!email) {
-    setAuthMessage('Enter your approved email address.');
-    return;
-  }
-  setAuthMessage('');
-  if (sendOtpBtn) sendOtpBtn.disabled = true;
-  const response = await nativeFetch('/api/auth/send-otp', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    setAuthMessage(result.error || 'Unable to send code.');
-    if (response.status === 429) startOtpCooldown(60);
-    else if (sendOtpBtn) sendOtpBtn.disabled = false;
-    return;
-  }
-  if (otpStep) otpStep.hidden = false;
-  if (verifyOtpBtn) verifyOtpBtn.hidden = false;
-  if (sendOtpBtn) {
-    sendOtpBtn.textContent = 'Resend code';
-    sendOtpBtn.disabled = false;
-  }
-  startOtpCooldown(60);
-  authTokenInput?.focus();
-  setAuthMessage('Code sent. Check your email inbox. You can resend after 60 seconds if it does not arrive.', 'success');
-}
-
-async function verifyEmailOtp() {
-  const email = authEmailInput?.value.trim();
-  const token = authTokenInput?.value.trim();
-  if (!email || !token) {
-    setAuthMessage('Enter your email and one-time code.');
-    return;
-  }
-  setAuthMessage('');
-  if (verifyOtpBtn) verifyOtpBtn.disabled = true;
-  const response = await nativeFetch('/api/auth/verify-otp', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, token }),
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    setAuthMessage(result.error || 'Invalid or expired code.');
-    if (verifyOtpBtn) verifyOtpBtn.disabled = false;
-    return;
-  }
-  authSession = result;
-  sessionStorage.setItem('gtrsg-auth', JSON.stringify(result));
-  authOverlay.hidden = true;
-  await loadDashboard(legacyWorkflowEnabled);
-}
 
 const form = document.getElementById('slot-form');
 const slotsContainer = document.getElementById('slots-container');
@@ -1696,10 +1538,7 @@ async function loadDashboard(includeLegacy = legacyWorkflowEnabled) {
 async function bootstrap() {
   ensureTemplatePreviewPlacement();
   hideManagedWorkflowSections();
-  // Older OAuth redirects can leave a session in the URL fragment; pick it up
-  // before anything else decides we're signed out.
-  captureSessionFromRedirect();
-
+  window.gtrsgAuth.init();
   const config = await (await nativeFetch('/api/auth-config')).json();
   legacyWorkflowEnabled = config.legacyEnabled;
   if (config.demoPreview) {
@@ -1707,28 +1546,15 @@ async function bootstrap() {
   }
   if (!config.legacyEnabled) document.querySelectorAll('.legacy-workflow').forEach((element) => element.remove());
 
-  sendOtpBtn?.addEventListener('click', sendEmailOtp);
-  authForm?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    await verifyEmailOtp();
-  });
-
-  if (config.required && !authSession?.access_token) {
-    showLogin();
+  if (config.required && !window.gtrsgAuth.hasSession()) {
+    window.gtrsgAuth.showLogin();
     return;
   }
 
   if (config.required) {
-    // Confirms the signed-in account is actually on the allow-list, and
-    // tells us the role so the Admin link can be shown only to admins.
     const meResponse = await fetch('/api/me');
-    if (meResponse.status === 403) {
-      const body = await meResponse.json().catch(() => ({}));
-      showNotProvisioned(body.error || 'Your account is not provisioned for this app.');
-      return;
-    }
     if (!meResponse.ok) {
-      showLogin('Session expired — please sign in again.');
+      window.gtrsgAuth.showLogin('Session expired. Sign in with Telegram again.');
       return;
     }
     currentUser = await meResponse.json();

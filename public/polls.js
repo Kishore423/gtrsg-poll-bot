@@ -4,132 +4,8 @@
 'use strict';
 
 /* ── Auth layer ─────────────────────────────────────────────────── */
-const nativeFetch = window.fetch.bind(window);
-let authSession = JSON.parse(sessionStorage.getItem('gtrsg-auth') || 'null');
-
-window.fetch = async (input, init = {}) => {
-  const url = typeof input === 'string' ? input : input.url;
-  const isManagementApi = url.startsWith('/api/') && !url.startsWith('/api/auth/');
-  const headers = new Headers(init.headers || (typeof input === 'string' ? undefined : input.headers));
-  if (isManagementApi && authSession?.access_token) headers.set('Authorization', `Bearer ${authSession.access_token}`);
-  let response = await nativeFetch(input, { ...init, headers });
-  if (isManagementApi && response.status === 401 && authSession?.refresh_token) {
-    const refreshed = await nativeFetch('/api/auth/refresh', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: authSession.refresh_token }),
-    });
-    if (refreshed.ok) {
-      authSession = { ...authSession, ...await refreshed.json() };
-      sessionStorage.setItem('gtrsg-auth', JSON.stringify(authSession));
-      headers.set('Authorization', `Bearer ${authSession.access_token}`);
-      response = await nativeFetch(input, { ...init, headers });
-    }
-  }
-  if (isManagementApi && response.status === 401) showLogin();
-  return response;
-};
-
+const nativeFetch = window.gtrsgAuth.nativeFetch;
 const authOverlay = document.getElementById('auth-overlay');
-const authForm    = document.getElementById('auth-form');
-const authError   = document.getElementById('auth-error');
-const authEmailInput = document.getElementById('auth-email');
-const authTokenInput = document.getElementById('auth-token');
-const otpStep = document.getElementById('otp-step');
-const sendOtpBtn = document.getElementById('send-otp');
-const verifyOtpBtn = document.getElementById('verify-otp');
-let otpCooldownTimer = null;
-
-function setAuthMessage(message = '', kind = 'error') {
-  authError.textContent = message;
-  authError.className = `auth-error ${message && kind === 'success' ? 'success' : ''}`.trim();
-}
-
-function startOtpCooldown(seconds = 60) {
-  if (!sendOtpBtn) return;
-  clearInterval(otpCooldownTimer);
-  let remaining = seconds;
-  const label = sendOtpBtn.textContent.includes('Resend') ? 'Resend code' : 'Send code';
-  const tick = () => {
-    sendOtpBtn.disabled = remaining > 0;
-    sendOtpBtn.textContent = remaining > 0 ? `${label} (${remaining}s)` : label;
-    remaining -= 1;
-    if (remaining < 0) clearInterval(otpCooldownTimer);
-  };
-  tick();
-  otpCooldownTimer = setInterval(tick, 1000);
-}
-
-function showLogin() {
-  authSession = null;
-  sessionStorage.removeItem('gtrsg-auth');
-  authOverlay.hidden = false;
-  if (sendOtpBtn) sendOtpBtn.disabled = false;
-  if (verifyOtpBtn) verifyOtpBtn.disabled = false;
-}
-
-async function sendEmailOtp() {
-  const email = authEmailInput?.value.trim();
-  if (!email) {
-    setAuthMessage('Enter your approved email address.');
-    return;
-  }
-  setAuthMessage('');
-  if (sendOtpBtn) sendOtpBtn.disabled = true;
-  const response = await nativeFetch('/api/auth/send-otp', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    setAuthMessage(result.error || 'Unable to send code.');
-    if (response.status === 429) startOtpCooldown(60);
-    else if (sendOtpBtn) sendOtpBtn.disabled = false;
-    return;
-  }
-  if (otpStep) otpStep.hidden = false;
-  if (verifyOtpBtn) verifyOtpBtn.hidden = false;
-  if (sendOtpBtn) {
-    sendOtpBtn.textContent = 'Resend code';
-    sendOtpBtn.disabled = false;
-  }
-  startOtpCooldown(60);
-  authTokenInput?.focus();
-  setAuthMessage('Code sent. Check your email inbox. You can resend after 60 seconds if it does not arrive.', 'success');
-}
-
-async function verifyEmailOtp() {
-  const email = authEmailInput?.value.trim();
-  const token = authTokenInput?.value.trim();
-  if (!email || !token) {
-    setAuthMessage('Enter your email and one-time code.');
-    return;
-  }
-  setAuthMessage('');
-  if (verifyOtpBtn) verifyOtpBtn.disabled = true;
-  const response = await nativeFetch('/api/auth/verify-otp', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, token }),
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    setAuthMessage(result.error || 'Invalid or expired code.');
-    if (verifyOtpBtn) verifyOtpBtn.disabled = false;
-    return;
-  }
-  authSession = result;
-  sessionStorage.setItem('gtrsg-auth', JSON.stringify(result));
-  authOverlay.hidden = true;
-  await loadPollsPage();
-}
-
-sendOtpBtn?.addEventListener('click', sendEmailOtp);
-authForm?.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  await verifyEmailOtp();
-});
 
 /* ── Status bar ─────────────────────────────────────────────────── */
 const navStatus = document.getElementById('nav-status');
@@ -388,8 +264,12 @@ async function loadPollsPage() {
 }
 
 async function bootstrap() {
+  window.gtrsgAuth.init();
   const config = await (await nativeFetch('/api/auth-config')).json();
-  if (config.required && !authSession?.access_token) { showLogin(); return; }
+  if (config.required && !window.gtrsgAuth.hasSession()) {
+    window.gtrsgAuth.showLogin();
+    return;
+  }
   await loadPollsPage();
 }
 

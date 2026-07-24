@@ -5,7 +5,7 @@
 const { createServer } = require('./server');
 const { createTelegramClient } = require('./telegram');
 const { createMemoryDb } = require('./db/memory');
-const { createSupabaseAuth } = require('./auth');
+const { createTelegramAuth } = require('./telegramAuth');
 const { decryptToken } = require('./crypto');
 
 function isUnconfiguredVercel() {
@@ -39,36 +39,31 @@ function buildAppFromEnv() {
     },
   });
 
-  // `db` is required: the allow-list lookup (app_users by email) is what actually
-  // authorises a caller after Supabase verifies the email OTP.
-  const auth = createSupabaseAuth({
-    url: process.env.SUPABASE_URL,
-    anonKey: process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  const auth = createTelegramAuth({
     db,
+    telegram,
+    sessionSecret: process.env.APP_SESSION_SECRET,
+    authBotKey: process.env.TELEGRAM_AUTH_BOT || 'PSA',
   });
   const options = {
     labelService: process.env.LABEL_SERVICE_IN_POLL === 'true',
     confirmationHour: Number(process.env.CONFIRMATION_HOUR || 9),
     confirmationTimezoneOffset: process.env.CONFIRMATION_TIMEZONE_OFFSET || '+08:00',
     verifyUser: auth.verifyUser,
-    refreshSession: auth.refresh,
-    sendOtp: auth.sendOtp,
-    verifyOtp: auth.verifyOtp,
+    startTelegramLogin: auth.startLogin,
+    finishTelegramLogin: auth.finishLogin,
+    completeTelegramLogin: auth.completeFromUpdate,
     requireAdminAuth: !unconfiguredPreview && process.env.REQUIRE_ADMIN_AUTH !== 'false' && process.env.DB_DRIVER !== 'memory',
     enableLegacyWorkflow: unconfiguredPreview || process.env.ENABLE_LEGACY_WORKFLOW === 'true' || process.env.DB_DRIVER === 'memory',
     demoPreview: unconfiguredPreview,
     appUrl: process.env.APP_URL || process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`,
-    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL,
-    supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY,
     telegramWebhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET,
     cronSecret: process.env.CRON_SECRET,
     clearPollsPassword: process.env.CLEAR_POLLS_PASSWORD,
   };
 
-  if (options.requireAdminAuth && (!options.supabaseUrl || !options.supabaseAnonKey ||
-      !process.env.SUPABASE_SERVICE_ROLE_KEY)) {
-    throw new Error('SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY are required in production.');
+  if (options.requireAdminAuth && !process.env.APP_SESSION_SECRET) {
+    throw new Error('APP_SESSION_SECRET is required in production.');
   }
   if (options.requireAdminAuth && !process.env.TELEGRAM_WEBHOOK_SECRET) {
     throw new Error('TELEGRAM_WEBHOOK_SECRET is required in production.');

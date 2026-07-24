@@ -66,28 +66,18 @@
     .ms-logo span:nth-child(2) { background:#7fba00; }
     .ms-logo span:nth-child(3) { background:#00a4ef; }
     .ms-logo span:nth-child(4) { background:#ffb900; }
+    .telegram-auth-copy { margin:0 0 1.25rem; color:var(--ink-soft); line-height:1.5; }
+    .telegram-sign-in { width:100%; min-height:3.2rem; border:0; border-radius:6px; background:#229ed9; color:#fff; font:inherit; font-weight:700; cursor:pointer; }
+    .telegram-sign-in:hover { background:#1688bd; }
+    .telegram-sign-in:disabled { cursor:progress; opacity:.72; }
   </style>
 </head>
 <body>
   <div id="auth-overlay" class="auth-overlay" hidden>
     <div class="auth-dialog" role="dialog" aria-modal="true">
       <h2>Sign in</h2>
-      <p>Legacy OAuth sign-in is disabled.</p>
-      <p class="otp-auth-copy">Enter your approved email. We will send a one-time code to that inbox.</p>
-      <button type="button" id="ms-sign-in" class="ms-sign-in-button">
-        <span class="ms-logo" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
-        <span>Legacy sign-in disabled</span>
-      </button>
-      <form id="auth-form">
-        <label>Email<input type="email" id="auth-email" name="email" autocomplete="email" required /></label>
-        <div id="otp-step" hidden>
-          <label>One-time code<input type="text" id="auth-token" name="token" class="otp-code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" /></label>
-        </div>
-        <div class="otp-auth-actions">
-          <button type="button" id="send-otp" class="primary">Send code</button>
-          <button type="submit" id="verify-otp" class="secondary" hidden>Verify code</button>
-        </div>
-      </form>
+      <p class="telegram-auth-copy">Use your approved Telegram account to manage users, bots, and groups.</p>
+      <button type="button" id="telegram-sign-in" class="telegram-sign-in">Continue with Telegram</button>
       <p id="auth-error" class="auth-error" aria-live="polite"></p>
     </div>
   </div>
@@ -109,9 +99,22 @@
     <div id="status" class="status" aria-live="polite"></div>
 
     <section class="card">
-      <h2>Add user</h2>
+      <h2>Pending Telegram access</h2>
+      <p>Users appear here after selecting Continue with Telegram for the first time.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Telegram account</th><th>Role</th><th>BotFather token</th><th></th></tr></thead>
+          <tbody id="requests-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Add Telegram user manually</h2>
       <form id="add-user-form">
-        <label>Email<input name="email" type="email" required /></label>
+        <label>Telegram user ID<input name="telegram_user_id" inputmode="numeric" required /></label>
+        <label>Telegram handle<input name="telegram_username" placeholder="@username" /></label>
+        <label>Display name<input name="telegram_display_name" /></label>
         <label>Role<select name="role"><option value="user">User</option><option value="admin">Admin</option></select></label>
         <label>BotFather token<input name="bot_token" autocomplete="off" placeholder="Required for users" /></label>
         <button type="submit" class="primary">Add user</button>
@@ -122,13 +125,14 @@
       <h2>Users and bots</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Email</th><th>Role</th><th>Bot</th><th>@username</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Telegram account</th><th>Role</th><th>Bot</th><th>Bot handle</th><th>Status</th><th></th></tr></thead>
           <tbody id="users-body"></tbody>
         </table>
       </div>
     </section>
   </main>
 
+  <script src="/telegram-auth.js"></script>
   <script src="/admin.js"></script>
 </body>
 </html>

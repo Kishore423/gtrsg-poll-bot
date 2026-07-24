@@ -8,6 +8,32 @@ function createSql(connectionString = process.env.DATABASE_URL) {
 function createPostgresDb(sql = createSql()) {
   // Alter unique constraint on telegram_groups to allow duplicate chat_ids with different bot_ids
   const initPromise = (async () => {
+    await sql`alter table app_users alter column email drop not null`;
+    await sql`alter table app_users
+      add column if not exists telegram_user_id bigint,
+      add column if not exists telegram_username text,
+      add column if not exists telegram_display_name text`;
+    await sql`create unique index if not exists app_users_telegram_user_id_key
+      on app_users(telegram_user_id) where telegram_user_id is not null`;
+    await sql`create table if not exists telegram_login_challenges (
+      id text primary key,
+      verifier_hash text not null,
+      telegram_user_id bigint,
+      telegram_username text,
+      telegram_display_name text,
+      expires_at timestamptz not null,
+      verified_at timestamptz,
+      created_at timestamptz not null default now()
+    )`;
+    await sql`create table if not exists telegram_access_requests (
+      telegram_user_id bigint primary key,
+      telegram_username text,
+      telegram_display_name text,
+      status text not null default 'pending'
+        check (status in ('pending', 'approved', 'rejected')),
+      requested_at timestamptz not null default now(),
+      reviewed_at timestamptz
+    )`;
     await sql`alter table telegram_groups add column if not exists bot_ref uuid references bots(id) on delete cascade`;
     await sql`create index if not exists telegram_groups_bot_ref_idx on telegram_groups(bot_ref)`;
     await sql`create unique index if not exists telegram_groups_chat_bot_ref_key
@@ -330,20 +356,33 @@ function createPostgresDb(sql = createSql()) {
     },
 
     // ---- App users (the SSO allow-list) --------------------------------------
-    async createAppUser({ email, role = 'user', bot_id = null }) {
+    async createAppUser({
+      email = null,
+      role = 'user',
+      bot_id = null,
+      telegram_user_id = null,
+      telegram_username = null,
+      telegram_display_name = null,
+    }) {
       const [row] = await sql`
-        insert into app_users (email, role, bot_id)
-        values (${String(email).toLowerCase()}, ${role}, ${bot_id})
+        insert into app_users (
+          email, role, bot_id, telegram_user_id, telegram_username, telegram_display_name
+        )
+        values (
+          ${email ? String(email).toLowerCase() : null}, ${role}, ${bot_id},
+          ${telegram_user_id}, ${telegram_username}, ${telegram_display_name}
+        )
         returning id`;
       return row.id;
     },
 
     async listAppUsers() {
       return sql`
-        select u.id, u.email, u.role, u.enabled, u.bot_id, u.auth_user_id, u.created_at,
+        select u.id, u.email, u.telegram_user_id::text, u.telegram_username,
+               u.telegram_display_name, u.role, u.enabled, u.bot_id, u.auth_user_id, u.created_at,
                b.bot_name, b.telegram_username, b.name_synced_at
         from app_users u left join bots b on b.id = u.bot_id
-        order by u.role desc, u.email`;
+        order by u.role desc, coalesce(u.telegram_display_name, u.telegram_username, u.email)`;
     },
 
     // Email is the join key between the Supabase identity and the allow-list.
@@ -351,6 +390,33 @@ function createPostgresDb(sql = createSql()) {
       const [row] = await sql`
         select id, email, role, enabled, bot_id, auth_user_id
         from app_users where email = ${String(email).toLowerCase()} and enabled`;
+      return row || null;
+    },
+
+    async getAppUserByTelegramId(telegramUserId) {
+      await initPromise;
+      const [row] = await sql`
+        select id, email, telegram_user_id::text, telegram_username,
+               telegram_display_name, role, enabled, bot_id
+        from app_users where telegram_user_id = ${telegramUserId} and enabled`;
+      return row || null;
+    },
+
+    async setAppUserTelegramIdentity(id, {
+      telegram_user_id,
+      telegram_username = null,
+      telegram_display_name = null,
+    }) {
+      await initPromise;
+      const [row] = await sql`
+        update app_users set
+          telegram_user_id = ${telegram_user_id},
+          telegram_username = ${telegram_username},
+          telegram_display_name = ${telegram_display_name},
+          updated_at = now()
+        where id = ${id}
+        returning id, email, telegram_user_id::text, telegram_username,
+                  telegram_display_name, role, enabled, bot_id`;
       return row || null;
     },
 
@@ -384,6 +450,85 @@ function createPostgresDb(sql = createSql()) {
 
     async deleteAppUser(id) {
       const [row] = await sql`delete from app_users where id = ${id} returning id, bot_id`;
+      return row || null;
+    },
+
+    async createTelegramLoginChallenge({ id, verifier_hash, expires_at }) {
+      await initPromise;
+      const [row] = await sql`
+        insert into telegram_login_challenges (id, verifier_hash, expires_at)
+        values (${id}, ${verifier_hash}, ${expires_at})
+        returning *`;
+      return row;
+    },
+
+    async getTelegramLoginChallenge(id) {
+      await initPromise;
+      const [row] = await sql`
+        select id, verifier_hash, telegram_user_id::text, telegram_username,
+               telegram_display_name, expires_at, verified_at
+        from telegram_login_challenges where id = ${id}`;
+      return row || null;
+    },
+
+    async completeTelegramLoginChallenge(id, identity) {
+      await initPromise;
+      const [row] = await sql`
+        update telegram_login_challenges set
+          telegram_user_id = ${identity.telegram_user_id},
+          telegram_username = ${identity.telegram_username},
+          telegram_display_name = ${identity.telegram_display_name},
+          verified_at = now()
+        where id = ${id} and expires_at > now()
+        returning id, verifier_hash, telegram_user_id::text, telegram_username,
+                  telegram_display_name, expires_at, verified_at`;
+      return row || null;
+    },
+
+    async upsertTelegramAccessRequest(identity) {
+      await initPromise;
+      const [row] = await sql`
+        insert into telegram_access_requests (
+          telegram_user_id, telegram_username, telegram_display_name
+        ) values (
+          ${identity.telegram_user_id}, ${identity.telegram_username},
+          ${identity.telegram_display_name}
+        )
+        on conflict (telegram_user_id) do update set
+          telegram_username = excluded.telegram_username,
+          telegram_display_name = excluded.telegram_display_name,
+          status = case
+            when telegram_access_requests.status = 'approved' then 'approved'
+            else 'pending'
+          end,
+          requested_at = case
+            when telegram_access_requests.status = 'approved'
+              then telegram_access_requests.requested_at
+            else now()
+          end
+        returning telegram_user_id::text, telegram_username,
+                  telegram_display_name, status, requested_at, reviewed_at`;
+      return row;
+    },
+
+    async listTelegramAccessRequests({ status = null } = {}) {
+      await initPromise;
+      return sql`
+        select telegram_user_id::text, telegram_username, telegram_display_name,
+               status, requested_at, reviewed_at
+        from telegram_access_requests
+        where ${status}::text is null or status = ${status}
+        order by requested_at`;
+    },
+
+    async setTelegramAccessRequestStatus(telegramUserId, status) {
+      await initPromise;
+      const [row] = await sql`
+        update telegram_access_requests
+        set status = ${status}, reviewed_at = now()
+        where telegram_user_id = ${telegramUserId}
+        returning telegram_user_id::text, telegram_username,
+                  telegram_display_name, status, requested_at, reviewed_at`;
       return row || null;
     },
     async createTelegramGroup({ telegram_chat_id, group_name, service = null, bot_id = 'PRIMARY', bot_ref = null }) {

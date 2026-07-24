@@ -1,168 +1,146 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createSupabaseAuth, requireUser, requireAdmin } = require('../src/auth');
 const { createMemoryDb } = require('../src/db/memory');
+const { createTelegramAuth, parseLoginStart, signSession, verifySession } = require('../src/telegramAuth');
+const { requireUser, requireAdmin } = require('../src/auth');
 
-// Stands in for supabase.auth.getUser: any token of the form "tok:<email>" is a
-// VALID Supabase login. That mirrors reality with email OTP -- the identity
-// provider proves inbox control, so these tests prove the
-// app_users allow-list (not the token) is what actually grants access.
-function fakeSupabase() {
+const SESSION_SECRET = 'test-session-secret-that-is-long-enough';
+
+function fakeTelegram() {
+  const messages = [];
   return {
-    auth: {
-      async getUser(token) {
-        const match = /^tok:(.+)$/.exec(token || '');
-        if (!match) return { data: { user: null }, error: new Error('bad token') };
-        return { data: { user: { id: `auth-${match[1]}`, email: match[1] } }, error: null };
-      },
-      async signInWithOtp({ email }) {
-        if (email === 'fail@example.com') return { data: {}, error: new Error('send failed') };
-        if (email === 'limited@example.com') return { data: {}, error: new Error('email rate limit exceeded') };
-        return { data: { user: null, session: null }, error: null };
-      },
-      async verifyOtp({ email, token }) {
-        if (token !== '123456') return { data: { session: null }, error: new Error('bad code') };
-        return { data: { session: {
-          access_token: `tok:${email}`,
-          refresh_token: `refresh:${email}`,
-          expires_at: 123,
-        } }, error: null };
-      },
+    messages,
+    async getMe() {
+      return { id: 8764384354, username: 'Pax_services_bot' };
+    },
+    async sendMessage(service, chatId, html) {
+      messages.push({ service, chatId, html });
     },
   };
 }
 
 async function seeded() {
   const db = createMemoryDb();
+  const telegram = fakeTelegram();
   const botId = await db.createBot({
-    bot_name: 'user_1_bot', token_encrypted: 'enc', webhook_secret: 'sec',
+    bot_name: 'User bot',
+    token_encrypted: 'enc',
+    webhook_secret: 'secret',
   });
-  await db.createAppUser({ email: 'Yidan_Wang@sats.com.sg', role: 'user', bot_id: botId });
-  await db.createAppUser({ email: 'Kirubakaran_Kishore@sats.com.sg', role: 'admin' });
-  const auth = createSupabaseAuth({ db, client: fakeSupabase(), adminClient: {} });
-  return { db, auth, botId };
+  await db.createAppUser({
+    telegram_user_id: '977476515',
+    telegram_username: 'yidan',
+    telegram_display_name: 'Yi Dan',
+    role: 'user',
+    bot_id: botId,
+  });
+  await db.createAppUser({
+    telegram_user_id: '2132609363',
+    telegram_username: 'kishore',
+    telegram_display_name: 'Kishore',
+    role: 'admin',
+  });
+  const auth = createTelegramAuth({ db, telegram, sessionSecret: SESSION_SECRET });
+  return { db, telegram, auth, botId };
 }
 
-const reqWith = (token) => ({ headers: token ? { authorization: `Bearer ${token}` } : {} });
+function requestWith(token) {
+  return { headers: token ? { authorization: `Bearer ${token}` } : {} };
+}
 
-function runMiddleware(mw, req) {
+function runMiddleware(middleware, req) {
   return new Promise((resolve) => {
     const res = {
       statusCode: null,
       status(code) { this.statusCode = code; return this; },
       json(body) { resolve({ status: this.statusCode, body, passed: false }); },
     };
-    mw(req, res, () => resolve({ status: 200, passed: true, req }));
+    middleware(req, res, () => resolve({ status: 200, passed: true, req }));
   });
 }
 
-test('a provisioned user is admitted and carries their role + bot', async () => {
-  const { auth, botId } = await seeded();
-  const user = await auth.verifyUser(reqWith('tok:Yidan_Wang@sats.com.sg'));
-  assert.equal(user.email, 'yidan_wang@sats.com.sg');
+test('Telegram login challenge authenticates a provisioned user', async () => {
+  const { auth, telegram, botId } = await seeded();
+  const started = await auth.startLogin();
+  assert.match(started.login_url, /^https:\/\/t\.me\/Pax_services_bot\?start=login_/);
+
+  const completed = await auth.completeFromUpdate('PSA', {
+    message: {
+      text: `/start login_${started.challenge_id}`,
+      chat: { id: 977476515, type: 'private' },
+      from: { id: 977476515, username: 'yidan', first_name: 'Yi', last_name: 'Dan' },
+    },
+  });
+  assert.equal(completed.handled, 'telegram_login');
+  assert.equal(telegram.messages.length, 1);
+
+  const session = await auth.finishLogin(started.challenge_id, started.verifier);
+  assert.equal(session.status, 'authenticated');
+  const user = await auth.verifyUser(requestWith(session.access_token));
+  assert.equal(user.telegram_user_id, '977476515');
   assert.equal(user.role, 'user');
   assert.equal(user.bot_id, botId);
 });
 
-test('SECURITY: a validly-authenticated but UNPROVISIONED account is denied', async () => {
-  const { auth } = await seeded();
-  // A real Supabase session -- the token verifies fine.
-  const user = await auth.verifyUser(reqWith('tok:stranger@some-other-company.com'));
-  assert.equal(user, null);
-
-  const result = await runMiddleware(requireUser(auth.verifyUser),
-    reqWith('tok:stranger@some-other-company.com'));
-  assert.equal(result.passed, false);
-  assert.equal(result.status, 403);
-  assert.match(result.body.error, /not provisioned/i);
-});
-
-test('a disabled user loses access even though their row exists', async () => {
+test('unknown Telegram identities fail closed and create a pending request', async () => {
   const { db, auth } = await seeded();
-  const [target] = (await db.listAppUsers()).filter((u) => u.role === 'user');
-  const stored = await db.getAppUserByEmail(target.email);
-  assert.ok(stored, 'enabled user resolves before being disabled');
-  (await db.listAppUsers()).find((u) => u.id === target.id); // sanity
-  // Disable by mutating through the repo's own surface.
-  const all = await db.listAppUsers();
-  assert.ok(all.length >= 2);
-  await db.deleteAppUser(target.id); // hard-delete is the strongest form of disable
-  assert.equal(await db.getAppUserByEmail(target.email), null);
-  assert.equal(await auth.verifyUser(reqWith(`tok:${target.email}`)), null);
+  const started = await auth.startLogin();
+  await auth.completeFromUpdate('PSA', {
+    message: {
+      text: `/start login_${started.challenge_id}`,
+      chat: { id: 555, type: 'private' },
+      from: { id: 555, username: 'new_user', first_name: 'New' },
+    },
+  });
+  const result = await auth.finishLogin(started.challenge_id, started.verifier);
+  assert.equal(result.status, 'pending_approval');
+  assert.equal(await auth.verifyUser(requestWith('invalid')), null);
+  const requests = await db.listTelegramAccessRequests({ status: 'pending' });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].telegram_user_id, '555');
 });
 
-test('missing or malformed credentials are denied', async () => {
+test('a challenge cannot be polled without its browser verifier', async () => {
   const { auth } = await seeded();
-  assert.equal(await auth.verifyUser(reqWith(null)), null);
-  assert.equal(await auth.verifyUser(reqWith('garbage')), null);
+  const started = await auth.startLogin();
+  await assert.rejects(
+    () => auth.finishLogin(started.challenge_id, 'wrong-verifier'),
+    (error) => error.statusCode === 401
+  );
 });
 
-test('requireAdmin lets an admin through and blocks a normal user', async () => {
-  const { auth } = await seeded();
-  const gate = requireAdmin(auth.verifyUser);
+test('login start parser only accepts private Telegram start messages', () => {
+  assert.equal(parseLoginStart({ message: {
+    text: '/start login_abcdefghijklmnopqrstuvwxyz',
+    chat: { id: 1, type: 'group' },
+    from: { id: 1 },
+  } }), null);
+  assert.equal(parseLoginStart({ message: {
+    text: '/start something_else',
+    chat: { id: 1, type: 'private' },
+    from: { id: 1 },
+  } }), null);
+});
 
-  const asAdmin = await runMiddleware(gate, reqWith('tok:Kirubakaran_Kishore@sats.com.sg'));
+test('signed sessions reject tampering and expiration', () => {
+  const now = Date.now();
+  const token = signSession(SESSION_SECRET, '123', now, 60);
+  assert.equal(verifySession(SESSION_SECRET, token, now).sub, '123');
+  assert.equal(verifySession(SESSION_SECRET, `${token}x`, now), null);
+  assert.equal(verifySession(SESSION_SECRET, token, now + 61_000), null);
+});
+
+test('route guards require a valid Telegram session and preserve admin RBAC', async () => {
+  const { auth } = await seeded();
+  const missing = await runMiddleware(requireUser(auth.verifyUser), requestWith(null));
+  assert.equal(missing.status, 401);
+
+  const userToken = signSession(SESSION_SECRET, '977476515', Date.now(), 60);
+  const asUser = await runMiddleware(requireAdmin(auth.verifyUser), requestWith(userToken));
+  assert.equal(asUser.status, 403);
+
+  const adminToken = signSession(SESSION_SECRET, '2132609363', Date.now(), 60);
+  const asAdmin = await runMiddleware(requireAdmin(auth.verifyUser), requestWith(adminToken));
   assert.equal(asAdmin.passed, true);
   assert.equal(asAdmin.req.appUser.role, 'admin');
-  assert.equal(asAdmin.req.appUser.bot_id, null); // admins may hold no bot
-
-  const asUser = await runMiddleware(gate, reqWith('tok:Yidan_Wang@sats.com.sg'));
-  assert.equal(asUser.passed, false);
-  assert.equal(asUser.status, 403);
-  assert.match(asUser.body.error, /Admin access required/i);
-});
-
-test('first sign-in binds the Supabase identity to the pre-provisioned row', async () => {
-  const { db, auth } = await seeded();
-  const before = await db.getAppUserByEmail('Yidan_Wang@sats.com.sg');
-  assert.equal(before.auth_user_id, null);
-
-  await auth.verifyUser(reqWith('tok:Yidan_Wang@sats.com.sg'));
-
-  const after = await db.getAppUserByEmail('Yidan_Wang@sats.com.sg');
-  assert.equal(after.auth_user_id, 'auth-Yidan_Wang@sats.com.sg');
-});
-
-test('email matching is case-insensitive so address casing cannot lock a user out', async () => {
-  const { auth } = await seeded();
-  const user = await auth.verifyUser(reqWith('tok:YIDAN_WANG@SATS.COM.SG'));
-  assert.ok(user, 'differently-cased email still resolves');
-  assert.equal(user.role, 'user');
-});
-
-test('sendOtp only emails provisioned enabled users', async () => {
-  const { auth } = await seeded();
-  const sent = await auth.sendOtp('Yidan_Wang@sats.com.sg');
-  assert.equal(sent.email, 'yidan_wang@sats.com.sg');
-
-  await assert.rejects(
-    () => auth.sendOtp('stranger@example.com'),
-    /not provisioned/i
-  );
-});
-
-test('sendOtp maps Supabase email rate limits to a retryable 429', async () => {
-  const db = createMemoryDb();
-  await db.createAppUser({ email: 'limited@example.com', role: 'admin' });
-  const auth = createSupabaseAuth({ db, client: fakeSupabase(), adminClient: {} });
-
-  await assert.rejects(
-    () => auth.sendOtp('limited@example.com'),
-    (error) => {
-      assert.equal(error.statusCode, 429);
-      assert.match(error.message, /wait 60 seconds/i);
-      return true;
-    }
-  );
-});
-
-test('verifyOtp returns a session for a provisioned user code', async () => {
-  const { auth } = await seeded();
-  const session = await auth.verifyOtp('Yidan_Wang@sats.com.sg', '123456');
-  assert.equal(session.access_token, 'tok:yidan_wang@sats.com.sg');
-
-  await assert.rejects(
-    () => auth.verifyOtp('Yidan_Wang@sats.com.sg', '000000'),
-    /bad code/i
-  );
 });

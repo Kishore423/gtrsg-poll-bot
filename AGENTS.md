@@ -1,26 +1,16 @@
 # Codex adapter
 
-> # ⛔ HANDS OFF (2026-07-24) — Claude Code is mid-rework
+> # ✅ MULTI-TENANT REWORK COMPLETE (2026-07-24)
 >
-> A **multi-tenant rework** is in flight (per-user Telegram bots, email OTP auth,
-> RBAC). **Read the "🚧 IN PROGRESS" section at the top of `CLAUDE.md`** for full
-> status, decisions and the next step. Approved plan:
+> The per-user Telegram bot, RBAC, managed-group, and Telegram sign-in work has
+> landed. Historical approved plan:
 > `C:\Users\kirub\.claude\plans\authentication-using-each-sleepy-hollerith.md`
 >
-> **Do not edit these files until it lands** (concurrent edits will clobber):
-> `src/server.js`, `public/app.js`, `public/index.html`, `src/auth.js`,
-> `src/telegram.js`, `src/processUpdate.js`, `src/db/memory.js`, `src/db/postgres.js`
->
-> Everything else is free (schedulers, pollBuilder, confirmation, scheduleRules,
-> and their tests). If you must touch an owned file, note it in `CLAUDE.md` first.
->
-> **Tasks 1–2 are done** (`src/crypto.js` + `bots`/`app_users` schema & repo methods;
-> 81 tests green). Historical note only; current status is below.
->
 > **Current status:** Tasks 1-8 are done (`src/crypto.js`, `bots`/
-> `app_users`, email OTP allow-list, tenant group scoping/RBAC, UUID bot
+> `app_users`, Telegram identity allow-list, tenant group scoping/RBAC, UUID bot
 > webhook routing/token resolution, admin APIs/page, dashboard group-popup flow,
-> and migration script). Validate with `npm test` and `npm run check`.
+> migration script, and Telegram access approval). Validate with `npm test` and
+> `npm run check`.
 >
 > Task 4 added `src/tenancy.js` and scoped existing managed routes in
 > `src/server.js`: managed groups, weekly schedules, skip dates, and scheduled
@@ -50,9 +40,9 @@
 >    text column on purpose — expand/contract, so the live bots keep working. The
 >    claim functions return `coalesce(g.bot_ref::text, g.bot_id)`. Don't drop
 >    `bot_id` until `scripts/migrate-to-multi-tenant.js` has backfilled.
-> 2. Supabase Auth only proves the caller controls an email inbox, so the `app_users` allow-list is the only
->    thing gating access. It must fail closed — never let "authenticated ⇒ allowed"
->    creep into any endpoint.
+> 2. A valid Telegram challenge only proves control of that Telegram account. The
+>    `app_users` allow-list is the authorization gate and must fail closed — never
+>    let "Telegram verified ⇒ allowed" creep into any endpoint.
 
 Codex-facing adapter. `CLAUDE.md` is the canonical source of project knowledge —
 read it for the full architecture. **Two agents (Claude Code + Codex) work on
@@ -63,11 +53,11 @@ change so neither drifts.**
 
 Node.js (CommonJS, Node 24.x) service running GTRSG wheelchair (`WHCL`) / PSA
 (`PSA`) shift-slot **Telegram** polls. Express UI/API, **Supabase** for Postgres
-(`DATABASE_URL` via the `postgres` lib) and admin auth, **Vercel serverless +
+(`DATABASE_URL` via the `postgres` lib), Telegram challenge auth, **Vercel serverless +
 Vercel Cron** for hosting/scheduling.
 
 > Migrated off WhatsApp/Baileys entirely. Also past Vercel-Postgres/Neon and HTTP
-> Basic Auth — now Supabase for DB + auth. Disregard those obsolete references.
+> Basic Auth — now Supabase for DB and Telegram for auth. Disregard those obsolete references.
 
 ## Two workflows
 
@@ -119,16 +109,15 @@ Vercel Cron** for hosting/scheduling.
 - The data layer is a repository with two implementations sharing one async
   interface (`src/db/memory.js`, `src/db/postgres.js`); keep them in lockstep —
   the memory one is what the tests run against.
-- Auth: Supabase (`src/auth.js`). `REQUIRE_ADMIN_AUTH` (default true in prod)
+- Auth: Telegram challenge sessions (`src/telegramAuth.js`). `REQUIRE_ADMIN_AUTH`
+  (default true in prod)
   protects `/api/*` except `/api/auth/*`, `/api/telegram/*`, `/api/cron/*`
   (those use the webhook secret / cron bearer instead).
-  The dashboard uses email OTP: `/api/auth/send-otp` sends only to enabled
-  `app_users`, and `/api/auth/verify-otp` stores the Supabase session in browser
-  session storage. Supabase sends a numeric code only when the **Magic Link / OTP**
-  email template includes `{{ .Token }}`; otherwise it sends a magic link. Repeat
-  sends can hit Supabase's default 60-second email rate limit. `sendOtp` maps
-  Supabase email rate-limit errors to 429, and the UI disables **Send code** with
-  a 60-second countdown.
+  `/api/auth/telegram/start` creates a five-minute verifier-bound challenge, the
+  configured auth bot confirms it through a private `/start login_<challenge>`
+  message, and `/api/auth/telegram/status` issues a signed 12-hour session only
+  for an enabled `app_users.telegram_user_id`. Unknown identities enter the admin
+  approval queue.
 - Webhook updates are de-duplicated (`beginWebhookEvent`/`finishWebhookEvent`);
   preserve that. Any configured webhook bot route (`PRIMARY`, `WHCL`, `PSA`)
   auto-captures a managed Telegram group from bot membership updates or received
@@ -163,18 +152,18 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   **omit `TELEGRAM_BOT_TOKEN`**. `set-webhook.js` registers every explicitly
   configured bot and rejects duplicate token values so one bot cannot get multiple
   webhook URLs. `TELEGRAM_BOT_USERNAME` is unused in code (omit).
-- Prod-required env (app.js throws): `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
-  `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_WEBHOOK_SECRET`, `CRON_SECRET`,
-  `DATABASE_URL`, `BOT_TOKEN_ENC_KEY`.
+- Prod-required env (app.js throws): `APP_SESSION_SECRET` (32+ characters),
+  `TELEGRAM_WEBHOOK_SECRET`, `CRON_SECRET`, `DATABASE_URL`, `BOT_TOKEN_ENC_KEY`.
+  `TELEGRAM_AUTH_BOT` selects the shared login route and defaults to `PSA`.
 - **DATABASE_URL = Supabase SESSION pooler (5432).** `postgres.js` uses prepared
   statements (no `prepare:false`); do NOT switch to the transaction pooler (6543)
   without adding `prepare:false`.
 - **Schema**: `npm run migrate` is disabled; use `npx supabase db push`
   (`supabase/migrations/202607120001_production_schema.sql`).
 - **Admin bootstrap** (else locked out): `REQUIRE_ADMIN_AUTH=true` + an enabled
-  admin row in `app_users`. `npm run migrate:multi-tenant` upserts the seed
-  admin `Kirubakaran_Kishore@sats.com.sg`; otherwise insert an enabled
-  `app_users` admin manually before turning auth on.
+  admin row in `app_users` with `telegram_user_id`. The production migration maps
+  the existing Kishore admin row to the Telegram identity already observed by
+  the poll bot.
 - `telegram_groups.bot_id` defaults to `service || 'PRIMARY'`. The table unique constraint
   is on `(telegram_chat_id, bot_id)`, allowing a single group chat ID to be added multiple
   times for different bots.
@@ -201,16 +190,13 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   confirmation as day-before 8:00 AM and PSA cutoff/confirmation as Friday
   8:00 AM / 12:00 PM. The weekly schedule
   defaults also act as templates for shifts, storing them in a `shifts` JSONB column and auto-populating
-  them on the dashboard's "Create a poll" card. Also: live deployment had auth
-  OFF (`/api/auth-config` → `required:false`; predates the env var) and `admin_users`
-  was empty — seed the admin BEFORE redeploying. `webhook_events` had traffic → both
-  bots' webhooks are live. **Current production auth is intentionally OFF** via
-  `REQUIRE_ADMIN_AUTH=false` (explicitly requested 2026-07-13), so management APIs are
-  publicly accessible.
+  them on the dashboard's "Create a poll" card. `webhook_events` had traffic, so both
+  bots' webhooks are live. Production auth is enabled with
+  `REQUIRE_ADMIN_AUTH=true`; management APIs require a valid Telegram session.
 - The poll editor has one form-level **Send immediately** action beside **Review and
   schedule**; it sends every shift row currently in the form.
-- Production deploy `dpl_CE7ZSmWgmjg3BhwPQKQgKTmM3NDk` was promoted on
-  2026-07-14 and aliased to `https://gtrsg-poll-bot.vercel.app`.
+- Production deploy `dpl_DKLZFQbPTj4jz2i91opFPGoCgnoY` was promoted on
+  2026-07-24 and aliased to `https://gtrsg-poll-bot.vercel.app`.
 - The managed dashboard includes a Release rules summary, a unified **Group template &
   automatic releases** section (template settings and template test polls), and a
   **Create one-off poll** section with inline timing preview and integrated test button.
@@ -297,9 +283,10 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   generation skips active existing polls by default.
 - **Footgun**: don't run `npm run dev-telegram` after webhooks are live — it deletes
   the production webhooks (long-polls). Re-run `set-webhook` to restore.
-- **Current handoff:** all required Vercel Production variables are set. Do not
-  redeploy until a Supabase Auth user exists and its enabled `admin_users` row is
-  seeded; `auth.users` was empty at the last check.
+- **Telegram auth deployment (2026-07-24):** the identity migration is applied,
+  existing users are mapped by immutable Telegram ID, and Vercel Production has
+  `APP_SESSION_SECRET`, `TELEGRAM_AUTH_BOT=PSA`, and
+  `REQUIRE_ADMIN_AUTH=true`.
 
 ## Commands
 

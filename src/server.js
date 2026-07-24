@@ -66,74 +66,38 @@ function createServer(db, telegram, options = {}) {
 
   app.get('/api/auth-config', (req, res) => {
     res.json({ required: !!options.requireAdminAuth, legacyEnabled: options.enableLegacyWorkflow !== false,
-      demoPreview: !!options.demoPreview, supabaseUrl: options.supabaseUrl,
-      supabaseAnonKey: options.supabaseAnonKey });
+      demoPreview: !!options.demoPreview, provider: 'telegram' });
   });
 
-  app.post('/api/auth/send-otp', async (req, res) => {
+  app.post('/api/auth/telegram/start', async (req, res) => {
     if (!options.requireAdminAuth) return res.json({ disabled: true });
     try {
-      const result = await options.sendOtp(req.body?.email);
-      res.json({ ok: true, email: result.email });
+      res.json(await options.startTelegramLogin());
     } catch (error) {
-      res.status(error.statusCode || 400).json({ error: error.message || 'Unable to send OTP' });
+      res.status(error.statusCode || 500).json({ error: error.message || 'Unable to start Telegram sign-in' });
     }
   });
 
-  app.post('/api/auth/verify-otp', async (req, res) => {
+  app.post('/api/auth/telegram/status', async (req, res) => {
     if (!options.requireAdminAuth) return res.json({ disabled: true });
     try {
-      const session = await options.verifyOtp(req.body?.email, req.body?.token);
-      res.json({ access_token: session.access_token, refresh_token: session.refresh_token,
-        expires_at: session.expires_at });
+      res.json(await options.finishTelegramLogin(req.body?.challenge_id, req.body?.verifier));
     } catch (error) {
-      res.status(error.statusCode || 401).json({ error: error.message || 'Invalid or expired OTP' });
-    }
-  });
-
-  app.post('/api/auth/refresh', async (req, res) => {
-    if (!options.requireAdminAuth) return res.json({ disabled: true });
-    try {
-      const session = await options.refreshSession(req.body?.refresh_token);
-      res.json({ access_token: session.access_token, refresh_token: session.refresh_token,
-        expires_at: session.expires_at });
-    } catch {
-      res.status(401).json({ error: 'Session expired' });
-    }
-  });
-
-  app.get('/api/auth/provider-status', async (req, res) => {
-    const provider = String(req.query.provider || '').trim();
-    if (!provider) return res.status(400).json({ error: 'Provider is required' });
-    if (!options.supabaseUrl) return res.json({ provider, enabled: false, error: 'Supabase Auth is not configured' });
-
-    try {
-      const origin = options.appUrl || `${req.protocol}://${req.get('host')}`;
-      const authUrl = new URL('/auth/v1/authorize', options.supabaseUrl);
-      authUrl.searchParams.set('provider', provider);
-      authUrl.searchParams.set('redirect_to', `${origin.replace(/\/$/, '')}/`);
-      authUrl.searchParams.set('scopes', 'openid email profile');
-
-      const response = await fetch(authUrl, { redirect: 'manual' });
-      if ((response.status >= 300 && response.status < 400) || response.ok) {
-        return res.json({ provider, enabled: true });
-      }
-      const body = await response.json().catch(() => ({}));
-      res.json({
-        provider,
-        enabled: false,
-        error: body.msg || body.error_description || body.error || 'Provider is not enabled',
-        error_code: body.error_code,
-      });
-    } catch (error) {
-      res.status(502).json({ provider, enabled: false, error: error.message });
+      res.status(error.statusCode || 401).json({ error: error.message || 'Unable to complete Telegram sign-in' });
     }
   });
 
   // Tells the caller who they are, so the UI can scope itself and decide whether to
   // show the Admin link. Unprovisioned callers get the 403 from requireUser.
   app.get('/api/me', requireUser(options.verifyUser || (async () => null)), (req, res) => {
-    res.json({ email: req.appUser.email, role: req.appUser.role, bot_id: req.appUser.bot_id });
+    res.json({
+      email: req.appUser.email,
+      telegram_user_id: req.appUser.telegram_user_id,
+      telegram_username: req.appUser.telegram_username,
+      telegram_display_name: req.appUser.telegram_display_name,
+      role: req.appUser.role,
+      bot_id: req.appUser.bot_id,
+    });
   });
 
   if (options.requireAdminAuth) {
@@ -224,6 +188,13 @@ function createServer(db, telegram, options = {}) {
     })));
   }));
 
+  app.get('/api/admin/access-requests', wrap(async (req, res) => {
+    if (!db.listTelegramAccessRequests) {
+      return res.status(501).json({ error: 'Supabase production database is required' });
+    }
+    res.json(await db.listTelegramAccessRequests({ status: 'pending' }));
+  }));
+
   app.get('/api/admin/bots', wrap(async (req, res) => {
     if (!db.listBots) return res.status(501).json({ error: 'Supabase production database is required' });
     const bots = await db.listBots();
@@ -240,19 +211,66 @@ function createServer(db, telegram, options = {}) {
 
   app.post('/api/admin/users', wrap(async (req, res) => {
     if (!db.createAppUser) return res.status(501).json({ error: 'Supabase production database is required' });
-    const email = String(req.body?.email || '').trim().toLowerCase();
+    const email = String(req.body?.email || '').trim().toLowerCase() || null;
+    const telegramUserId = String(req.body?.telegram_user_id || '').trim();
+    const telegramUsername = String(req.body?.telegram_username || '').trim().replace(/^@/, '') || null;
+    const telegramDisplayName = String(req.body?.telegram_display_name || '').trim() || null;
     const role = String(req.body?.role || 'user');
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Valid email is required' });
+    if (!/^\d+$/.test(telegramUserId)) return res.status(400).json({ error: 'A numeric Telegram user ID is required' });
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Email is invalid' });
     if (!['admin', 'user'].includes(role)) return res.status(400).json({ error: 'Role must be admin or user' });
     if (db.listAppUsers) {
-      const existing = (await db.listAppUsers()).find((user) => user.email === email);
-      if (existing) return res.status(409).json({ error: 'This email is already provisioned' });
+      const existing = (await db.listAppUsers()).find((user) =>
+        String(user.telegram_user_id) === telegramUserId || email && user.email === email);
+      if (existing) return res.status(409).json({ error: 'This Telegram account is already provisioned' });
     }
     const botToken = String(req.body?.bot_token || '').trim();
     if (role === 'user' && !botToken) return res.status(400).json({ error: 'A user needs a Telegram bot token' });
     const botId = botToken ? await createBotFromToken(botToken) : null;
-    const userId = await db.createAppUser({ email, role, bot_id: botId });
-    res.status(201).json({ id: userId, email, role, bot_id: botId });
+    const userId = await db.createAppUser({
+      email,
+      role,
+      bot_id: botId,
+      telegram_user_id: telegramUserId,
+      telegram_username: telegramUsername,
+      telegram_display_name: telegramDisplayName,
+    });
+    res.status(201).json({ id: userId, email, telegram_user_id: telegramUserId, role, bot_id: botId });
+  }));
+
+  app.post('/api/admin/access-requests/:telegramUserId/approve', wrap(async (req, res) => {
+    if (!db.listTelegramAccessRequests || !db.createAppUser || !db.setTelegramAccessRequestStatus) {
+      return res.status(501).json({ error: 'Supabase production database is required' });
+    }
+    const request = (await db.listTelegramAccessRequests({ status: 'pending' }))
+      .find((item) => String(item.telegram_user_id) === String(req.params.telegramUserId));
+    if (!request) return res.status(404).json({ error: 'Pending access request not found' });
+    if (db.getAppUserByTelegramId && await db.getAppUserByTelegramId(request.telegram_user_id)) {
+      return res.status(409).json({ error: 'This Telegram account is already provisioned' });
+    }
+    const role = String(req.body?.role || 'user');
+    if (!['admin', 'user'].includes(role)) return res.status(400).json({ error: 'Role must be admin or user' });
+    const botToken = String(req.body?.bot_token || '').trim();
+    if (role === 'user' && !botToken) return res.status(400).json({ error: 'A user needs a Telegram bot token' });
+    const botId = botToken ? await createBotFromToken(botToken) : null;
+    const userId = await db.createAppUser({
+      role,
+      bot_id: botId,
+      telegram_user_id: request.telegram_user_id,
+      telegram_username: request.telegram_username,
+      telegram_display_name: request.telegram_display_name,
+    });
+    await db.setTelegramAccessRequestStatus(request.telegram_user_id, 'approved');
+    res.status(201).json({ id: userId, telegram_user_id: request.telegram_user_id, role, bot_id: botId });
+  }));
+
+  app.post('/api/admin/access-requests/:telegramUserId/reject', wrap(async (req, res) => {
+    if (!db.setTelegramAccessRequestStatus) {
+      return res.status(501).json({ error: 'Supabase production database is required' });
+    }
+    const request = await db.setTelegramAccessRequestStatus(req.params.telegramUserId, 'rejected');
+    if (!request) return res.status(404).json({ error: 'Access request not found' });
+    res.json(request);
   }));
 
   app.patch('/api/admin/users/:id', wrap(async (req, res) => {
@@ -804,7 +822,10 @@ function createServer(db, telegram, options = {}) {
       return res.status(400).json({ error: 'Invalid Telegram update' });
     }
 
-    const result = await processTelegramUpdate(db, service, req.body, { botRef });
+    const loginResult = options.completeTelegramLogin
+      ? await options.completeTelegramLogin(service, req.body)
+      : null;
+    const result = loginResult || await processTelegramUpdate(db, service, req.body, { botRef });
     if (result.summary) console.log(result.summary);
     // Always 200 so Telegram doesn't retry.
     res.status(200).json({ ok: true });

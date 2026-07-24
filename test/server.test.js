@@ -48,7 +48,7 @@ test('management APIs are open locally and require a provisioned user in product
   await withServer(async ({ baseUrl }) => {
     // Unprovisioned (or absent) identity is refused -- the allow-list, not the
     // Supabase token, is what grants access.
-    assert.equal((await fetch(`${baseUrl}/api/slots`)).status, 403);
+    assert.equal((await fetch(`${baseUrl}/api/slots`)).status, 401);
     const ok = await fetch(`${baseUrl}/api/slots`, { headers: { Authorization: 'Bearer valid' } });
     assert.equal(ok.status, 200);
   }, { requireAdminAuth: true, verifyUser: async (req) =>
@@ -69,36 +69,31 @@ test('admin-only routes reject a provisioned non-admin', async () => {
       : null });
 });
 
-test('auth OTP endpoints send and verify a provisioned email session', async () => {
-  const sent = [];
+test('Telegram auth endpoints start and finish a login session', async () => {
   await withServer(async ({ baseUrl }) => {
-    const send = await fetch(`${baseUrl}/api/auth/send-otp`, json('POST', {
-      email: 'user@example.com',
-    }));
-    assert.equal(send.status, 200);
-    assert.deepEqual(sent, ['user@example.com']);
+    const started = await fetch(`${baseUrl}/api/auth/telegram/start`, { method: 'POST' });
+    assert.equal(started.status, 200);
+    assert.equal((await started.json()).login_url, 'https://t.me/login_bot?start=login_challenge');
 
-    const verified = await fetch(`${baseUrl}/api/auth/verify-otp`, json('POST', {
-      email: 'user@example.com',
-      token: '123456',
+    const finished = await fetch(`${baseUrl}/api/auth/telegram/status`, json('POST', {
+      challenge_id: 'challenge',
+      verifier: 'verifier',
     }));
-    assert.equal(verified.status, 200);
-    const session = await verified.json();
-    assert.equal(session.access_token, 'access-user@example.com');
-    assert.equal(session.refresh_token, 'refresh-user@example.com');
+    assert.equal(finished.status, 200);
+    const session = await finished.json();
+    assert.equal(session.status, 'authenticated');
+    assert.equal(session.access_token, 'telegram-session');
   }, {
     requireAdminAuth: true,
-    sendOtp: async (email) => {
-      sent.push(String(email).toLowerCase());
-      return { email: String(email).toLowerCase() };
-    },
-    verifyOtp: async (email, token) => {
-      assert.equal(token, '123456');
-      return {
-        access_token: `access-${String(email).toLowerCase()}`,
-        refresh_token: `refresh-${String(email).toLowerCase()}`,
-        expires_at: 123,
-      };
+    startTelegramLogin: async () => ({
+      challenge_id: 'challenge',
+      verifier: 'verifier',
+      login_url: 'https://t.me/login_bot?start=login_challenge',
+    }),
+    finishTelegramLogin: async (challengeId, verifier) => {
+      assert.equal(challengeId, 'challenge');
+      assert.equal(verifier, 'verifier');
+      return { status: 'authenticated', access_token: 'telegram-session', expires_at: 123 };
     },
   });
 });
@@ -142,13 +137,15 @@ test('admin APIs create a user bot mapping, register webhook, and sync bot renam
   try {
     const headers = { Authorization: 'Bearer admin' };
     const created = await fetch(`${baseUrl}/api/admin/users`, json('POST', {
-      email: 'new.user@example.com',
+      telegram_user_id: '123456789',
+      telegram_username: 'new_user',
+      telegram_display_name: 'New User',
       role: 'user',
       bot_token: 'fake-token',
     }, headers));
     assert.equal(created.status, 201);
     const body = await created.json();
-    assert.equal(body.email, 'new.user@example.com');
+    assert.equal(body.telegram_user_id, '123456789');
     assert.equal(body.role, 'user');
     assert.ok(body.bot_id);
     assert.equal(webhooks.length, 1);
