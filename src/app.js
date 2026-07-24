@@ -56,6 +56,7 @@ function buildAppFromEnv() {
     requireAdminAuth: !unconfiguredPreview && process.env.REQUIRE_ADMIN_AUTH !== 'false' && process.env.DB_DRIVER !== 'memory',
     enableLegacyWorkflow: unconfiguredPreview || process.env.ENABLE_LEGACY_WORKFLOW === 'true' || process.env.DB_DRIVER === 'memory',
     demoPreview: unconfiguredPreview,
+    appUrl: process.env.APP_URL || process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`,
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL,
     supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY,
     telegramWebhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET,

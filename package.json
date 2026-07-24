@@ -8,6 +8,7 @@
     "start": "node src/localServer.js",
     "dev-telegram": "node scripts/dev-telegram.js",
     "migrate": "node scripts/migrate.js",
+    "migrate:multi-tenant": "node scripts/migrate-to-multi-tenant.js",
     "set-webhook": "node scripts/set-webhook.js",
     "delete-webhook": "node scripts/delete-webhook.js",
     "check": "node scripts/check.js",

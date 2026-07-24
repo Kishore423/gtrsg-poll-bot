@@ -178,6 +178,17 @@ function createMemoryDb() {
         .map((group) => ({ ...group, bot_id: group.bot_ref || group.bot_id }));
     },
 
+    async assignTelegramGroupsToBot(oldBotId, botId) {
+      const updated = [];
+      for (const group of telegramGroups) {
+        if (String(group.bot_id) !== String(oldBotId) || group.bot_ref) continue;
+        group.bot_ref = String(botId);
+        group.bot_id = String(botId);
+        updated.push({ ...group, bot_id: group.bot_ref });
+      }
+      return updated;
+    },
+
     // ---- Bots (one per user) -------------------------------------------------
     async createBot({ bot_name, telegram_username, telegram_bot_id, token_encrypted, webhook_secret }) {
       const bot = {
@@ -266,6 +277,20 @@ function createMemoryDb() {
       const user = appUsers.find((item) => item.id === String(id));
       if (!user) return null;
       user.role = role;
+      return { ...user };
+    },
+
+    async setAppUserBot(id, botId) {
+      const user = appUsers.find((item) => item.id === String(id));
+      if (!user) return null;
+      user.bot_id = botId ? String(botId) : null;
+      return { ...user };
+    },
+
+    async setAppUserEnabled(id, enabled) {
+      const user = appUsers.find((item) => item.id === String(id));
+      if (!user) return null;
+      user.enabled = Boolean(enabled);
       return { ...user };
     },
 

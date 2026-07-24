@@ -17,10 +17,10 @@
 > **Tasks 1–2 are done** (`src/crypto.js` + `bots`/`app_users` schema & repo methods;
 > 81 tests green). Historical note only; current status is below.
 >
-> **Current status:** Tasks 1-5 backend are done (`src/crypto.js`, `bots`/
-> `app_users`, Microsoft SSO allow-list, tenant group scoping/RBAC, and UUID
-> bot webhook routing/token resolution; 94 tests green). **Task 6 is next:**
-> admin page (`/admin`) + admin APIs.
+> **Current status:** Tasks 1-8 are done (`src/crypto.js`, `bots`/
+> `app_users`, Microsoft SSO allow-list, tenant group scoping/RBAC, UUID bot
+> webhook routing/token resolution, admin APIs/page, dashboard group-popup flow,
+> and migration script). Validate with `npm test` and `npm run check`.
 >
 > Task 4 added `src/tenancy.js` and scoped existing managed routes in
 > `src/server.js`: managed groups, weekly schedules, skip dates, and scheduled
@@ -31,6 +31,19 @@
 > (`/api/telegram/:botId`) with per-bot webhook secrets, `bot_ref` group capture,
 > `getMyName`/`setMyName` client methods, DB bot identity sync, and DB-backed
 > webhook registration. Legacy WHCL/PSA/PRIMARY routes remain during migration.
+>
+> Task 6 added `/admin` plus `/api/admin/*` for allow-list users and bot
+> management. Admins paste BotFather tokens; tokens are encrypted with
+> `BOT_TOKEN_ENC_KEY`; bot renames call Telegram `setMyName`.
+>
+> Task 7 changed the main dashboard Managed groups section: groups are
+> auto-detected when a user's bot is added to Telegram, the **Verify bot** button
+> remains beside each group, and clicking a group opens a popup for **Weekly
+> default template**, **Skip days**, **Custom poll**, or **Send test poll**.
+>
+> Task 8 added `npm run migrate:multi-tenant` /
+> `scripts/migrate-to-multi-tenant.js` to create/reuse WHCL/PSA bot rows, assign
+> legacy service groups to `bot_ref`, and upsert the seed `app_users` roster.
 >
 > ⚠️ Two things not to "tidy up":
 > 1. `telegram_groups.bot_ref` (uuid) was added **alongside** the legacy `bot_id`
@@ -144,15 +157,17 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   configured bot and rejects duplicate token values so one bot cannot get multiple
   webhook URLs. `TELEGRAM_BOT_USERNAME` is unused in code (omit).
 - Prod-required env (app.js throws): `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
-  `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_WEBHOOK_SECRET`, `CRON_SECRET`, `DATABASE_URL`.
+  `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_WEBHOOK_SECRET`, `CRON_SECRET`,
+  `DATABASE_URL`, `BOT_TOKEN_ENC_KEY`.
 - **DATABASE_URL = Supabase SESSION pooler (5432).** `postgres.js` uses prepared
   statements (no `prepare:false`); do NOT switch to the transaction pooler (6543)
   without adding `prepare:false`.
 - **Schema**: `npm run migrate` is disabled; use `npx supabase db push`
   (`supabase/migrations/202607120001_production_schema.sql`).
-- **Admin bootstrap** (else locked out): `REQUIRE_ADMIN_AUTH=true` + empty `admin_users`.
-  Create a Supabase Auth user, then
-  `insert into public.admin_users (auth_user_id, role, enabled) values ('<uid>','admin',true);`.
+- **Admin bootstrap** (else locked out): `REQUIRE_ADMIN_AUTH=true` + an enabled
+  admin row in `app_users`. `npm run migrate:multi-tenant` upserts the seed
+  admin `Kirubakaran_Kishore@sats.com.sg`; otherwise insert an enabled
+  `app_users` admin manually before turning auth on.
 - `telegram_groups.bot_id` defaults to `service || 'PRIMARY'`. The table unique constraint
   is on `(telegram_chat_id, bot_id)`, allowing a single group chat ID to be added multiple
   times for different bots.

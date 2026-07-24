@@ -271,6 +271,18 @@ function createPostgresDb(sql = createSql()) {
         from telegram_groups order by group_name`;
     },
 
+    async assignTelegramGroupsToBot(oldBotId, botId) {
+      return sql`
+        update telegram_groups
+        set bot_ref = ${String(botId)}::uuid,
+            bot_id = ${String(botId)},
+            updated_at = now()
+        where bot_id = ${String(oldBotId)}
+          and bot_ref is null
+        returning id, telegram_chat_id::text, group_name, service,
+          coalesce(bot_ref::text, bot_id) as bot_id, bot_ref, enabled`;
+    },
+
     // ---- Bots (one per user) -------------------------------------------------
     async createBot({ bot_name, telegram_username, telegram_bot_id, token_encrypted, webhook_secret }) {
       const [row] = await sql`
@@ -352,7 +364,21 @@ function createPostgresDb(sql = createSql()) {
     async setAppUserRole(id, role) {
       const [row] = await sql`
         update app_users set role = ${role}, updated_at = now()
-        where id = ${id} returning id, email, role`;
+        where id = ${id} returning id, email, role, enabled, bot_id`;
+      return row || null;
+    },
+
+    async setAppUserBot(id, botId) {
+      const [row] = await sql`
+        update app_users set bot_id = ${botId}, updated_at = now()
+        where id = ${id} returning id, email, role, enabled, bot_id`;
+      return row || null;
+    },
+
+    async setAppUserEnabled(id, enabled) {
+      const [row] = await sql`
+        update app_users set enabled = ${enabled}, updated_at = now()
+        where id = ${id} returning id, email, role, enabled, bot_id`;
       return row || null;
     },
 

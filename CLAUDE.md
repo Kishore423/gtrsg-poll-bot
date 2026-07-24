@@ -29,6 +29,10 @@ routing and token resolution while preserving legacy WHCL/PSA routes. Updated
 `src/server.js`, `src/telegram.js`, `src/processUpdate.js`, both DB adapters,
 webhook scripts, and focused tests.
 
+**Codex note (2026-07-24):** also completed Tasks 6-8 on owned files per user
+request: admin APIs/page, dashboard managed-group popup workflow, and
+`scripts/migrate-to-multi-tenant.js`.
+
 ### Goal (one line)
 
 One Telegram bot **per user**: admin maps a BotFather token to a user's email; that
@@ -60,10 +64,10 @@ user only sees the groups **their own bot** is in. Sign-in becomes **Microsoft
 | 2 | `bots` + `app_users` schema & repo methods | ✅ **done** |
 | 3 | Microsoft SSO + `app_users` allow-list | ✅ **done** (7 tests green) |
 | 4 | RBAC + per-user tenancy scoping | ✅ **done** (92 tests green) |
-| 5 | Per-bot Telegram routing + name sync | ✅ **backend done** (94 tests green) |
-| 6 | Admin page (`/admin`) + admin APIs | ⬜ next |
-| 7 | Main UI → group-popup flow | ⬜ |
-| 8 | Migration script + docs | ⬜ |
+| 5 | Per-bot Telegram routing + name sync | ✅ **done** (94 tests green before Task 6-8) |
+| 6 | Admin page (`/admin`) + admin APIs | ✅ **done** |
+| 7 | Main UI → group-popup flow | ✅ **done** |
+| 8 | Migration script + docs | ✅ **done** |
 
 **Done so far (already on disk, 81 tests green):**
 - `src/crypto.js` — AES-256-GCM `encryptToken`/`decryptToken`/`maskToken`/
@@ -87,7 +91,20 @@ user only sees the groups **their own bot** is in. Sign-in becomes **Microsoft
   detection writes `telegram_groups.bot_ref` for UUID bots while keeping legacy
   `bot_id` fallback. `scripts/set-webhook.js` reads enabled DB bots, registers
   `/api/telegram/<bot id>`, and syncs `getMe()` / `getMyName()` into the bot
-  cache. Admin APIs/UI for adding, renaming, and deleting bots are still Task 6.
+  cache.
+- Task 6 admin UI/API: `/admin` serves `public/admin.html` / `public/admin.js`.
+  Admins can create allow-list users, paste a BotFather token for user bots,
+  enable/disable or delete users, list bots, and rename bots through Telegram
+  `setMyName`. `/api/admin/*` is protected by `requireAdmin` when auth is on.
+- Task 7 dashboard flow: managed groups are auto-detected by webhook updates and
+  rendered as clickable rows. Each row still has **Verify bot** and delete
+  actions; clicking the row opens a popup with **Weekly default template**,
+  **Skip days**, **Custom poll**, and **Send test poll** actions. The template,
+  skip-days, and one-off poll cards stay hidden until a group workflow is chosen.
+- Task 8 migration: `npm run migrate:multi-tenant` creates/reuses WHCL and PSA
+  bot records from `TELEGRAM_TOKEN_WHCL` / `TELEGRAM_TOKEN_PSA`, assigns legacy
+  `telegram_groups.bot_id` service rows to `bot_ref`, and upserts the seed
+  `app_users` roster. It requires `DATABASE_URL` and stable `BOT_TOKEN_ENC_KEY`.
 
 **⚠️ Key migration decision — expand/contract, no flag day.** `bot_id` is read inside
 `claim_due_polls`, `claim_due_confirmations` and `apply_scheduled_poll_response`, so
@@ -181,10 +198,11 @@ The app currently ships BOTH, selected at runtime:
   `DATABASE_URL`) and `src/db/memory.js` (tests + local). `scripts/migrate.js`
   creates the schema; `scripts/verify-migration.js` checks it. `pollBuilder.js`
   and `confirmation.js` are pure.
-- **Auth**: `src/auth.js` (Supabase). Admin signs in with email/password
-  (`/api/auth/sign-in` → JWT); `verifyAdmin` checks the JWT and an `admin_users`
-  row (`enabled`). `REQUIRE_ADMIN_AUTH` (default true in prod) protects all
-  `/api/*` except `/api/auth/*`, `/api/telegram/*`, `/api/cron/*`.
+- **Auth**: `src/auth.js` (Supabase). Users sign in with Microsoft/Entra ID via
+  Supabase Auth, then `verifyUser` looks up the normalized email in
+  `app_users`. `requireAdmin` gates `/api/admin/*`; `requireUser` gates the rest
+  of `/api/*` except `/api/auth/*`, `/api/telegram/*`, `/api/cron/*`. Because
+  the Entra app is multi-tenant, the `app_users` allow-list must fail closed.
 - **Vercel**: `vercel.json` uses explicit `builds` (not zero-config rewrites) to avoid Vercel
   auto-discovering `src/server.js` as a function. Only `api/index.js` is the serverless entry;
   `public/**` is served as static. Routes: `/api/*` → function, static assets → `public/`, all
@@ -288,8 +306,10 @@ live only in Vercel env + the local (gitignored) `.env`.
 - `TELEGRAM_BOT_USERNAME` is unused and omitted from configuration.
 - Prod-required env (`src/app.js` throws otherwise): `SUPABASE_URL`,
   `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_WEBHOOK_SECRET`,
-  `CRON_SECRET`, plus `DATABASE_URL`. `NEXT_PUBLIC_SUPABASE_*` optional (falls back to
-  `SUPABASE_*`). Both bots share the one `TELEGRAM_WEBHOOK_SECRET`.
+  `CRON_SECRET`, `DATABASE_URL`, and stable `BOT_TOKEN_ENC_KEY`.
+  `NEXT_PUBLIC_SUPABASE_*` optional (falls back to `SUPABASE_*`). Legacy
+  WHCL/PSA routes share `TELEGRAM_WEBHOOK_SECRET`; UUID bot routes use each
+  bot row's `webhook_secret`.
 - **DATABASE_URL uses the Supabase SESSION pooler (port 5432).** `src/db/postgres.js`
   relies on prepared statements (`postgres(url,{ssl:'require',max:5,idle_timeout:20})`,
   no `prepare:false`), which require session mode. Do NOT switch to the transaction
@@ -298,11 +318,10 @@ live only in Vercel env + the local (gitignored) `.env`.
 - **Schema**: `npm run migrate` is intentionally disabled (errors, telling you to use
   the CLI). Apply with `npx supabase db push`; migration is
   `supabase/migrations/202607120001_production_schema.sql`.
-- **Admin bootstrap (or the dashboard is locked out)**: `REQUIRE_ADMIN_AUTH=true` and
-  `admin_users` seeds empty. After migrating: create a Supabase Auth user (email/pw),
-  copy its UID, then in the SQL editor run
-  `insert into public.admin_users (auth_user_id, role, enabled) values ('<uid>','admin',true);`
-  `verifyAdmin` (src/auth.js) requires this row (service-role read bypasses RLS).
+- **Admin bootstrap (or the dashboard is locked out)**: `REQUIRE_ADMIN_AUTH=true`
+  and an enabled admin row in `app_users`. `npm run migrate:multi-tenant`
+  upserts `Kirubakaran_Kishore@sats.com.sg` as `role='admin'`; otherwise insert
+  an enabled `app_users` admin row manually before turning auth on.
 - `telegram_groups.bot_id` defaults to `'PRIMARY'`; in the dashboard assign each group
   `WHCL`/`PSA` so it uses the right bot token.
   Deleting a Telegram group from the app reassigns that group's managed weekly
@@ -315,11 +334,12 @@ live only in Vercel env + the local (gitignored) `.env`.
   `service='WHCL'` and stale `bot_id='PRIMARY'` still verify with the wheelchair
   token. Actual scheduled sends still use `telegram_groups.bot_id` in the DB
   claim functions, so production rows should still have the correct `bot_id`.
-- **Deploy order**: (1) `npx supabase db push`; (2) create Supabase Auth user + insert
-  `admin_users` row; (3) Vercel redeploy (env vars apply only to new deployments);
-  (4) verify admin login loads the dashboard; (5) run `npm run set-webhook` locally
-  ONLY after the redeploy is live (Telegram must hit a deployment that has the secret +
-  DB); (6) assign each group's `bot_id`; (7) add each bot to its group as admin.
+- **Deploy order**: (1) `npx supabase db push`; (2) set Vercel env including
+  `BOT_TOKEN_ENC_KEY`; (3) Vercel redeploy (env vars apply only to new
+  deployments); (4) run `npm run migrate:multi-tenant`; (5) verify Microsoft
+  login loads the dashboard/admin page; (6) run `npm run set-webhook` locally
+  ONLY after the redeploy is live (Telegram must hit a deployment that has the
+  secret + DB); (7) add each user's bot to its group as admin.
 - **Footgun**: never run `npm run dev-telegram` after webhooks are live — it calls
   `deleteWebhook` and long-polls, wiping the production webhooks. Re-run `set-webhook`
   to restore.

@@ -141,6 +141,66 @@
       color: var(--ink);
     }
 
+    .managed-workflow-card {
+      animation: section-reveal 160ms ease-out;
+    }
+
+    @keyframes section-reveal {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .group-dialog-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(28,34,48,0.32);
+      display: grid;
+      place-items: center;
+      z-index: 500;
+      padding: 1rem;
+    }
+
+    .group-dialog {
+      width: min(92vw, 460px);
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+      box-shadow: 0 18px 54px rgba(16,24,40,0.2);
+    }
+
+    .group-dialog header {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0;
+      margin: 0 0 1rem;
+    }
+
+    .group-dialog h2 {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .group-dialog-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.7rem;
+    }
+
+    .group-dialog-actions button {
+      min-height: 3rem;
+      text-align: left;
+    }
+
+    .managed-group-row {
+      cursor: pointer;
+    }
+
+    .managed-group-row:hover {
+      background: #fbfcfd;
+    }
+
     form {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -707,6 +767,7 @@
     <ul class="nav-links">
       <li><a href="/" class="active">Home</a></li>
       <li><a href="/polls.html">Polls</a></li>
+      <li data-admin-only data-admin-nav hidden><a href="/admin">Admin</a></li>
     </ul>
   </nav>
 
@@ -774,7 +835,8 @@
 
   <section class="card" id="managed-groups-section">
     <h2>Managed Telegram groups</h2>
-    <form id="managed-group-form">
+    <p class="hint">Groups appear here automatically after the assigned Telegram bot is added to the group. Click a group to manage its template, skip days, custom poll, or test poll.</p>
+    <form id="managed-group-form" hidden>
       <label>Group name<input name="group_name" required /></label>
       <label>Telegram chat ID<input name="telegram_chat_id" inputmode="numeric" placeholder="-1001234567890" required /></label>
       <label>Category
@@ -785,8 +847,26 @@
     <div id="managed-group-list"></div>
   </section>
 
-  <section class="card" id="managed-schedule-section">
-    <h2>Group template & automatic releases</h2>
+  <div id="group-action-dialog" class="group-dialog-backdrop" hidden>
+    <div class="group-dialog" role="dialog" aria-modal="true" aria-labelledby="group-action-title">
+      <header>
+        <div>
+          <h2 id="group-action-title">Manage group</h2>
+          <p id="group-action-subtitle" class="hint" style="margin: 0.25rem 0 0;"></p>
+        </div>
+        <button type="button" class="danger-link" id="group-action-close" aria-label="Close">Close</button>
+      </header>
+      <div class="group-dialog-actions">
+        <button type="button" class="secondary" data-group-workflow="template">Weekly default template</button>
+        <button type="button" class="secondary" data-group-workflow="skip">Skip days</button>
+        <button type="button" class="secondary" data-group-workflow="custom">Custom poll</button>
+        <button type="button" class="secondary" data-group-workflow="test">Send test poll</button>
+      </div>
+    </div>
+  </div>
+
+  <section class="card managed-workflow-card" id="managed-schedule-section" hidden>
+    <h2>Weekly default template</h2>
     <p class="hint">Configure default slots once. The scheduler automatically creates and sends WHCL/PSA polls from the saved template when the release time is due.</p>
     
     <!-- Unified Group Selector -->
@@ -817,18 +897,6 @@
           </div>
           <div id="template-timing-preview" class="timing-preview">Select a group to preview its release rule.</div>
 
-          <div class="skip-date-panel">
-            <h4 style="margin: 0 0 0.75rem;">Skip event dates</h4>
-            <div class="skip-date-controls">
-              <label>Event date
-                <input type="date" id="template-skip-date" />
-              </label>
-              <button type="button" id="template-add-skip-date" class="secondary">Skip this date</button>
-            </div>
-            <div id="template-skip-date-list" class="skip-date-list"></div>
-            <p class="hint" style="margin: 0.75rem 0 0;">The automatic release batch will not create or send a poll for skipped dates in this Telegram group.</p>
-          </div>
-          
           <div id="weekly-shift-editor"></div>
           <div class="template-actions">
             <button type="button" id="weekly-add-shift" class="secondary">Add template shift</button>
@@ -863,8 +931,23 @@
     </div>
   </section>
 
+  <section class="card managed-workflow-card" id="skip-days-section" hidden>
+    <h2>Skip days</h2>
+    <p class="hint">Add event dates where you do not want polls to be sent for the selected Telegram group.</p>
+    <div class="skip-date-panel">
+      <div class="skip-date-controls">
+        <label>Event date
+          <input type="date" id="template-skip-date" />
+        </label>
+        <button type="button" id="template-add-skip-date" class="secondary">Skip this date</button>
+      </div>
+      <h3 style="margin: 1rem 0 0.75rem; font-size: 0.9rem;">Days polls will be skipped</h3>
+      <div id="template-skip-date-list" class="skip-date-list"></div>
+    </div>
+  </section>
+
   <!-- Create one-off poll -->
-  <section class="card" id="advance-poll-section">
+  <section class="card managed-workflow-card" id="advance-poll-section" hidden>
     <h2>Create one-off poll</h2>
     <p class="hint">Starts from the selected group's saved default template. Adjust only the fields needed for a one-off exception; if a default poll already exists for that date it will be automatically removed.</p>
     <form id="advance-poll-form">

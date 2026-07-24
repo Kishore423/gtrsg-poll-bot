@@ -111,6 +111,13 @@ const oneOffTimingPreview = document.getElementById('one-off-timing-preview');
 const templateSkipDateInput = document.getElementById('template-skip-date');
 const templateAddSkipDateBtn = document.getElementById('template-add-skip-date');
 const templateSkipDateList = document.getElementById('template-skip-date-list');
+const groupActionDialog = document.getElementById('group-action-dialog');
+const groupActionTitle = document.getElementById('group-action-title');
+const groupActionSubtitle = document.getElementById('group-action-subtitle');
+const groupActionClose = document.getElementById('group-action-close');
+const managedScheduleSection = document.getElementById('managed-schedule-section');
+const skipDaysSection = document.getElementById('skip-days-section');
+const advancePollSection = document.getElementById('advance-poll-section');
 const batchGroupSelect = document.getElementById('unified-group-select');
 const batchReleaseDateInput = document.getElementById('batch-release-date');
 const batchSummary = document.getElementById('batch-summary');
@@ -126,6 +133,9 @@ let managedSchedules = [];
 let scheduledPolls = [];
 let generatedBatchRows = [];
 let pollExclusions = [];
+let selectedManagedGroupId = '';
+
+const managedWorkflowSections = [managedScheduleSection, skipDaysSection, advancePollSection].filter(Boolean);
 
 function ensureTemplatePreviewPlacement() {
   const preview = document.getElementById('weekly-template-poll-preview');
@@ -133,6 +143,58 @@ function ensureTemplatePreviewPlacement() {
     .find((element) => element.textContent.trim() === 'Test template poll');
   if (!preview || !heading || preview.nextElementSibling === heading) return;
   heading.parentElement.insertBefore(preview, heading);
+}
+
+function hideManagedWorkflowSections() {
+  managedWorkflowSections.forEach((section) => {
+    section.hidden = true;
+  });
+}
+
+function setSelectedManagedGroup(telegramGroupId) {
+  selectedManagedGroupId = telegramGroupId || '';
+  document.querySelectorAll('.managed-group-select').forEach((select) => {
+    select.value = selectedManagedGroupId;
+  });
+  const hiddenInput = document.getElementById('template-group-hidden');
+  if (hiddenInput) hiddenInput.value = selectedManagedGroupId;
+  syncWeeklyTemplateFormFromSavedSchedule(selectedManagedGroupId);
+  syncOneOffPollFormFromSavedSchedule(selectedManagedGroupId);
+  refreshManagedPreviews();
+}
+
+async function selectManagedGroup(telegramGroupId) {
+  setSelectedManagedGroup(telegramGroupId);
+  await loadPollExclusions(telegramGroupId);
+}
+
+async function openGroupActionDialog(telegramGroupId) {
+  const group = groupById(telegramGroupId);
+  if (!group || !groupActionDialog) return;
+  await selectManagedGroup(telegramGroupId);
+  groupActionTitle.textContent = managedGroupOptionLabel(group);
+  groupActionSubtitle.textContent = group.telegram_chat_id;
+  groupActionDialog.hidden = false;
+}
+
+function closeGroupActionDialog() {
+  if (groupActionDialog) groupActionDialog.hidden = true;
+}
+
+function showManagedWorkflow(workflow) {
+  if (!selectedManagedGroupId) return;
+  hideManagedWorkflowSections();
+  const section = workflow === 'skip'
+    ? skipDaysSection
+    : workflow === 'custom'
+      ? advancePollSection
+      : managedScheduleSection;
+  if (section) {
+    section.hidden = false;
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  if (workflow === 'test') document.getElementById('weekly-send-test')?.focus();
+  closeGroupActionDialog();
 }
 
 function formatTime(hhmm) {
@@ -920,17 +982,17 @@ async function scheduleGeneratedBatch() {
 const unifiedGroupSelect = document.getElementById('unified-group-select');
 if (unifiedGroupSelect) {
   unifiedGroupSelect.addEventListener('change', async () => {
-    const hiddenInput = document.getElementById('template-group-hidden');
-    if (hiddenInput) hiddenInput.value = unifiedGroupSelect.value;
-    const weeklySendGroup = document.getElementById('weekly-send-group');
-    if (weeklySendGroup) weeklySendGroup.value = unifiedGroupSelect.value;
-    syncWeeklyTemplateFormFromSavedSchedule(unifiedGroupSelect.value);
-    await loadPollExclusions(unifiedGroupSelect.value);
-    updateTemplateTimingPreview();
-    updateTemplatePollPreview();
+    await selectManagedGroup(unifiedGroupSelect.value);
   });
 }
-templateAddSkipDateBtn.addEventListener('click', addPollExclusion);
+groupActionClose?.addEventListener('click', closeGroupActionDialog);
+groupActionDialog?.addEventListener('click', (event) => {
+  if (event.target === groupActionDialog) closeGroupActionDialog();
+});
+groupActionDialog?.querySelectorAll('[data-group-workflow]').forEach((button) => {
+  button.addEventListener('click', () => showManagedWorkflow(button.dataset.groupWorkflow));
+});
+templateAddSkipDateBtn?.addEventListener('click', addPollExclusion);
 managedScheduleForm.elements.poll_release_day_of_week.addEventListener('change', () => {
   updateTemplateTimingPreview();
   updateTemplatePollPreview();
@@ -1093,40 +1155,49 @@ async function loadManagedGroups() {
   document.querySelectorAll('.managed-group-select').forEach((select) => {
     const current = select.value;
     select.innerHTML = options || '<option value="">Add group first</option>';
-    if (current) select.value = current;
+    if (current && managedGroups.some((group) => group.id === current)) select.value = current;
+    else if (selectedManagedGroupId && managedGroups.some((group) => group.id === selectedManagedGroupId)) select.value = selectedManagedGroupId;
     else if (select.options.length > 0) {
       select.selectedIndex = 0;
     }
-    if (select.closest('#advance-poll-form')) {
-      syncOneOffPollFormFromSavedSchedule(select.value);
-    }
   });
-  const unified = document.getElementById('unified-group-select');
-  const hiddenInput = document.getElementById('template-group-hidden');
-  if (unified && hiddenInput) {
-    hiddenInput.value = unified.value;
-    await loadPollExclusions(unified.value);
+  if (!managedGroups.some((group) => group.id === selectedManagedGroupId)) {
+    selectedManagedGroupId = '';
+    hideManagedWorkflowSections();
   }
-  refreshManagedPreviews();
-  managedGroupList.innerHTML = managedGroups.map((group) => `
-      <div class="schedule-row">
+  if (selectedManagedGroupId) await selectManagedGroup(selectedManagedGroupId);
+  else refreshManagedPreviews();
+  managedGroupList.innerHTML = managedGroups.length ? managedGroups.map((group) => `
+      <div class="schedule-row managed-group-row" data-id="${escapeHtml(group.id)}" tabindex="0" role="button" aria-label="Manage ${escapeHtml(managedGroupOptionLabel(group))}">
         <span>${servicePill(group.service || group.bot_id)} <strong>${escapeHtml(managedGroupOptionLabel(group))}</strong> (${escapeHtml(group.telegram_chat_id)})</span>
         <span>
           <button type="button" class="secondary verify-group" data-id="${group.id}">Verify bot</button>
           <button type="button" class="danger-link delete-group" data-id="${group.id}">Delete</button>
       </span>
-    </div>`).join('');
-  managedGroupList.querySelectorAll('.verify-group').forEach((button) => button.addEventListener('click', async () => {
+    </div>`).join('') : '<p class="hint">No managed groups yet. Add a user bot from Admin, then add that Telegram bot to its group.</p>';
+  managedGroupList.querySelectorAll('.managed-group-row').forEach((row) => {
+    const open = () => openGroupActionDialog(row.dataset.id);
+    row.addEventListener('click', open);
+    row.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      open();
+    });
+  });
+  managedGroupList.querySelectorAll('.verify-group').forEach((button) => button.addEventListener('click', async (event) => {
+    event.stopPropagation();
     const response = await fetch(`/api/telegram-groups/${button.dataset.id}/verify`, { method: 'POST' });
     const result = await response.json();
     setStatus(response.ok
       ? `Bot status: ${result.status}${result.can_post_messages ? ', can post' : ', posting permission missing'}`
       : `Error: ${result.error}`, response.ok && result.present && result.can_post_messages ? 'success' : 'error');
   }));
-  managedGroupList.querySelectorAll('.delete-group').forEach((button) => button.addEventListener('click', async () => {
+  managedGroupList.querySelectorAll('.delete-group').forEach((button) => button.addEventListener('click', async (event) => {
+    event.stopPropagation();
     if (!window.confirm('Delete this managed group?')) return;
     const response = await fetch(`/api/telegram-groups/${button.dataset.id}`, { method: 'DELETE' });
     if (response.ok) {
+      if (selectedManagedGroupId === button.dataset.id) selectedManagedGroupId = '';
       await loadManagedGroups();
       setStatus('Group deleted.', 'success');
     } else {
@@ -1555,6 +1626,7 @@ async function loadDashboard(includeLegacy = legacyWorkflowEnabled) {
 
 async function bootstrap() {
   ensureTemplatePreviewPlacement();
+  hideManagedWorkflowSections();
   // Returning from the Microsoft redirect? Pick the session out of the fragment
   // before anything else decides we're signed out.
   captureSessionFromRedirect();
@@ -1591,6 +1663,11 @@ async function bootstrap() {
     currentUser = await meResponse.json();
     document.querySelectorAll('[data-admin-only]').forEach((element) => {
       element.hidden = currentUser.role !== 'admin';
+    });
+  } else {
+    currentUser = { role: 'admin' };
+    document.querySelectorAll('[data-admin-nav]').forEach((element) => {
+      element.hidden = false;
     });
   }
   const releaseTimePicker = document.querySelector('[data-name="poll_release_time"]');

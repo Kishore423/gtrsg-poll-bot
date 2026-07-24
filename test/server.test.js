@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const { createMemoryDb } = require('../src/db/memory');
 const { createServer } = require('../src/server');
 
@@ -66,6 +67,75 @@ test('admin-only routes reject a provisioned non-admin', async () => {
     req.headers.authorization === 'Bearer user'
       ? { id: 'user-1', email: 'user@example.com', role: 'user', bot_id: null }
       : null });
+});
+
+test('admin APIs create a user bot mapping, register webhook, and sync bot rename', async () => {
+  const previousKey = process.env.BOT_TOKEN_ENC_KEY;
+  process.env.BOT_TOKEN_ENC_KEY = crypto.randomBytes(32).toString('base64');
+  const db = createMemoryDb();
+  const webhooks = [];
+  const renamed = [];
+  const telegram = {
+    async setWebhook(botId, url, secret) {
+      webhooks.push({ botId, url, secret });
+      return true;
+    },
+    async getMe(botId) {
+      return { id: 9001, username: `${botId}_username`, first_name: 'Tenant Bot' };
+    },
+    async getMyName(botId) {
+      return { name: renamed.at(-1)?.name || `${botId} display` };
+    },
+    async setMyName(botId, name) {
+      renamed.push({ botId, name });
+      return true;
+    },
+  };
+  const server = createServer(db, telegram, {
+    requireAdminAuth: true,
+    appUrl: 'https://example.test',
+    verifyUser: async (req) =>
+      req.headers.authorization === 'Bearer admin'
+        ? { id: 'admin-1', email: 'admin@example.com', role: 'admin', bot_id: null }
+        : null,
+    createTelegramClientForToken: () => ({
+      async getMe() { return { id: 123, username: 'new_user_bot', first_name: 'New User Bot' }; },
+      async getMyName() { return { name: 'New User Bot' }; },
+    }),
+  }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const headers = { Authorization: 'Bearer admin' };
+    const created = await fetch(`${baseUrl}/api/admin/users`, json('POST', {
+      email: 'new.user@example.com',
+      role: 'user',
+      bot_token: 'fake-token',
+    }, headers));
+    assert.equal(created.status, 201);
+    const body = await created.json();
+    assert.equal(body.email, 'new.user@example.com');
+    assert.equal(body.role, 'user');
+    assert.ok(body.bot_id);
+    assert.equal(webhooks.length, 1);
+    assert.equal(webhooks[0].botId, body.bot_id);
+    assert.match(webhooks[0].url, new RegExp(`/api/telegram/${body.bot_id}$`));
+
+    const listed = await fetch(`${baseUrl}/api/admin/users`, { headers });
+    assert.equal(listed.status, 200);
+    const users = await listed.json();
+    assert.equal(users[0].bot.telegram_username, 'new_user_bot');
+
+    const renamedRes = await fetch(`${baseUrl}/api/admin/bots/${body.bot_id}`, json('PATCH', {
+      bot_name: 'Renamed Bot',
+    }, headers));
+    assert.equal(renamedRes.status, 200);
+    assert.deepEqual(renamed, [{ botId: body.bot_id, name: 'Renamed Bot' }]);
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+    if (previousKey === undefined) delete process.env.BOT_TOKEN_ENC_KEY;
+    else process.env.BOT_TOKEN_ENC_KEY = previousKey;
+  }
 });
 
 test('tenant scoping limits managed groups to the caller bot', async () => {

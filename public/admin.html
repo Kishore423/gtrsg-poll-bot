@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" href="data:," />
+  <title>Admin - Gops poll</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { --green:#128c7e; --green-dark:#0d6b60; --green-light:#e7f7f4; --red:#c0392b; --red-light:#fdecea; --ink:#1c2230; --ink-soft:#5b6472; --border:#e3e7ed; --bg:#f4f6f8; }
+    [hidden] { display:none !important; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Inter,-apple-system,'Segoe UI',Roboto,system-ui,sans-serif; color:var(--ink); background:var(--bg); }
+    nav { position:sticky; top:0; z-index:10; height:56px; background:#fff; border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 1.5rem; gap:2rem; }
+    .nav-brand { font-weight:700; color:var(--green-dark); text-decoration:none; }
+    .nav-links { display:flex; gap:.25rem; list-style:none; margin:0; padding:0; }
+    .nav-links a { display:block; padding:.4rem .85rem; border-radius:8px; color:var(--ink-soft); text-decoration:none; font-weight:500; font-size:.9rem; }
+    .nav-links a.active { background:var(--green-light); color:var(--green-dark); font-weight:600; }
+    main { max-width:960px; margin:0 auto; padding:2rem 1.5rem 5rem; }
+    header { margin-bottom:1.5rem; }
+    h1 { margin:0 0 .35rem; font-size:1.45rem; }
+    h2 { margin:0 0 1rem; font-size:1rem; }
+    p { color:var(--ink-soft); line-height:1.5; }
+    .card { background:#fff; border:1px solid var(--border); border-radius:10px; padding:1.25rem; margin-bottom:1.25rem; }
+    form { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:.85rem; align-items:end; }
+    label { display:flex; flex-direction:column; gap:.35rem; font-size:.76rem; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em; }
+    input,select { padding:.58rem .65rem; border:1px solid var(--border); border-radius:8px; background:#fbfcfd; color:var(--ink); font:inherit; }
+    input:focus,select:focus { outline:none; border-color:var(--green); box-shadow:0 0 0 3px var(--green-light); background:#fff; }
+    button { font:inherit; font-weight:700; border:0; border-radius:8px; padding:.62rem .95rem; cursor:pointer; }
+    .primary { background:var(--green); color:#fff; }
+    .secondary { background:#fff; color:var(--green-dark); border:1px solid var(--green); }
+    .danger-link { background:transparent; color:var(--red); padding:.35rem .45rem; }
+    .status { min-height:1.5rem; margin-bottom:1rem; font-weight:600; color:var(--ink-soft); }
+    .status.success { color:var(--green-dark); } .status.error { color:var(--red); }
+    .table-wrap { overflow:auto; border:1px solid var(--border); border-radius:8px; }
+    table { width:100%; border-collapse:collapse; background:#fff; }
+    th,td { padding:.75rem; border-bottom:1px solid var(--border); text-align:left; vertical-align:middle; }
+    th { font-size:.72rem; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; }
+    td { font-size:.9rem; }
+    tr:last-child td { border-bottom:0; }
+    .muted { color:var(--ink-soft); }
+    .row-actions { display:flex; gap:.4rem; flex-wrap:wrap; justify-content:flex-end; }
+    .auth-overlay { position:fixed; inset:0; display:grid; place-items:center; background:rgba(244,246,248,.92); z-index:1000; }
+    .auth-dialog { width:min(92vw,380px); background:#fff; border:1px solid var(--border); border-radius:10px; padding:1.4rem; box-shadow:0 18px 50px rgba(16,24,40,.18); }
+    .auth-error { color:var(--red); min-height:1.2rem; }
+  </style>
+</head>
+<body>
+  <div id="auth-overlay" class="auth-overlay" hidden>
+    <div class="auth-dialog" role="dialog" aria-modal="true">
+      <h2>Sign in</h2>
+      <p>Use your provisioned Microsoft account.</p>
+      <button type="button" id="ms-sign-in" class="primary">Sign in with Microsoft</button>
+      <p id="auth-error" class="auth-error" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <nav>
+    <a href="/" class="nav-brand">Gops poll</a>
+    <ul class="nav-links">
+      <li><a href="/">Home</a></li>
+      <li><a href="/polls.html">Polls</a></li>
+      <li><a href="/admin" class="active">Admin</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <header>
+      <h1>Admin</h1>
+      <p>Provision users and map each user to one Telegram bot.</p>
+    </header>
+    <div id="status" class="status" aria-live="polite"></div>
+
+    <section class="card">
+      <h2>Add user</h2>
+      <form id="add-user-form">
+        <label>Email<input name="email" type="email" required /></label>
+        <label>Role<select name="role"><option value="user">User</option><option value="admin">Admin</option></select></label>
+        <label>BotFather token<input name="bot_token" autocomplete="off" placeholder="Required for users" /></label>
+        <button type="submit" class="primary">Add user</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Users and bots</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Email</th><th>Role</th><th>Bot</th><th>@username</th><th>Status</th><th></th></tr></thead>
+          <tbody id="users-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/admin.js"></script>
+</body>
+</html>

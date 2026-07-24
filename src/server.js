@@ -17,6 +17,7 @@ const { resolvePollSchedule } = require('./scheduleResolver');
 const { managedTimingForEvent } = require('./scheduleRules');
 const { runScheduledPolls, runScheduledConfirmations, runScheduledClosures } = require('./productionScheduler');
 const { scopeGroups, assertGroupAccess, filterRowsByUserBot } = require('./tenancy');
+const { encryptToken, generateWebhookSecret } = require('./crypto');
 
 const SERVICES = ['PRIMARY', 'WHCL', 'PSA'];
 const ROUTED_SERVICES = ['WHCL', 'PSA'];
@@ -57,10 +58,16 @@ function createServer(db, telegram, options = {}) {
     if (indexHtml) return res.type('html').send(indexHtml);
     res.redirect('/index.html');
   });
+  app.get('/admin', (req, res) => {
+    const adminHtmlPath = path.join(__dirname, '..', 'public', 'admin.html');
+    if (fs.existsSync(adminHtmlPath)) return res.type('html').send(fs.readFileSync(adminHtmlPath, 'utf8'));
+    res.redirect('/admin.html');
+  });
 
   app.get('/api/auth-config', (req, res) => {
     res.json({ required: !!options.requireAdminAuth, legacyEnabled: options.enableLegacyWorkflow !== false,
-      demoPreview: !!options.demoPreview });
+      demoPreview: !!options.demoPreview, supabaseUrl: options.supabaseUrl,
+      supabaseAnonKey: options.supabaseAnonKey });
   });
 
   // Password sign-in is retired: the browser completes Microsoft SSO directly with
@@ -102,6 +109,147 @@ function createServer(db, telegram, options = {}) {
       error: err.statusCode ? err.message : 'Server error. Check logs.',
     });
   });
+
+  function publicBot(bot) {
+    if (!bot) return null;
+    return {
+      id: bot.id,
+      bot_name: bot.bot_name,
+      telegram_username: bot.telegram_username,
+      telegram_bot_id: bot.telegram_bot_id,
+      enabled: bot.enabled,
+      name_synced_at: bot.name_synced_at,
+      created_at: bot.created_at,
+    };
+  }
+
+  async function syncBotIdentity(botId) {
+    if (!db.getBot || !db.setBotTelegramIdentity) return null;
+    const bot = await db.getBot(botId);
+    if (!bot || bot.enabled === false) return bot && publicBot(bot);
+    const [me, name] = await Promise.all([
+      telegram.getMe(botId),
+      telegram.getMyName(botId).catch(() => null),
+    ]);
+    return publicBot(await db.setBotTelegramIdentity(botId, {
+      bot_name: name?.name || bot.bot_name || me.first_name,
+      telegram_username: me.username || null,
+      telegram_bot_id: me.id,
+    }));
+  }
+
+  async function registerBotWebhook(botId, secret) {
+    if (!options.appUrl) return null;
+    const url = `${String(options.appUrl).replace(/\/$/, '')}/api/telegram/${botId}`;
+    await telegram.setWebhook(botId, url, secret);
+    return url;
+  }
+
+  async function createBotFromToken(botToken) {
+    const token = String(botToken || '').trim();
+    if (!token) return null;
+    const tempTelegram = options.createTelegramClientForToken
+      ? options.createTelegramClientForToken(token)
+      : require('./telegram').createTelegramClient({ tokens: { BOT: token } });
+    const [me, name] = await Promise.all([
+      tempTelegram.getMe('BOT'),
+      tempTelegram.getMyName('BOT').catch(() => null),
+    ]);
+    const webhookSecret = generateWebhookSecret();
+    const botId = await db.createBot({
+      bot_name: name?.name || me.first_name || me.username || 'Telegram bot',
+      telegram_username: me.username || null,
+      telegram_bot_id: me.id,
+      token_encrypted: encryptToken(token),
+      webhook_secret: webhookSecret,
+    });
+    await registerBotWebhook(botId, webhookSecret);
+    return botId;
+  }
+
+  app.get('/api/admin/users', wrap(async (req, res) => {
+    if (!db.listAppUsers) return res.status(501).json({ error: 'Supabase production database is required' });
+    const users = await db.listAppUsers();
+    const bots = db.listBots ? await db.listBots() : [];
+    const botMap = new Map(bots.map((bot) => [String(bot.id), publicBot(bot)]));
+    res.json(users.map((user) => ({
+      ...user,
+      bot: user.bot_id ? botMap.get(String(user.bot_id)) || null : null,
+    })));
+  }));
+
+  app.get('/api/admin/bots', wrap(async (req, res) => {
+    if (!db.listBots) return res.status(501).json({ error: 'Supabase production database is required' });
+    const bots = await db.listBots();
+    const synced = [];
+    for (const bot of bots) {
+      try {
+        synced.push(await syncBotIdentity(bot.id) || publicBot(bot));
+      } catch (error) {
+        synced.push({ ...publicBot(bot), sync_error: error.message });
+      }
+    }
+    res.json(synced);
+  }));
+
+  app.post('/api/admin/users', wrap(async (req, res) => {
+    if (!db.createAppUser) return res.status(501).json({ error: 'Supabase production database is required' });
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const role = String(req.body?.role || 'user');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Valid email is required' });
+    if (!['admin', 'user'].includes(role)) return res.status(400).json({ error: 'Role must be admin or user' });
+    if (db.listAppUsers) {
+      const existing = (await db.listAppUsers()).find((user) => user.email === email);
+      if (existing) return res.status(409).json({ error: 'This email is already provisioned' });
+    }
+    const botToken = String(req.body?.bot_token || '').trim();
+    if (role === 'user' && !botToken) return res.status(400).json({ error: 'A user needs a Telegram bot token' });
+    const botId = botToken ? await createBotFromToken(botToken) : null;
+    const userId = await db.createAppUser({ email, role, bot_id: botId });
+    res.status(201).json({ id: userId, email, role, bot_id: botId });
+  }));
+
+  app.patch('/api/admin/users/:id', wrap(async (req, res) => {
+    const role = req.body?.role;
+    const enabled = req.body?.enabled;
+    let row = null;
+    if (role !== undefined) {
+      if (!['admin', 'user'].includes(String(role))) return res.status(400).json({ error: 'Role must be admin or user' });
+      if (!db.setAppUserRole) return res.status(501).json({ error: 'Supabase production database is required' });
+      row = await db.setAppUserRole(req.params.id, String(role));
+    }
+    if (enabled !== undefined) {
+      if (!db.setAppUserEnabled) return res.status(501).json({ error: 'Supabase production database is required' });
+      row = await db.setAppUserEnabled(req.params.id, Boolean(enabled));
+    }
+    if (!row) return res.status(404).json({ error: 'User not found' });
+    res.json(row);
+  }));
+
+  app.delete('/api/admin/users/:id', wrap(async (req, res) => {
+    if (!db.deleteAppUser) return res.status(501).json({ error: 'Supabase production database is required' });
+    const row = await db.deleteAppUser(req.params.id);
+    if (!row) return res.status(404).json({ error: 'User not found' });
+    if (row.bot_id && db.deleteBot) await db.deleteBot(row.bot_id);
+    res.json({ deleted: row.id });
+  }));
+
+  app.patch('/api/admin/bots/:id', wrap(async (req, res) => {
+    const botName = String(req.body?.bot_name || '').trim();
+    if (!botName || botName.length > 64) return res.status(400).json({ error: 'Bot name must be 1-64 characters' });
+    if (!db.getBot || !db.setBotTelegramIdentity) return res.status(501).json({ error: 'Supabase production database is required' });
+    const current = await db.getBot(req.params.id);
+    if (!current) return res.status(404).json({ error: 'Bot not found' });
+    const remote = await telegram.getMyName(req.params.id).catch(() => null);
+    if (remote?.name !== botName) await telegram.setMyName(req.params.id, botName);
+    const confirmed = await telegram.getMyName(req.params.id).catch(() => ({ name: botName }));
+    const me = await telegram.getMe(req.params.id).catch(() => ({}));
+    res.json(await db.setBotTelegramIdentity(req.params.id, {
+      bot_name: confirmed?.name || botName,
+      telegram_username: me.username || current.telegram_username || null,
+      telegram_bot_id: me.id || current.telegram_bot_id || null,
+    }));
+  }));
 
   // ---- Slots ----------------------------------------------------------------
   app.get('/api/slots', wrap(async (req, res) => {
