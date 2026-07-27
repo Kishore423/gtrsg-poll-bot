@@ -242,9 +242,8 @@ function createMemoryDb() {
       return bots.splice(index, 1)[0];
     },
 
-    // ---- App users (the SSO allow-list) --------------------------------------
+    // ---- App users (the Telegram allow-list) ---------------------------------
     async createAppUser({
-      email = null,
       role = 'user',
       bot_id = null,
       telegram_user_id = null,
@@ -253,8 +252,6 @@ function createMemoryDb() {
     }) {
       const user = {
         id: `app-user-${++appUserSeq}`,
-        email: email ? String(email).toLowerCase() : null,
-        auth_user_id: null,
         telegram_user_id: telegram_user_id ? String(telegram_user_id) : null,
         telegram_username,
         telegram_display_name,
@@ -269,13 +266,6 @@ function createMemoryDb() {
 
     async listAppUsers() {
       return appUsers.map((user) => ({ ...user }));
-    },
-
-    // Email is the join key between the Supabase identity and the allow-list.
-    async getAppUserByEmail(email) {
-      const user = appUsers.find(
-        (item) => item.email === String(email).toLowerCase() && item.enabled);
-      return user ? { ...user } : null;
     },
 
     async getAppUserByTelegramId(telegramUserId) {
@@ -294,13 +284,6 @@ function createMemoryDb() {
       user.telegram_user_id = String(telegram_user_id);
       user.telegram_username = telegram_username;
       user.telegram_display_name = telegram_display_name;
-      return { ...user };
-    },
-
-    async setAppUserAuthId(id, authUserId) {
-      const user = appUsers.find((item) => item.id === String(id));
-      if (!user) return null;
-      user.auth_user_id = authUserId;
       return { ...user };
     },
 

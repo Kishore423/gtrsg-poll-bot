@@ -8,7 +8,6 @@ function createSql(connectionString = process.env.DATABASE_URL) {
 function createPostgresDb(sql = createSql()) {
   // Alter unique constraint on telegram_groups to allow duplicate chat_ids with different bot_ids
   const initPromise = (async () => {
-    await sql`alter table app_users alter column email drop not null`;
     await sql`alter table app_users
       add column if not exists telegram_user_id bigint,
       add column if not exists telegram_username text,
@@ -355,9 +354,8 @@ function createPostgresDb(sql = createSql()) {
       return row || null;
     },
 
-    // ---- App users (the SSO allow-list) --------------------------------------
+    // ---- App users (the Telegram allow-list) ---------------------------------
     async createAppUser({
-      email = null,
       role = 'user',
       bot_id = null,
       telegram_user_id = null,
@@ -366,11 +364,11 @@ function createPostgresDb(sql = createSql()) {
     }) {
       const [row] = await sql`
         insert into app_users (
-          email, role, bot_id, telegram_user_id, telegram_username, telegram_display_name
+          role, bot_id, telegram_user_id, telegram_username, telegram_display_name
         )
         values (
-          ${email ? String(email).toLowerCase() : null}, ${role}, ${bot_id},
-          ${telegram_user_id}, ${telegram_username}, ${telegram_display_name}
+          ${role}, ${bot_id}, ${telegram_user_id}, ${telegram_username},
+          ${telegram_display_name}
         )
         returning id`;
       return row.id;
@@ -378,25 +376,17 @@ function createPostgresDb(sql = createSql()) {
 
     async listAppUsers() {
       return sql`
-        select u.id, u.email, u.telegram_user_id::text, u.telegram_username,
-               u.telegram_display_name, u.role, u.enabled, u.bot_id, u.auth_user_id, u.created_at,
+        select u.id, u.telegram_user_id::text, u.telegram_username,
+               u.telegram_display_name, u.role, u.enabled, u.bot_id, u.created_at,
                b.bot_name, b.telegram_username, b.name_synced_at
         from app_users u left join bots b on b.id = u.bot_id
-        order by u.role desc, coalesce(u.telegram_display_name, u.telegram_username, u.email)`;
-    },
-
-    // Email is the join key between the Supabase identity and the allow-list.
-    async getAppUserByEmail(email) {
-      const [row] = await sql`
-        select id, email, role, enabled, bot_id, auth_user_id
-        from app_users where email = ${String(email).toLowerCase()} and enabled`;
-      return row || null;
+        order by u.role desc, coalesce(u.telegram_display_name, u.telegram_username)`;
     },
 
     async getAppUserByTelegramId(telegramUserId) {
       await initPromise;
       const [row] = await sql`
-        select id, email, telegram_user_id::text, telegram_username,
+        select id, telegram_user_id::text, telegram_username,
                telegram_display_name, role, enabled, bot_id
         from app_users where telegram_user_id = ${telegramUserId} and enabled`;
       return row || null;
@@ -415,36 +405,29 @@ function createPostgresDb(sql = createSql()) {
           telegram_display_name = ${telegram_display_name},
           updated_at = now()
         where id = ${id}
-        returning id, email, telegram_user_id::text, telegram_username,
+        returning id, telegram_user_id::text, telegram_username,
                   telegram_display_name, role, enabled, bot_id`;
-      return row || null;
-    },
-
-    async setAppUserAuthId(id, authUserId) {
-      const [row] = await sql`
-        update app_users set auth_user_id = ${authUserId}, updated_at = now()
-        where id = ${id} returning id`;
       return row || null;
     },
 
     async setAppUserRole(id, role) {
       const [row] = await sql`
         update app_users set role = ${role}, updated_at = now()
-        where id = ${id} returning id, email, role, enabled, bot_id`;
+        where id = ${id} returning id, role, enabled, bot_id`;
       return row || null;
     },
 
     async setAppUserBot(id, botId) {
       const [row] = await sql`
         update app_users set bot_id = ${botId}, updated_at = now()
-        where id = ${id} returning id, email, role, enabled, bot_id`;
+        where id = ${id} returning id, role, enabled, bot_id`;
       return row || null;
     },
 
     async setAppUserEnabled(id, enabled) {
       const [row] = await sql`
         update app_users set enabled = ${enabled}, updated_at = now()
-        where id = ${id} returning id, email, role, enabled, bot_id`;
+        where id = ${id} returning id, role, enabled, bot_id`;
       return row || null;
     },
 

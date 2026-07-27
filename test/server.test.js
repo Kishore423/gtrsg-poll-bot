@@ -53,7 +53,7 @@ test('management APIs are open locally and require a provisioned user in product
     assert.equal(ok.status, 200);
   }, { requireAdminAuth: true, verifyUser: async (req) =>
     req.headers.authorization === 'Bearer valid'
-      ? { id: 'user-1', email: 'user@example.com', role: 'user', bot_id: null }
+      ? { id: 'user-1', telegram_user_id: '1001', role: 'user', bot_id: null }
       : null });
 });
 
@@ -65,7 +65,7 @@ test('admin-only routes reject a provisioned non-admin', async () => {
     assert.equal(asUser.status, 403);
   }, { requireAdminAuth: true, verifyUser: async (req) =>
     req.headers.authorization === 'Bearer user'
-      ? { id: 'user-1', email: 'user@example.com', role: 'user', bot_id: null }
+      ? { id: 'user-1', telegram_user_id: '1001', role: 'user', bot_id: null }
       : null });
 });
 
@@ -125,7 +125,7 @@ test('admin APIs create a user bot mapping, register webhook, and sync bot renam
     appUrl: 'https://example.test',
     verifyUser: async (req) =>
       req.headers.authorization === 'Bearer admin'
-        ? { id: 'admin-1', email: 'admin@example.com', role: 'admin', bot_id: null }
+        ? { id: 'admin-1', telegram_user_id: '1002', role: 'admin', bot_id: null }
         : null,
     createTelegramClientForToken: () => ({
       async getMe() { return { id: 123, username: 'new_user_bot', first_name: 'New User Bot' }; },
@@ -140,6 +140,7 @@ test('admin APIs create a user bot mapping, register webhook, and sync bot renam
       telegram_user_id: '123456789',
       telegram_username: 'new_user',
       telegram_display_name: 'New User',
+      email: 'ignored@example.com',
       role: 'user',
       bot_token: 'fake-token',
     }, headers));
@@ -147,6 +148,7 @@ test('admin APIs create a user bot mapping, register webhook, and sync bot renam
     const body = await created.json();
     assert.equal(body.telegram_user_id, '123456789');
     assert.equal(body.role, 'user');
+    assert.equal(Object.hasOwn(body, 'email'), false);
     assert.ok(body.bot_id);
     assert.equal(webhooks.length, 1);
     assert.equal(webhooks[0].botId, body.bot_id);
@@ -156,6 +158,7 @@ test('admin APIs create a user bot mapping, register webhook, and sync bot renam
     assert.equal(listed.status, 200);
     const users = await listed.json();
     assert.equal(users[0].bot.telegram_username, 'new_user_bot');
+    assert.equal(Object.hasOwn(users[0], 'email'), false);
 
     const renamedRes = await fetch(`${baseUrl}/api/admin/bots/${body.bot_id}`, json('PATCH', {
       bot_name: 'Renamed Bot',
@@ -208,7 +211,7 @@ test('tenant scoping limits managed groups to the caller bot', async () => {
     assert.equal(ownSkipDate.status, 201);
   }, { requireAdminAuth: true, verifyUser: async (req) =>
     req.headers.authorization === 'Bearer user-a'
-      ? { id: 'user-a', email: 'a@example.com', role: 'user', bot_id: 'bot-a' }
+      ? { id: 'user-a', telegram_user_id: '1003', role: 'user', bot_id: 'bot-a' }
       : null });
 });
 
@@ -237,7 +240,7 @@ test('admins are not filtered by bot tenancy', async () => {
     ]);
   }, { requireAdminAuth: true, verifyUser: async (req) =>
     req.headers.authorization === 'Bearer admin'
-      ? { id: 'admin-1', email: 'admin@example.com', role: 'admin', bot_id: null }
+      ? { id: 'admin-1', telegram_user_id: '1002', role: 'admin', bot_id: null }
       : null });
 });
 
@@ -589,7 +592,7 @@ test('tenant scoping blocks non-admin scheduled poll bulk deletion outside their
     requireAdminAuth: true,
     verifyUser: async (req) =>
       req.headers.authorization === 'Bearer user-a'
-        ? { id: 'user-a', email: 'a@example.com', role: 'user', bot_id: 'bot-a' }
+        ? { id: 'user-a', telegram_user_id: '1003', role: 'user', bot_id: 'bot-a' }
         : null,
   }).listen(0);
   await new Promise((resolve) => server.once('listening', resolve));

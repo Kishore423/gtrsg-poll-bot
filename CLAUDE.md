@@ -56,8 +56,9 @@ Telegram bot challenge and a signed application session; roles are **admin | use
   `telegram_groups.bot_ref uuid` FK, RLS.
 - `bots`/`app_users` methods in **both** `src/db/memory.js` and `src/db/postgres.js`
   (`createBot`, `listBots`, `getBot`, `setBotName`, `deleteBot`, `createAppUser`,
-  `listAppUsers`, `getAppUserByEmail`, `setAppUserAuthId`, `setAppUserRole`,
-  `deleteAppUser`). `listTelegramGroups({ botId })` now takes an optional scope.
+  `listAppUsers`, `getAppUserByTelegramId`, `setAppUserTelegramIdentity`,
+  `setAppUserRole`, `deleteAppUser`). `listTelegramGroups({ botId })` now takes
+  an optional scope.
 - `src/tenancy.js` — Task 4 tenant helpers: `scopeGroups(user)` and
   `assertGroupAccess(db, user, groupId)`, returning 404 for groups outside a
   non-admin user's bot. `src/server.js` applies this to managed groups, weekly
@@ -101,9 +102,10 @@ WHCL/PSA bots keep running until `scripts/migrate-to-multi-tenant.js` backfills
   receive no session until an admin approves them. Approval can create and assign
   the user's encrypted BotFather token in the same action.
 - `app_users.telegram_user_id` is unique and is the authorization join key.
-  Email and old Supabase Auth IDs remain nullable migration metadata only.
+  The email column was removed on 2026-07-24; handles and display names are
+  refreshable metadata only.
 - `public/telegram-auth.js` is the shared login client for Home, Polls, and Admin.
-  Email OTP and Microsoft sign-in are removed from the active UI and API.
+  The active UI, API, repository, and `app_users` schema are Telegram-only.
 - `GET /api/me` returns Telegram identity, role, and `bot_id`. `/api/admin/*`
   remains admin-only and all other management APIs remain tenant-scoped.
 
@@ -329,7 +331,7 @@ live only in Vercel env + the local (gitignored) `.env`.
 - The poll editor has one form-level **Send immediately** action beside **Review and
   schedule**. It sends all shift rows currently in the form; shift rows only have a
   Remove action.
-- Production deploy `dpl_DKLZFQbPTj4jz2i91opFPGoCgnoY` was promoted on
+- Production deploy `dpl_2NfTiE812qcDPzSyGDUvXvaEieuZ` was promoted on
   2026-07-24 and aliased to `https://gtrsg-poll-bot.vercel.app`.
 - The managed dashboard now includes a Release rules summary, a renamed **Group
   release template** section with service-specific timing previews, and a **Create

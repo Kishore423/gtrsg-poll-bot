@@ -7,9 +7,27 @@ const { createTelegramClient } = require('../src/telegram');
 const { encryptToken, generateWebhookSecret } = require('../src/crypto');
 
 const USERS = [
-  { email: 'Malla_Sonia@gtr.com.sg', role: 'user', service: 'PSA' },
-  { email: 'Yidan_Wang@sats.com.sg', role: 'user', service: 'WHCL' },
-  { email: 'Kirubakaran_Kishore@sats.com.sg', role: 'admin', service: null },
+  {
+    telegram_user_id: '1012500255',
+    telegram_username: 'sonia_mala',
+    telegram_display_name: 'Sonia',
+    role: 'user',
+    service: 'PSA',
+  },
+  {
+    telegram_user_id: '977476515',
+    telegram_username: 'Y6yyyyyyyyyyuu',
+    telegram_display_name: 'Yi Dan Wang',
+    role: 'user',
+    service: 'WHCL',
+  },
+  {
+    telegram_user_id: '2132609363',
+    telegram_username: 'kishorek888',
+    telegram_display_name: 'Kishore',
+    role: 'admin',
+    service: null,
+  },
 ];
 
 const SERVICE_TOKENS = {
@@ -51,14 +69,31 @@ async function ensureBot(db, service, token) {
   });
 }
 
-async function ensureUser(db, { email, role, botId }) {
-  const normalizedEmail = email.toLowerCase();
-  const existing = (await db.listAppUsers()).find((user) => user.email === normalizedEmail);
+async function ensureUser(db, {
+  telegram_user_id,
+  telegram_username,
+  telegram_display_name,
+  role,
+  botId,
+}) {
+  const existing = (await db.listAppUsers()).find((user) =>
+    String(user.telegram_user_id) === String(telegram_user_id));
   if (!existing) {
-    const id = await db.createAppUser({ email: normalizedEmail, role, bot_id: botId || null });
+    const id = await db.createAppUser({
+      telegram_user_id,
+      telegram_username,
+      telegram_display_name,
+      role,
+      bot_id: botId || null,
+    });
     await db.setAppUserEnabled(id, true);
     return id;
   }
+  await db.setAppUserTelegramIdentity(existing.id, {
+    telegram_user_id,
+    telegram_username,
+    telegram_display_name,
+  });
   await db.setAppUserRole(existing.id, role);
   await db.setAppUserBot(existing.id, botId || null);
   await db.setAppUserEnabled(existing.id, true);
@@ -79,7 +114,9 @@ async function main() {
     for (const user of USERS) {
       const botId = user.service ? botIds[user.service] : null;
       await ensureUser(db, { ...user, botId });
-      console.log(`User ready: ${user.email} (${user.role})${botId ? ` -> ${botId}` : ''}`);
+      console.log(
+        `User ready: @${user.telegram_username} (${user.role})${botId ? ` -> ${botId}` : ''}`,
+      );
     }
   } finally {
     await db.close();

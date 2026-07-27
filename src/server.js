@@ -91,7 +91,6 @@ function createServer(db, telegram, options = {}) {
   // show the Admin link. Unprovisioned callers get the 403 from requireUser.
   app.get('/api/me', requireUser(options.verifyUser || (async () => null)), (req, res) => {
     res.json({
-      email: req.appUser.email,
       telegram_user_id: req.appUser.telegram_user_id,
       telegram_username: req.appUser.telegram_username,
       telegram_display_name: req.appUser.telegram_display_name,
@@ -211,31 +210,28 @@ function createServer(db, telegram, options = {}) {
 
   app.post('/api/admin/users', wrap(async (req, res) => {
     if (!db.createAppUser) return res.status(501).json({ error: 'Supabase production database is required' });
-    const email = String(req.body?.email || '').trim().toLowerCase() || null;
     const telegramUserId = String(req.body?.telegram_user_id || '').trim();
     const telegramUsername = String(req.body?.telegram_username || '').trim().replace(/^@/, '') || null;
     const telegramDisplayName = String(req.body?.telegram_display_name || '').trim() || null;
     const role = String(req.body?.role || 'user');
     if (!/^\d+$/.test(telegramUserId)) return res.status(400).json({ error: 'A numeric Telegram user ID is required' });
-    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Email is invalid' });
     if (!['admin', 'user'].includes(role)) return res.status(400).json({ error: 'Role must be admin or user' });
     if (db.listAppUsers) {
       const existing = (await db.listAppUsers()).find((user) =>
-        String(user.telegram_user_id) === telegramUserId || email && user.email === email);
+        String(user.telegram_user_id) === telegramUserId);
       if (existing) return res.status(409).json({ error: 'This Telegram account is already provisioned' });
     }
     const botToken = String(req.body?.bot_token || '').trim();
     if (role === 'user' && !botToken) return res.status(400).json({ error: 'A user needs a Telegram bot token' });
     const botId = botToken ? await createBotFromToken(botToken) : null;
     const userId = await db.createAppUser({
-      email,
       role,
       bot_id: botId,
       telegram_user_id: telegramUserId,
       telegram_username: telegramUsername,
       telegram_display_name: telegramDisplayName,
     });
-    res.status(201).json({ id: userId, email, telegram_user_id: telegramUserId, role, bot_id: botId });
+    res.status(201).json({ id: userId, telegram_user_id: telegramUserId, role, bot_id: botId });
   }));
 
   app.post('/api/admin/access-requests/:telegramUserId/approve', wrap(async (req, res) => {

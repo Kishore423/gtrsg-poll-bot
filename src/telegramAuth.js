@@ -179,7 +179,6 @@ function createTelegramAuth({
     if (!appUser || appUser.enabled === false) return null;
     return {
       id: appUser.id,
-      email: appUser.email || null,
       telegram_user_id: String(appUser.telegram_user_id),
       telegram_username: appUser.telegram_username || null,
       telegram_display_name: appUser.telegram_display_name || null,
