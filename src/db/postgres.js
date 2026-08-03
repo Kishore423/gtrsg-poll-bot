@@ -14,25 +14,24 @@ function createPostgresDb(sql = createSql()) {
       add column if not exists telegram_display_name text`;
     await sql`create unique index if not exists app_users_telegram_user_id_key
       on app_users(telegram_user_id) where telegram_user_id is not null`;
+    await sql`create unique index if not exists app_users_telegram_username_key
+      on app_users(lower(telegram_username)) where telegram_username is not null`;
     await sql`create table if not exists telegram_login_challenges (
       id text primary key,
       verifier_hash text not null,
       telegram_user_id bigint,
-      telegram_username text,
-      telegram_display_name text,
+      otp_hash text,
       expires_at timestamptz not null,
-      verified_at timestamptz,
+      attempt_count integer not null default 0,
+      sent_at timestamptz,
+      consumed_at timestamptz,
       created_at timestamptz not null default now()
     )`;
-    await sql`create table if not exists telegram_access_requests (
-      telegram_user_id bigint primary key,
-      telegram_username text,
-      telegram_display_name text,
-      status text not null default 'pending'
-        check (status in ('pending', 'approved', 'rejected')),
-      requested_at timestamptz not null default now(),
-      reviewed_at timestamptz
-    )`;
+    await sql`alter table telegram_login_challenges
+      add column if not exists otp_hash text,
+      add column if not exists attempt_count integer not null default 0,
+      add column if not exists sent_at timestamptz,
+      add column if not exists consumed_at timestamptz`;
     await sql`alter table telegram_groups add column if not exists bot_ref uuid references bots(id) on delete cascade`;
     await sql`create index if not exists telegram_groups_bot_ref_idx on telegram_groups(bot_ref)`;
     await sql`create unique index if not exists telegram_groups_chat_bot_ref_key
@@ -392,6 +391,21 @@ function createPostgresDb(sql = createSql()) {
       return row || null;
     },
 
+    async getAppUserByTelegramIdentifier(identifier) {
+      await initPromise;
+      const normalized = String(identifier).toLowerCase();
+      const [row] = await sql`
+        select id, telegram_user_id::text, telegram_username,
+               telegram_display_name, role, enabled, bot_id
+        from app_users
+        where enabled and (
+          telegram_user_id::text = ${String(identifier)}
+          or lower(telegram_username) = ${normalized}
+        )
+        limit 1`;
+      return row || null;
+    },
+
     async setAppUserTelegramIdentity(id, {
       telegram_user_id,
       telegram_username = null,
@@ -436,11 +450,23 @@ function createPostgresDb(sql = createSql()) {
       return row || null;
     },
 
-    async createTelegramLoginChallenge({ id, verifier_hash, expires_at }) {
+    async createTelegramLoginChallenge({
+      id,
+      verifier_hash,
+      telegram_user_id = null,
+      otp_hash,
+      expires_at,
+      created_at,
+    }) {
       await initPromise;
       const [row] = await sql`
-        insert into telegram_login_challenges (id, verifier_hash, expires_at)
-        values (${id}, ${verifier_hash}, ${expires_at})
+        insert into telegram_login_challenges (
+          id, verifier_hash, telegram_user_id, otp_hash, expires_at, created_at
+        )
+        values (
+          ${id}, ${verifier_hash}, ${telegram_user_id}, ${otp_hash},
+          ${expires_at}, ${created_at}
+        )
         returning *`;
       return row;
     },
@@ -448,72 +474,65 @@ function createPostgresDb(sql = createSql()) {
     async getTelegramLoginChallenge(id) {
       await initPromise;
       const [row] = await sql`
-        select id, verifier_hash, telegram_user_id::text, telegram_username,
-               telegram_display_name, expires_at, verified_at
+        select id, verifier_hash, telegram_user_id::text, otp_hash, expires_at,
+               attempt_count, sent_at, consumed_at, created_at
         from telegram_login_challenges where id = ${id}`;
       return row || null;
     },
 
-    async completeTelegramLoginChallenge(id, identity) {
+    async getLatestSentTelegramLoginChallenge(telegramUserId) {
+      await initPromise;
+      const [row] = await sql`
+        select id, sent_at
+        from telegram_login_challenges
+        where telegram_user_id = ${telegramUserId} and sent_at is not null
+        order by sent_at desc
+        limit 1`;
+      return row || null;
+    },
+
+    async countSentTelegramLoginChallengesSince(telegramUserId, since) {
+      await initPromise;
+      const [row] = await sql`
+        select count(*)::integer as count
+        from telegram_login_challenges
+        where telegram_user_id = ${telegramUserId}
+          and sent_at >= ${since}`;
+      return row?.count || 0;
+    },
+
+    async markTelegramLoginChallengeSent(id, sentAt = new Date().toISOString()) {
+      await initPromise;
+      const [row] = await sql`
+        update telegram_login_challenges set sent_at = ${sentAt}
+        where id = ${id}
+        returning id, sent_at`;
+      return row || null;
+    },
+
+    async consumeTelegramLoginChallenge({
+      id,
+      verifier_hash,
+      otp_hash,
+      max_attempts,
+      now,
+    }) {
       await initPromise;
       const [row] = await sql`
         update telegram_login_challenges set
-          telegram_user_id = ${identity.telegram_user_id},
-          telegram_username = ${identity.telegram_username},
-          telegram_display_name = ${identity.telegram_display_name},
-          verified_at = now()
-        where id = ${id} and expires_at > now()
-        returning id, verifier_hash, telegram_user_id::text, telegram_username,
-                  telegram_display_name, expires_at, verified_at`;
+          attempt_count = attempt_count + 1,
+          consumed_at = case when otp_hash = ${otp_hash} then ${now} else consumed_at end
+        where id = ${id}
+          and verifier_hash = ${verifier_hash}
+          and sent_at is not null
+          and consumed_at is null
+          and expires_at > ${now}
+          and attempt_count < ${max_attempts}
+        returning id, telegram_user_id::text, attempt_count, consumed_at,
+                  otp_hash = ${otp_hash} as matched`;
       return row || null;
     },
 
-    async upsertTelegramAccessRequest(identity) {
-      await initPromise;
-      const [row] = await sql`
-        insert into telegram_access_requests (
-          telegram_user_id, telegram_username, telegram_display_name
-        ) values (
-          ${identity.telegram_user_id}, ${identity.telegram_username},
-          ${identity.telegram_display_name}
-        )
-        on conflict (telegram_user_id) do update set
-          telegram_username = excluded.telegram_username,
-          telegram_display_name = excluded.telegram_display_name,
-          status = case
-            when telegram_access_requests.status = 'approved' then 'approved'
-            else 'pending'
-          end,
-          requested_at = case
-            when telegram_access_requests.status = 'approved'
-              then telegram_access_requests.requested_at
-            else now()
-          end
-        returning telegram_user_id::text, telegram_username,
-                  telegram_display_name, status, requested_at, reviewed_at`;
-      return row;
-    },
-
-    async listTelegramAccessRequests({ status = null } = {}) {
-      await initPromise;
-      return sql`
-        select telegram_user_id::text, telegram_username, telegram_display_name,
-               status, requested_at, reviewed_at
-        from telegram_access_requests
-        where ${status}::text is null or status = ${status}
-        order by requested_at`;
-    },
-
-    async setTelegramAccessRequestStatus(telegramUserId, status) {
-      await initPromise;
-      const [row] = await sql`
-        update telegram_access_requests
-        set status = ${status}, reviewed_at = now()
-        where telegram_user_id = ${telegramUserId}
-        returning telegram_user_id::text, telegram_username,
-                  telegram_display_name, status, requested_at, reviewed_at`;
-      return row || null;
-    },
     async createTelegramGroup({ telegram_chat_id, group_name, service = null, bot_id = 'PRIMARY', bot_ref = null }) {
       const [row] = await sql`insert into telegram_groups(telegram_chat_id,group_name,service,bot_id,bot_ref)
         values (${telegram_chat_id},${group_name},${service},${bot_ref || bot_id},${bot_ref}::uuid) returning id`;

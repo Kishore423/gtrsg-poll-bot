@@ -29,7 +29,6 @@ function createMemoryDb() {
   const bots = [];
   const appUsers = [];
   const telegramLoginChallenges = new Map();
-  const telegramAccessRequests = new Map();
   let slotSeq = 0;
   let pollSeq = 0;
   let voteSeq = 0;
@@ -274,6 +273,15 @@ function createMemoryDb() {
       return user ? { ...user } : null;
     },
 
+    async getAppUserByTelegramIdentifier(identifier) {
+      const normalized = String(identifier).toLowerCase();
+      const user = appUsers.find((item) => item.enabled && (
+        item.telegram_user_id === String(identifier) ||
+        String(item.telegram_username || '').toLowerCase() === normalized
+      ));
+      return user ? { ...user } : null;
+    },
+
     async setAppUserTelegramIdentity(id, {
       telegram_user_id,
       telegram_username = null,
@@ -314,16 +322,24 @@ function createMemoryDb() {
       return appUsers.splice(index, 1)[0];
     },
 
-    async createTelegramLoginChallenge({ id, verifier_hash, expires_at }) {
+    async createTelegramLoginChallenge({
+      id,
+      verifier_hash,
+      telegram_user_id = null,
+      otp_hash,
+      expires_at,
+      created_at,
+    }) {
       const challenge = {
         id,
         verifier_hash,
+        telegram_user_id: telegram_user_id ? String(telegram_user_id) : null,
+        otp_hash,
         expires_at,
-        telegram_user_id: null,
-        telegram_username: null,
-        telegram_display_name: null,
-        verified_at: null,
-        created_at: new Date().toISOString(),
+        attempt_count: 0,
+        sent_at: null,
+        consumed_at: null,
+        created_at: created_at || new Date().toISOString(),
       };
       telegramLoginChallenges.set(id, challenge);
       return { ...challenge };
@@ -334,40 +350,48 @@ function createMemoryDb() {
       return challenge ? { ...challenge } : null;
     },
 
-    async completeTelegramLoginChallenge(id, identity) {
+    async getLatestSentTelegramLoginChallenge(telegramUserId) {
+      return [...telegramLoginChallenges.values()]
+        .filter((item) =>
+          item.telegram_user_id === String(telegramUserId) && item.sent_at)
+        .sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at))
+        .map((item) => ({ ...item }))[0] || null;
+    },
+
+    async countSentTelegramLoginChallengesSince(telegramUserId, since) {
+      const sinceMs = new Date(since).getTime();
+      return [...telegramLoginChallenges.values()].filter((item) =>
+        item.telegram_user_id === String(telegramUserId) &&
+        item.sent_at &&
+        new Date(item.sent_at).getTime() >= sinceMs
+      ).length;
+    },
+
+    async markTelegramLoginChallengeSent(id, sentAt = new Date().toISOString()) {
       const challenge = telegramLoginChallenges.get(String(id));
-      if (!challenge || new Date(challenge.expires_at).getTime() <= Date.now()) return null;
-      Object.assign(challenge, identity, { verified_at: new Date().toISOString() });
+      if (!challenge) return null;
+      challenge.sent_at = sentAt;
       return { ...challenge };
     },
 
-    async upsertTelegramAccessRequest(identity) {
-      const id = String(identity.telegram_user_id);
-      const existing = telegramAccessRequests.get(id);
-      const request = {
-        telegram_user_id: id,
-        telegram_username: identity.telegram_username || null,
-        telegram_display_name: identity.telegram_display_name || null,
-        status: existing?.status === 'approved' ? 'approved' : 'pending',
-        requested_at: existing?.requested_at || new Date().toISOString(),
-        reviewed_at: existing?.reviewed_at || null,
-      };
-      telegramAccessRequests.set(id, request);
-      return { ...request };
-    },
-
-    async listTelegramAccessRequests({ status = null } = {}) {
-      return [...telegramAccessRequests.values()]
-        .filter((request) => !status || request.status === status)
-        .map((request) => ({ ...request }));
-    },
-
-    async setTelegramAccessRequestStatus(telegramUserId, status) {
-      const request = telegramAccessRequests.get(String(telegramUserId));
-      if (!request) return null;
-      request.status = status;
-      request.reviewed_at = new Date().toISOString();
-      return { ...request };
+    async consumeTelegramLoginChallenge({
+      id,
+      verifier_hash,
+      otp_hash,
+      max_attempts,
+      now,
+    }) {
+      const challenge = telegramLoginChallenges.get(String(id));
+      if (!challenge ||
+          !challenge.sent_at ||
+          challenge.verifier_hash !== verifier_hash ||
+          challenge.consumed_at ||
+          challenge.attempt_count >= max_attempts ||
+          new Date(challenge.expires_at).getTime() <= new Date(now).getTime()) return null;
+      challenge.attempt_count += 1;
+      const matched = challenge.otp_hash === otp_hash;
+      if (matched) challenge.consumed_at = now;
+      return { ...challenge, matched };
     },
 
     async listPollExclusions(telegramGroupId = null) {

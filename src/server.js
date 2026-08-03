@@ -69,21 +69,30 @@ function createServer(db, telegram, options = {}) {
       demoPreview: !!options.demoPreview, provider: 'telegram' });
   });
 
-  app.post('/api/auth/telegram/start', async (req, res) => {
+  app.post('/api/auth/telegram/otp/request', async (req, res) => {
     if (!options.requireAdminAuth) return res.json({ disabled: true });
     try {
-      res.json(await options.startTelegramLogin());
+      res.status(202).json(await options.requestTelegramOtp(req.body?.identifier));
     } catch (error) {
-      res.status(error.statusCode || 500).json({ error: error.message || 'Unable to start Telegram sign-in' });
+      const payload = { error: error.message || 'Unable to send Telegram code' };
+      if (error.retryAfter) payload.retry_after = error.retryAfter;
+      if (error.botUsername) payload.bot_username = error.botUsername;
+      res.status(error.statusCode || 500).json(payload);
     }
   });
 
-  app.post('/api/auth/telegram/status', async (req, res) => {
+  app.post('/api/auth/telegram/otp/verify', async (req, res) => {
     if (!options.requireAdminAuth) return res.json({ disabled: true });
     try {
-      res.json(await options.finishTelegramLogin(req.body?.challenge_id, req.body?.verifier));
+      res.json(await options.verifyTelegramOtp(
+        req.body?.challenge_id,
+        req.body?.verifier,
+        req.body?.code
+      ));
     } catch (error) {
-      res.status(error.statusCode || 401).json({ error: error.message || 'Unable to complete Telegram sign-in' });
+      res.status(error.statusCode || 401).json({
+        error: error.message || 'Unable to verify Telegram code',
+      });
     }
   });
 
@@ -187,13 +196,6 @@ function createServer(db, telegram, options = {}) {
     })));
   }));
 
-  app.get('/api/admin/access-requests', wrap(async (req, res) => {
-    if (!db.listTelegramAccessRequests) {
-      return res.status(501).json({ error: 'Supabase production database is required' });
-    }
-    res.json(await db.listTelegramAccessRequests({ status: 'pending' }));
-  }));
-
   app.get('/api/admin/bots', wrap(async (req, res) => {
     if (!db.listBots) return res.status(501).json({ error: 'Supabase production database is required' });
     const bots = await db.listBots();
@@ -232,41 +234,6 @@ function createServer(db, telegram, options = {}) {
       telegram_display_name: telegramDisplayName,
     });
     res.status(201).json({ id: userId, telegram_user_id: telegramUserId, role, bot_id: botId });
-  }));
-
-  app.post('/api/admin/access-requests/:telegramUserId/approve', wrap(async (req, res) => {
-    if (!db.listTelegramAccessRequests || !db.createAppUser || !db.setTelegramAccessRequestStatus) {
-      return res.status(501).json({ error: 'Supabase production database is required' });
-    }
-    const request = (await db.listTelegramAccessRequests({ status: 'pending' }))
-      .find((item) => String(item.telegram_user_id) === String(req.params.telegramUserId));
-    if (!request) return res.status(404).json({ error: 'Pending access request not found' });
-    if (db.getAppUserByTelegramId && await db.getAppUserByTelegramId(request.telegram_user_id)) {
-      return res.status(409).json({ error: 'This Telegram account is already provisioned' });
-    }
-    const role = String(req.body?.role || 'user');
-    if (!['admin', 'user'].includes(role)) return res.status(400).json({ error: 'Role must be admin or user' });
-    const botToken = String(req.body?.bot_token || '').trim();
-    if (role === 'user' && !botToken) return res.status(400).json({ error: 'A user needs a Telegram bot token' });
-    const botId = botToken ? await createBotFromToken(botToken) : null;
-    const userId = await db.createAppUser({
-      role,
-      bot_id: botId,
-      telegram_user_id: request.telegram_user_id,
-      telegram_username: request.telegram_username,
-      telegram_display_name: request.telegram_display_name,
-    });
-    await db.setTelegramAccessRequestStatus(request.telegram_user_id, 'approved');
-    res.status(201).json({ id: userId, telegram_user_id: request.telegram_user_id, role, bot_id: botId });
-  }));
-
-  app.post('/api/admin/access-requests/:telegramUserId/reject', wrap(async (req, res) => {
-    if (!db.setTelegramAccessRequestStatus) {
-      return res.status(501).json({ error: 'Supabase production database is required' });
-    }
-    const request = await db.setTelegramAccessRequestStatus(req.params.telegramUserId, 'rejected');
-    if (!request) return res.status(404).json({ error: 'Access request not found' });
-    res.json(request);
   }));
 
   app.patch('/api/admin/users/:id', wrap(async (req, res) => {

@@ -69,15 +69,18 @@ test('admin-only routes reject a provisioned non-admin', async () => {
       : null });
 });
 
-test('Telegram auth endpoints start and finish a login session', async () => {
+test('Telegram OTP endpoints request a code and verify a login session', async () => {
   await withServer(async ({ baseUrl }) => {
-    const started = await fetch(`${baseUrl}/api/auth/telegram/start`, { method: 'POST' });
-    assert.equal(started.status, 200);
-    assert.equal((await started.json()).login_url, 'https://t.me/login_bot?start=login_challenge');
+    const started = await fetch(`${baseUrl}/api/auth/telegram/otp/request`, json('POST', {
+      identifier: '@approved_user',
+    }));
+    assert.equal(started.status, 202);
+    assert.equal((await started.json()).bot_username, 'login_bot');
 
-    const finished = await fetch(`${baseUrl}/api/auth/telegram/status`, json('POST', {
+    const finished = await fetch(`${baseUrl}/api/auth/telegram/otp/verify`, json('POST', {
       challenge_id: 'challenge',
       verifier: 'verifier',
+      code: '123456',
     }));
     assert.equal(finished.status, 200);
     const session = await finished.json();
@@ -85,14 +88,19 @@ test('Telegram auth endpoints start and finish a login session', async () => {
     assert.equal(session.access_token, 'telegram-session');
   }, {
     requireAdminAuth: true,
-    startTelegramLogin: async () => ({
+    requestTelegramOtp: async (identifier) => {
+      assert.equal(identifier, '@approved_user');
+      return {
       challenge_id: 'challenge',
       verifier: 'verifier',
-      login_url: 'https://t.me/login_bot?start=login_challenge',
-    }),
-    finishTelegramLogin: async (challengeId, verifier) => {
+      bot_username: 'login_bot',
+      setup_url: 'https://t.me/login_bot?start=login_setup',
+      };
+    },
+    verifyTelegramOtp: async (challengeId, verifier, code) => {
       assert.equal(challengeId, 'challenge');
       assert.equal(verifier, 'verifier');
+      assert.equal(code, '123456');
       return { status: 'authenticated', access_token: 'telegram-session', expires_at: 123 };
     },
   });
@@ -342,7 +350,7 @@ test('full flow: link group, send poll, vote, results ranked, confirm', async ()
     }));
 
     // 2. Admin adds slots (2-slot option) and sends the poll.
-    await fetch(`${baseUrl}/api/slots`, json('POST', { slot_date: '2026-07-25', time_start: '17:00', time_end: '22:00', slot_count: 2, service: 'WHCL' }));
+    await fetch(`${baseUrl}/api/slots`, json('POST', { slot_date: '2026-08-25', time_start: '17:00', time_end: '22:00', slot_count: 2, service: 'WHCL' }));
     const trig = await fetch(`${baseUrl}/api/trigger-now`, json('POST', { service: 'WHCL' }));
     assert.equal((await trig.json()).sent, 1);
     assert.equal(telegram.polls[0].chatId, '-100999');

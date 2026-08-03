@@ -1,13 +1,21 @@
 (function setupTelegramAuth() {
   const nativeFetch = window.fetch.bind(window);
   const sessionKey = 'gtrsg-auth';
-  const challengeKey = 'gtrsg-telegram-login';
+  const challengeKey = 'gtrsg-telegram-otp';
   let session = JSON.parse(sessionStorage.getItem(sessionKey) || 'null');
-  let pollTimer = null;
+  let challenge = JSON.parse(sessionStorage.getItem(challengeKey) || 'null');
 
   const elements = () => ({
     overlay: document.getElementById('auth-overlay'),
-    button: document.getElementById('telegram-sign-in'),
+    form: document.getElementById('telegram-otp-form'),
+    identifier: document.getElementById('telegram-identifier'),
+    codeStep: document.getElementById('telegram-code-step'),
+    code: document.getElementById('telegram-code'),
+    send: document.getElementById('telegram-send-code'),
+    verify: document.getElementById('telegram-verify-code'),
+    change: document.getElementById('telegram-change-account'),
+    setup: document.getElementById('telegram-setup'),
+    botLink: document.getElementById('telegram-bot-link'),
     message: document.getElementById('auth-error'),
   });
 
@@ -18,19 +26,63 @@
     element.className = `auth-error ${kind}`.trim();
   }
 
-  function showLogin(message = '') {
-    const { overlay, button } = elements();
-    if (overlay) overlay.hidden = false;
-    if (button) {
-      button.disabled = false;
-      button.textContent = 'Continue with Telegram';
+  function showIdentifierStep() {
+    const { identifier, codeStep, code, send, verify, change, setup } = elements();
+    if (identifier) identifier.disabled = false;
+    if (codeStep) codeStep.hidden = true;
+    if (code) code.value = '';
+    if (send) {
+      send.hidden = false;
+      send.disabled = false;
+      send.textContent = 'Send code';
     }
+    if (verify) {
+      verify.hidden = true;
+      verify.disabled = false;
+      verify.textContent = 'Verify code';
+    }
+    if (change) change.hidden = true;
+    if (setup) setup.hidden = true;
+  }
+
+  function showCodeStep(activeChallenge = challenge) {
+    const { identifier, codeStep, code, send, verify, change, setup, botLink } = elements();
+    if (identifier) {
+      identifier.value = activeChallenge.identifier || identifier.value;
+      identifier.disabled = true;
+    }
+    if (codeStep) codeStep.hidden = false;
+    if (send) send.hidden = true;
+    if (verify) {
+      verify.hidden = false;
+      verify.disabled = false;
+      verify.textContent = 'Verify code';
+    }
+    if (change) change.hidden = false;
+    if (setup) setup.hidden = false;
+    if (botLink) {
+      botLink.href = activeChallenge.setup_url;
+      botLink.textContent = `Open @${activeChallenge.bot_username}`;
+    }
+    window.setTimeout(() => code?.focus(), 0);
+  }
+
+  function showLogin(message = '') {
+    const { overlay } = elements();
+    if (overlay) overlay.hidden = false;
+    if (challenge) showCodeStep(challenge);
+    else showIdentifierStep();
     setMessage(message);
   }
 
   function clearSession() {
     session = null;
     sessionStorage.removeItem(sessionKey);
+  }
+
+  function clearChallenge() {
+    challenge = null;
+    sessionStorage.removeItem(challengeKey);
   }
 
   window.fetch = async (input, init = {}) => {
@@ -43,86 +95,114 @@
     const response = await nativeFetch(input, { ...init, headers });
     if (isManagementApi && response.status === 401) {
       clearSession();
-      showLogin('Your session expired. Sign in with Telegram again.');
+      showLogin('Your session expired. Sign in again.');
     }
     return response;
   };
 
-  async function checkChallenge(challenge) {
-    const response = await nativeFetch('/api/auth/telegram/status', {
+  async function requestOtp() {
+    const { identifier, send } = elements();
+    const value = identifier?.value.trim();
+    if (!value) {
+      setMessage('Enter your Telegram ID or handle.');
+      identifier?.focus();
+      return;
+    }
+    if (send) {
+      send.disabled = true;
+      send.textContent = 'Sending code...';
+    }
+    setMessage('');
+    const response = await nativeFetch('/api/auth/telegram/otp/request', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(challenge),
+      body: JSON.stringify({ identifier: value }),
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) {
-      sessionStorage.removeItem(challengeKey);
-      clearInterval(pollTimer);
-      showLogin(result.error || 'Unable to complete Telegram sign-in.');
+      if (send) {
+        send.disabled = false;
+        send.textContent = 'Send code';
+      }
+      setMessage(result.error || 'Unable to send a Telegram code.');
       return;
     }
-    if (result.status === 'waiting_for_telegram') {
-      setMessage('Approve the sign-in in Telegram, then return to this page.', 'success');
-      return;
-    }
-    if (result.status === 'pending_approval') {
-      sessionStorage.removeItem(challengeKey);
-      clearInterval(pollTimer);
-      const identity = result.telegram_username
-        ? `@${result.telegram_username}`
-        : result.telegram_display_name || 'This Telegram account';
-      showLogin(`${identity} is awaiting administrator approval.`);
-      return;
-    }
-    if (result.status === 'authenticated') {
-      session = result;
-      sessionStorage.setItem(sessionKey, JSON.stringify(result));
-      sessionStorage.removeItem(challengeKey);
-      clearInterval(pollTimer);
-      const { overlay } = elements();
-      if (overlay) overlay.hidden = true;
-      window.location.reload();
-    }
-  }
-
-  function pollChallenge(challenge) {
-    clearInterval(pollTimer);
-    checkChallenge(challenge);
-    pollTimer = setInterval(() => checkChallenge(challenge), 1500);
-  }
-
-  async function startLogin() {
-    const { button } = elements();
-    const popup = window.open('about:blank', 'gtrsg-telegram-login');
-    if (button) {
-      button.disabled = true;
-      button.textContent = 'Opening Telegram...';
-    }
-    setMessage('');
-    const response = await nativeFetch('/api/auth/telegram/start', { method: 'POST' });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      if (popup) popup.close();
-      showLogin(result.error || 'Unable to start Telegram sign-in.');
-      return;
-    }
-    const challenge = {
+    challenge = {
       challenge_id: result.challenge_id,
       verifier: result.verifier,
+      expires_at: result.expires_at,
+      bot_username: result.bot_username,
+      setup_url: result.setup_url,
+      identifier: value,
     };
     sessionStorage.setItem(challengeKey, JSON.stringify(challenge));
-    setMessage(`Continue in @${result.bot_username}. This request expires in 5 minutes.`, 'success');
-    if (popup) popup.location.replace(result.login_url);
-    else window.location.href = result.login_url;
-    pollChallenge(challenge);
+    showCodeStep(challenge);
+    setMessage(`Check Telegram for a code from @${result.bot_username}.`, 'success');
+  }
+
+  async function verifyOtp() {
+    const { code, verify } = elements();
+    const value = String(code?.value || '').replace(/\D/g, '');
+    if (value.length !== 6) {
+      setMessage('Enter the six-digit code sent to Telegram.');
+      code?.focus();
+      return;
+    }
+    if (verify) {
+      verify.disabled = true;
+      verify.textContent = 'Verifying...';
+    }
+    setMessage('');
+    const response = await nativeFetch('/api/auth/telegram/otp/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        challenge_id: challenge?.challenge_id,
+        verifier: challenge?.verifier,
+        code: value,
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (verify) {
+        verify.disabled = false;
+        verify.textContent = 'Verify code';
+      }
+      if (code) code.value = '';
+      setMessage(result.error || 'Unable to verify the Telegram code.');
+      code?.focus();
+      return;
+    }
+    session = result;
+    sessionStorage.setItem(sessionKey, JSON.stringify(result));
+    clearChallenge();
+    const { overlay } = elements();
+    if (overlay) overlay.hidden = true;
+    window.location.reload();
+  }
+
+  function changeAccount() {
+    clearChallenge();
+    showIdentifierStep();
+    setMessage('');
+    elements().identifier?.focus();
   }
 
   function init() {
-    elements().button?.addEventListener('click', startLogin);
-    const challenge = JSON.parse(sessionStorage.getItem(challengeKey) || 'null');
+    const { form, verify, change, code } = elements();
+    form?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (challenge) verifyOtp();
+      else requestOtp();
+    });
+    verify?.addEventListener('click', verifyOtp);
+    change?.addEventListener('click', changeAccount);
+    code?.addEventListener('input', () => {
+      code.value = code.value.replace(/\D/g, '').slice(0, 6);
+    });
     if (challenge) {
-      showLogin('Complete the sign-in in Telegram.');
-      pollChallenge(challenge);
+      showCodeStep(challenge);
+      setMessage(`Enter the code sent by @${challenge.bot_username}.`, 'success');
     }
   }
 

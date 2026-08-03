@@ -16,13 +16,13 @@ so the other agent stays in sync.**
 
 One Telegram bot **per user**: admin maps a BotFather token to a Telegram identity;
 that user only sees the groups **their own bot** is in. Sign-in uses a short-lived
-Telegram bot challenge and a signed application session; roles are **admin | user**.
+Telegram bot OTP and a signed application session; roles are **admin | user**.
 
 ### Confirmed decisions
 
 - The immutable Telegram user ID is the identity and authorization key. A valid
-  Telegram challenge grants nothing unless an enabled `app_users` row exists for
-  that ID. Unknown identities create a pending admin request and fail closed.
+  Telegram OTP grants nothing unless an enabled `app_users` row exists for that
+  ID. Unknown identities receive a generic response but no OTP or session.
 - Bot tokens: admin pastes BotFather token → **encrypted** in DB (never sent to browser).
 - Admins see **all** groups/bots; an admin may have **no bot** (`bot_id` nullable).
 - Bot name is **bidirectional**: UI edit → `setMyName` (shows in BotFather);
@@ -95,12 +95,16 @@ WHCL/PSA bots keep running until `scripts/migrate-to-multi-tenant.js` backfills
 `bot_ref`. Do not "tidy" this by dropping `bot_id` before that backfill runs.
 
 **Task 3 (done) — what changed, so nothing gets "fixed" back:**
-- `src/telegramAuth.js` creates a five-minute browser-verifier challenge. The PSA
-  bot receives `/start login_<challenge>`, confirms the immutable Telegram user
-  ID, and the server issues a 12-hour HMAC-signed application session.
-- Unknown Telegram identities are recorded in `telegram_access_requests`; they
-  receive no session until an admin approves them. Approval can create and assign
-  the user's encrypted BotFather token in the same action.
+- `src/telegramAuth.js` accepts an approved Telegram handle or numeric ID, then
+  sends a six-digit OTP to the immutable `telegram_user_id` through that user's
+  assigned bot. Admins without a bot use the configured `TELEGRAM_AUTH_BOT`.
+- OTP challenges expire after five minutes, are bound to the requesting browser,
+  allow five attempts, are consumed atomically, and produce a 12-hour HMAC-signed
+  session. Successful sends have a one-minute cooldown and a five-per-hour cap.
+- Unknown Telegram identities receive the same generic browser response but no
+  database challenge, OTP, or session. Admins add approved identities manually.
+- A private `/start` message only opens the bot conversation so it can deliver
+  future OTPs; it does not authenticate the browser.
 - `app_users.telegram_user_id` is unique and is the authorization join key.
   The email column was removed on 2026-07-24; handles and display names are
   refreshable metadata only.
@@ -115,10 +119,10 @@ Node.js (CommonJS) service that runs GTRSG wheelchair (`WHCL`) and passenger
 service associate (`PSA`) shift-slot **Telegram** polls: schedules/sends polls,
 records votes via webhook, and posts first-come-first-served confirmations.
 Deployed on **Vercel** (serverless) with **Supabase** for Postgres and Telegram
-challenge sign-in.
+bot OTP sign-in.
 
 > History: WhatsApp/Baileys (removed) → Telegram on Vercel with Vercel-Postgres
-> (Claude) → **Supabase DB + Supabase Auth + a managed production workflow**
+> (Claude) → **Supabase Postgres + Telegram Auth + a managed production workflow**
 > (Codex, current). Ignore obsolete WhatsApp/Baileys/Vercel-Postgres/Neon/
 > Basic-Auth references anywhere in history.
 
@@ -126,7 +130,7 @@ challenge sign-in.
 
 The app currently ships BOTH, selected at runtime:
 
-- **Managed workflow = production** (Codex). Admin dashboard (Supabase Auth) to
+- **Managed workflow = production** (Codex). Authenticated admin dashboard to
   schedule polls with precise timezone release/close/confirmation times, sent by
   cron with claim-token concurrency safety, edit-in-place confirmations, waiting
   lists, and poll closures. Modules: `src/productionScheduler.js` (including
@@ -331,8 +335,9 @@ live only in Vercel env + the local (gitignored) `.env`.
 - The poll editor has one form-level **Send immediately** action beside **Review and
   schedule**. It sends all shift rows currently in the form; shift rows only have a
   Remove action.
-- Production deploy `dpl_2NfTiE812qcDPzSyGDUvXvaEieuZ` was promoted on
-  2026-07-24 and aliased to `https://gtrsg-poll-bot.vercel.app`.
+- Production deploy `dpl_HuCt1EFJqUqseHNFtPXayzcWm7iX` was promoted on
+  2026-08-03 and aliased to `https://gtrsg-poll-bot.vercel.app`; it includes
+  Telegram bot OTP login.
 - The managed dashboard now includes a Release rules summary, a renamed **Group
   release template** section with service-specific timing previews, and a **Create
   one-off poll** section with inline timing preview. Default release batches are

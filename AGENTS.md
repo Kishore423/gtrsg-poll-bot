@@ -9,7 +9,7 @@
 > **Current status:** Tasks 1-8 are done (`src/crypto.js`, `bots`/
 > `app_users`, Telegram identity allow-list, tenant group scoping/RBAC, UUID bot
 > webhook routing/token resolution, admin APIs/page, dashboard group-popup flow,
-> migration script, and Telegram access approval). Validate with `npm test` and
+> migration script, and Telegram bot OTP login). Validate with `npm test` and
 > `npm run check`.
 >
 > Task 4 added `src/tenancy.js` and scoped existing managed routes in
@@ -40,7 +40,7 @@
 >    text column on purpose — expand/contract, so the live bots keep working. The
 >    claim functions return `coalesce(g.bot_ref::text, g.bot_id)`. Don't drop
 >    `bot_id` until `scripts/migrate-to-multi-tenant.js` has backfilled.
-> 2. A valid Telegram challenge only proves control of that Telegram account. The
+> 2. A valid Telegram OTP only proves control of that Telegram account. The
 >    `app_users` allow-list is the authorization gate and must fail closed — never
 >    let "Telegram verified ⇒ allowed" creep into any endpoint.
 
@@ -53,7 +53,7 @@ change so neither drifts.**
 
 Node.js (CommonJS, Node 24.x) service running GTRSG wheelchair (`WHCL`) / PSA
 (`PSA`) shift-slot **Telegram** polls. Express UI/API, **Supabase** for Postgres
-(`DATABASE_URL` via the `postgres` lib), Telegram challenge auth, **Vercel serverless +
+(`DATABASE_URL` via the `postgres` lib), Telegram bot OTP auth, **Vercel serverless +
 Vercel Cron** for hosting/scheduling.
 
 > Migrated off WhatsApp/Baileys entirely. Also past Vercel-Postgres/Neon and HTTP
@@ -109,16 +109,19 @@ Vercel Cron** for hosting/scheduling.
 - The data layer is a repository with two implementations sharing one async
   interface (`src/db/memory.js`, `src/db/postgres.js`); keep them in lockstep —
   the memory one is what the tests run against.
-- Auth: Telegram challenge sessions (`src/telegramAuth.js`). `REQUIRE_ADMIN_AUTH`
+- Auth: Telegram bot OTP sessions (`src/telegramAuth.js`). `REQUIRE_ADMIN_AUTH`
   (default true in prod)
   protects `/api/*` except `/api/auth/*`, `/api/telegram/*`, `/api/cron/*`
   (those use the webhook secret / cron bearer instead).
-  `/api/auth/telegram/start` creates a five-minute verifier-bound challenge, the
-  configured auth bot confirms it through a private `/start login_<challenge>`
-  message, and `/api/auth/telegram/status` issues a signed 12-hour session only
-  for an enabled `app_users.telegram_user_id`. Unknown identities enter the admin
-  approval queue. `app_users` stores no email; Telegram ID is the authorization
-  key, while handle and display name are refreshable metadata.
+  `/api/auth/telegram/otp/request` accepts an approved handle or numeric ID and
+  sends a six-digit code to the immutable `app_users.telegram_user_id` through
+  the user's assigned bot, or `TELEGRAM_AUTH_BOT` for an admin without a bot.
+  `/api/auth/telegram/otp/verify` consumes the five-minute browser-bound challenge
+  and issues a signed 12-hour session. Codes allow five attempts and successful
+  sends have a one-minute cooldown plus a five-per-hour cap. Unknown identities
+  get a generic response but no OTP/session. A private `/start` only enrolls the
+  bot conversation for future delivery. `app_users` stores no email; Telegram ID
+  is the authorization key, while handle and display name are metadata.
 - Webhook updates are de-duplicated (`beginWebhookEvent`/`finishWebhookEvent`);
   preserve that. Any configured webhook bot route (`PRIMARY`, `WHCL`, `PSA`)
   auto-captures a managed Telegram group from bot membership updates or received
@@ -196,8 +199,9 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   `REQUIRE_ADMIN_AUTH=true`; management APIs require a valid Telegram session.
 - The poll editor has one form-level **Send immediately** action beside **Review and
   schedule**; it sends every shift row currently in the form.
-- Production deploy `dpl_2NfTiE812qcDPzSyGDUvXvaEieuZ` was promoted on
-  2026-07-24 and aliased to `https://gtrsg-poll-bot.vercel.app`.
+- Production deploy `dpl_HuCt1EFJqUqseHNFtPXayzcWm7iX` was promoted on
+  2026-08-03 and aliased to `https://gtrsg-poll-bot.vercel.app`; it includes
+  Telegram bot OTP login.
 - The managed dashboard includes a Release rules summary, a unified **Group template &
   automatic releases** section (template settings and template test polls), and a
   **Create one-off poll** section with inline timing preview and integrated test button.

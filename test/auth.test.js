@@ -1,7 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createMemoryDb } = require('../src/db/memory');
-const { createTelegramAuth, parseLoginStart, signSession, verifySession } = require('../src/telegramAuth');
+const {
+  createTelegramAuth,
+  normalizeTelegramIdentifier,
+  parsePrivateStart,
+  signSession,
+  verifySession,
+} = require('../src/telegramAuth');
 const { requireUser, requireAdmin } = require('../src/auth');
 
 const SESSION_SECRET = 'test-session-secret-that-is-long-enough';
@@ -10,16 +16,16 @@ function fakeTelegram() {
   const messages = [];
   return {
     messages,
-    async getMe() {
-      return { id: 8764384354, username: 'Pax_services_bot' };
+    async getMe(service) {
+      return { id: 8764384354, username: service === 'PSA' ? 'Pax_services_bot' : 'User_login_bot' };
     },
     async sendMessage(service, chatId, html) {
-      messages.push({ service, chatId, html });
+      messages.push({ service, chatId: String(chatId), html });
     },
   };
 }
 
-async function seeded() {
+async function seeded({ nowMs = Date.now() } = {}) {
   const db = createMemoryDb();
   const telegram = fakeTelegram();
   const botId = await db.createBot({
@@ -40,8 +46,21 @@ async function seeded() {
     telegram_display_name: 'Kishore',
     role: 'admin',
   });
-  const auth = createTelegramAuth({ db, telegram, sessionSecret: SESSION_SECRET });
-  return { db, telegram, auth, botId };
+  let clock = nowMs;
+  const auth = createTelegramAuth({
+    db,
+    telegram,
+    sessionSecret: SESSION_SECRET,
+    now: () => clock,
+    generateOtp: () => '123456',
+  });
+  return {
+    db,
+    telegram,
+    auth,
+    botId,
+    advance(ms) { clock += ms; },
+  };
 }
 
 function requestWith(token) {
@@ -59,22 +78,16 @@ function runMiddleware(middleware, req) {
   });
 }
 
-test('Telegram login challenge authenticates a provisioned user', async () => {
+test('Telegram OTP authenticates an approved handle through its immutable Telegram ID', async () => {
   const { auth, telegram, botId } = await seeded();
-  const started = await auth.startLogin();
-  assert.match(started.login_url, /^https:\/\/t\.me\/Pax_services_bot\?start=login_/);
-
-  const completed = await auth.completeFromUpdate('PSA', {
-    message: {
-      text: `/start login_${started.challenge_id}`,
-      chat: { id: 977476515, type: 'private' },
-      from: { id: 977476515, username: 'yidan', first_name: 'Yi', last_name: 'Dan' },
-    },
-  });
-  assert.equal(completed.handled, 'telegram_login');
+  const started = await auth.requestOtp('@YiDan');
+  assert.equal(started.bot_username, 'User_login_bot');
   assert.equal(telegram.messages.length, 1);
+  assert.equal(telegram.messages[0].service, botId);
+  assert.equal(telegram.messages[0].chatId, '977476515');
+  assert.match(telegram.messages[0].html, /123456/);
 
-  const session = await auth.finishLogin(started.challenge_id, started.verifier);
+  const session = await auth.verifyOtp(started.challenge_id, started.verifier, '123456');
   assert.equal(session.status, 'authenticated');
   const user = await auth.verifyUser(requestWith(session.access_token));
   assert.equal(user.telegram_user_id, '977476515');
@@ -82,44 +95,122 @@ test('Telegram login challenge authenticates a provisioned user', async () => {
   assert.equal(user.bot_id, botId);
 });
 
-test('unknown Telegram identities fail closed and create a pending request', async () => {
-  const { db, auth } = await seeded();
-  const started = await auth.startLogin();
-  await auth.completeFromUpdate('PSA', {
-    message: {
-      text: `/start login_${started.challenge_id}`,
-      chat: { id: 555, type: 'private' },
-      from: { id: 555, username: 'new_user', first_name: 'New' },
-    },
-  });
-  const result = await auth.finishLogin(started.challenge_id, started.verifier);
-  assert.equal(result.status, 'pending_approval');
-  assert.equal(await auth.verifyUser(requestWith('invalid')), null);
-  const requests = await db.listTelegramAccessRequests({ status: 'pending' });
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0].telegram_user_id, '555');
+test('numeric Telegram IDs can request OTPs without using mutable handles', async () => {
+  const { auth, telegram } = await seeded();
+  await auth.requestOtp('2132609363');
+  assert.equal(telegram.messages[0].service, 'PSA');
+  assert.equal(telegram.messages[0].chatId, '2132609363');
 });
 
-test('a challenge cannot be polled without its browser verifier', async () => {
-  const { auth } = await seeded();
-  const started = await auth.startLogin();
+test('unknown Telegram identifiers receive a generic challenge but no message or session', async () => {
+  const { auth, telegram } = await seeded();
+  const started = await auth.requestOtp('@unknown_user');
+  assert.equal(started.bot_username, 'Pax_services_bot');
+  assert.equal(telegram.messages.length, 0);
   await assert.rejects(
-    () => auth.finishLogin(started.challenge_id, 'wrong-verifier'),
+    () => auth.verifyOtp(started.challenge_id, started.verifier, '123456'),
     (error) => error.statusCode === 401
   );
 });
 
-test('login start parser only accepts private Telegram start messages', () => {
-  assert.equal(parseLoginStart({ message: {
-    text: '/start login_abcdefghijklmnopqrstuvwxyz',
-    chat: { id: 1, type: 'group' },
-    from: { id: 1 },
+test('OTP challenges enforce browser binding, attempt limits, and single use', async () => {
+  const { auth, advance } = await seeded();
+  const wrongBrowser = await auth.requestOtp('yidan');
+  await assert.rejects(
+    () => auth.verifyOtp(wrongBrowser.challenge_id, 'wrong-verifier', '123456'),
+    (error) => error.statusCode === 401
+  );
+
+  const limited = await auth.requestOtp('kishore');
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await assert.rejects(
+      () => auth.verifyOtp(limited.challenge_id, limited.verifier, '000000'),
+      (error) => error.statusCode === 401
+    );
+  }
+  await assert.rejects(
+    () => auth.verifyOtp(limited.challenge_id, limited.verifier, '123456'),
+    (error) => error.statusCode === 401
+  );
+
+  advance(61_000);
+  const valid = await auth.requestOtp('yidan');
+  await auth.verifyOtp(valid.challenge_id, valid.verifier, '123456');
+  await assert.rejects(
+    () => auth.verifyOtp(valid.challenge_id, valid.verifier, '123456'),
+    (error) => error.statusCode === 401
+  );
+});
+
+test('successfully sent OTPs have a one-minute resend cooldown', async () => {
+  const context = await seeded();
+  await context.auth.requestOtp('yidan');
+  await assert.rejects(
+    () => context.auth.requestOtp('yidan'),
+    (error) => error.statusCode === 429 && error.retryAfter === 60
+  );
+  context.advance(61_000);
+  await context.auth.requestOtp('yidan');
+  assert.equal(context.telegram.messages.length, 2);
+});
+
+test('successfully sent OTPs are limited to five per hour', async () => {
+  const context = await seeded();
+  for (let request = 0; request < 5; request += 1) {
+    await context.auth.requestOtp('yidan');
+    context.advance(61_000);
+  }
+  await assert.rejects(
+    () => context.auth.requestOtp('yidan'),
+    (error) => error.statusCode === 429 && error.retryAfter === 3600
+  );
+  assert.equal(context.telegram.messages.length, 5);
+});
+
+test('plain private /start enrolls an approved user with the delivery bot', async () => {
+  const { auth, telegram, botId } = await seeded();
+  assert.equal(parsePrivateStart({ message: {
+    text: '/start',
+    chat: { id: 977476515, type: 'group' },
+    from: { id: 977476515 },
   } }), null);
-  assert.equal(parseLoginStart({ message: {
-    text: '/start something_else',
-    chat: { id: 1, type: 'private' },
-    from: { id: 1 },
-  } }), null);
+  const result = await auth.completeFromUpdate(botId, {
+    message: {
+      text: '/start login_setup',
+      chat: { id: 977476515, type: 'private' },
+      from: { id: 977476515 },
+    },
+  });
+  assert.equal(result.handled, 'telegram_login_setup');
+  assert.match(telegram.messages[0].html, /sign-in is ready/);
+});
+
+test('plain private /start ignores unknown users and the wrong delivery bot', async () => {
+  const { auth, telegram } = await seeded();
+  const unknown = await auth.completeFromUpdate('PSA', {
+    message: {
+      text: '/start login_setup',
+      chat: { id: 555555555, type: 'private' },
+      from: { id: 555555555 },
+    },
+  });
+  const wrongBot = await auth.completeFromUpdate('PSA', {
+    message: {
+      text: '/start login_setup',
+      chat: { id: 977476515, type: 'private' },
+      from: { id: 977476515 },
+    },
+  });
+  assert.equal(unknown, null);
+  assert.equal(wrongBot, null);
+  assert.equal(telegram.messages.length, 0);
+});
+
+test('Telegram identifiers are normalized and invalid values are rejected', () => {
+  assert.equal(normalizeTelegramIdentifier('@Example_User'), 'example_user');
+  assert.equal(normalizeTelegramIdentifier('2132609363'), '2132609363');
+  assert.equal(normalizeTelegramIdentifier('bad handle'), null);
+  assert.equal(normalizeTelegramIdentifier('abc'), null);
 });
 
 test('signed sessions reject tampering and expiration', () => {

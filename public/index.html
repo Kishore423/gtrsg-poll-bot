@@ -664,17 +664,14 @@
     .auth-overlay[hidden] { display: none; }
     .auth-dialog { width: min(32rem, 100%); background: white; padding: 1.8rem; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.18); }
     .auth-dialog h2 { margin: 0 0 0.35rem; }
-    .auth-dialog form { display: grid; gap: 1rem; margin-top: 1rem; }
+    .auth-dialog form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; margin-top: 1rem; }
     .auth-dialog label { display: grid; gap: 0.45rem; font-weight: 700; color: var(--ink); }
     .auth-dialog input { width: 100%; min-height: 3.1rem; border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 0.95rem; font: inherit; background: #fff; box-sizing: border-box; }
     .auth-dialog input:focus { border-color: var(--green); outline: 3px solid rgba(44, 142, 93, 0.16); }
     .auth-error { color: var(--red); min-height: 1.25rem; margin: 0.35rem 0 0; font-size: 0.9rem; }
     .auth-error.success { color: var(--green-dark); }
     .otp-auth-copy { margin: 0; color: var(--ink-soft); line-height: 1.45; }
-    .auth-dialog > p.hint,
-    #ms-sign-in {
-      display: none;
-    }
+    .auth-dialog > p.hint { display: none; }
     .otp-auth-actions {
       display: flex;
       gap: 0.65rem;
@@ -690,45 +687,15 @@
       letter-spacing: 0.16em;
       text-align: center;
     }
-    .ms-sign-in-button {
-      width: 100%;
-      min-height: 2.75rem;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.75rem;
-      border: 1px solid #8c8c8c;
-      border-radius: 2px;
-      background: #fff;
-      color: #1f1f1f;
-      font-weight: 600;
-      box-shadow: none;
-    }
-    .ms-sign-in-button:hover { background: #f5f5f5; }
-    .ms-sign-in-button:disabled {
-      cursor: progress;
-      opacity: 0.72;
-    }
-    .ms-sign-in-button:focus-visible {
-      outline: 2px solid #2563eb;
-      outline-offset: 2px;
-    }
-    .ms-logo {
-      width: 1.25rem;
-      height: 1.25rem;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 2px;
-      flex: 0 0 auto;
-    }
-    .ms-logo span:nth-child(1) { background: #f25022; }
-    .ms-logo span:nth-child(2) { background: #7fba00; }
-    .ms-logo span:nth-child(3) { background: #00a4ef; }
-    .ms-logo span:nth-child(4) { background: #ffb900; }
     .telegram-auth-copy { margin: 0 0 1.25rem; color: var(--ink-soft); line-height: 1.5; }
     .telegram-sign-in { width: 100%; min-height: 3.2rem; background: #229ed9; color: #fff; border: 0; border-radius: 6px; font: inherit; font-weight: 700; cursor: pointer; }
     .telegram-sign-in:hover { background: #1688bd; }
     .telegram-sign-in:disabled { cursor: progress; opacity: 0.72; }
+    .telegram-code-step { display: grid; gap: 0.45rem; }
+    .telegram-code-step[hidden] { display: none; }
+    .telegram-change-account { min-height: 3rem; background: #fff; color: var(--ink); border: 1px solid var(--border); }
+    .telegram-setup { margin: 0; color: var(--ink-soft); font-size: 0.88rem; line-height: 1.45; }
+    .telegram-setup a { color: #147fb1; font-weight: 700; }
 
     /* ── Time wheel picker ───────────────────────────────── */
     .time-wheel-picker {
@@ -818,8 +785,23 @@
   <div id="auth-overlay" class="auth-overlay" hidden>
     <div class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title">
       <h2 id="auth-title">Sign in</h2>
-      <p class="telegram-auth-copy">Use your Telegram account to access the bots and managed groups assigned to you.</p>
-      <button type="button" id="telegram-sign-in" class="telegram-sign-in">Continue with Telegram</button>
+      <p class="telegram-auth-copy">Enter your approved Telegram ID or handle. A six-digit code will be sent to your Telegram phone app.</p>
+      <form id="telegram-otp-form">
+        <label for="telegram-identifier">Telegram ID or handle
+          <input id="telegram-identifier" name="identifier" autocomplete="username" placeholder="@username or numeric ID" required />
+        </label>
+        <div id="telegram-code-step" class="telegram-code-step" hidden>
+          <label for="telegram-code">Six-digit code
+            <input id="telegram-code" class="otp-code-input" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" />
+          </label>
+        </div>
+        <div class="otp-auth-actions">
+          <button type="submit" id="telegram-send-code" class="telegram-sign-in">Send code</button>
+          <button type="button" id="telegram-verify-code" class="telegram-sign-in" hidden>Verify code</button>
+          <button type="button" id="telegram-change-account" class="telegram-change-account" hidden>Change account</button>
+        </div>
+        <p id="telegram-setup" class="telegram-setup" hidden>No code? <a id="telegram-bot-link" target="_blank" rel="noopener">Open the bot and press Start</a>, then request a new code.</p>
+      </form>
       <p id="auth-error" class="auth-error" aria-live="polite"></p>
     </div>
   </div>

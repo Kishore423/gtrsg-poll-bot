@@ -4,7 +4,6 @@ let currentUser = null;
 const statusEl = document.getElementById('status');
 const authOverlay = document.getElementById('auth-overlay');
 const usersBody = document.getElementById('users-body');
-const requestsBody = document.getElementById('requests-body');
 const addUserForm = document.getElementById('add-user-form');
 
 function setStatus(message, kind = '') {
@@ -102,52 +101,6 @@ async function loadUsers() {
   });
 }
 
-async function loadAccessRequests() {
-  const response = await fetch('/api/admin/access-requests');
-  const requests = await response.json().catch(() => []);
-  if (!response.ok) {
-    setStatus(requests.error || 'Unable to load access requests', 'error');
-    return;
-  }
-  requestsBody.innerHTML = requests.length ? requests.map((request) => `
-    <tr data-request="${escapeHtml(request.telegram_user_id)}">
-      <td>${telegramLabel(request)}<br><span class="muted">ID ${escapeHtml(request.telegram_user_id)}</span></td>
-      <td><select data-request-role><option value="user">User</option><option value="admin">Admin</option></select></td>
-      <td><input data-request-token autocomplete="off" placeholder="Required for users" /></td>
-      <td><span class="row-actions">
-        <button type="button" class="primary" data-approve-request>Approve</button>
-        <button type="button" class="danger-link" data-reject-request>Reject</button>
-      </span></td>
-    </tr>`).join('') : '<tr><td colspan="4" class="muted">No pending requests.</td></tr>';
-
-  requestsBody.querySelectorAll('[data-approve-request]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      const row = button.closest('[data-request]');
-      const response = await fetch(`/api/admin/access-requests/${row.dataset.request}/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          role: row.querySelector('[data-request-role]').value,
-          bot_token: row.querySelector('[data-request-token]').value,
-        }),
-      });
-      const result = await response.json().catch(() => ({}));
-      setStatus(response.ok ? 'Telegram user approved.' : `Error: ${result.error}`, response.ok ? 'success' : 'error');
-      if (response.ok) await Promise.all([loadAccessRequests(), loadUsers()]);
-    });
-  });
-
-  requestsBody.querySelectorAll('[data-reject-request]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      const row = button.closest('[data-request]');
-      const response = await fetch(`/api/admin/access-requests/${row.dataset.request}/reject`, { method: 'POST' });
-      const result = await response.json().catch(() => ({}));
-      setStatus(response.ok ? 'Access request rejected.' : `Error: ${result.error}`, response.ok ? 'success' : 'error');
-      if (response.ok) await loadAccessRequests();
-    });
-  });
-}
-
 addUserForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const body = Object.fromEntries(new FormData(addUserForm).entries());
@@ -176,7 +129,7 @@ async function loadAdminAfterAuth() {
     return;
   }
   authOverlay.hidden = true;
-  await Promise.all([loadAccessRequests(), loadUsers()]);
+  await loadUsers();
 }
 
 async function bootstrap() {
@@ -189,7 +142,7 @@ async function bootstrap() {
   if (!config.required) {
     currentUser = { role: 'admin' };
     authOverlay.hidden = true;
-    await Promise.all([loadAccessRequests(), loadUsers()]);
+    await loadUsers();
     return;
   }
   await loadAdminAfterAuth();
