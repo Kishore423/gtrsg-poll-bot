@@ -29,7 +29,6 @@ const groupActionClose = document.getElementById('group-action-close');
 const managedScheduleSection = document.getElementById('managed-schedule-section');
 const skipDaysSection = document.getElementById('skip-days-section');
 const advancePollSection = document.getElementById('advance-poll-section');
-const batchGroupSelect = document.getElementById('unified-group-select');
 const batchReleaseDateInput = document.getElementById('batch-release-date');
 const batchSummary = document.getElementById('batch-summary');
 const batchList = document.getElementById('batch-list');
@@ -71,11 +70,10 @@ function hideManagedWorkflowSections() {
 
 function setSelectedManagedGroup(telegramGroupId) {
   selectedManagedGroupId = telegramGroupId || '';
-  document.querySelectorAll('.managed-group-select').forEach((select) => {
-    select.value = selectedManagedGroupId;
-  });
-  const hiddenInput = document.getElementById('template-group-hidden');
-  if (hiddenInput) hiddenInput.value = selectedManagedGroupId;
+  managedScheduleForm.elements.telegram_group_id.value = selectedManagedGroupId;
+  advancePollForm.elements.telegram_group_id.value = selectedManagedGroupId;
+  const weeklyTestGroup = document.getElementById('weekly-send-group');
+  if (weeklyTestGroup) weeklyTestGroup.value = selectedManagedGroupId;
   syncWeeklyTemplateFormFromSavedSchedule(selectedManagedGroupId);
   syncOneOffPollFormFromSavedSchedule(selectedManagedGroupId);
   refreshManagedPreviews();
@@ -111,7 +109,6 @@ function showManagedWorkflow(workflow) {
     section.hidden = false;
     section.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
-  if (workflow === 'test') document.getElementById('weekly-send-test')?.focus();
   closeGroupActionDialog();
 }
 
@@ -834,7 +831,7 @@ function updateOneOffTimingPreview() {
 }
 
 function updateBatchSummary() {
-  const telegramGroupId = batchGroupSelect.value;
+  const telegramGroupId = selectedManagedGroupId;
   const releaseDate = batchReleaseDateInput.value;
   const schedule = scheduleForGroup(telegramGroupId);
   const group = groupById(telegramGroupId);
@@ -876,7 +873,7 @@ function renderBatchRows() {
 }
 
 function generateBatchRows() {
-  const telegramGroupId = batchGroupSelect.value;
+  const telegramGroupId = selectedManagedGroupId;
   const schedule = scheduleForGroup(telegramGroupId);
   const group = groupById(telegramGroupId);
   if (!telegramGroupId || !group || !schedule) { setStatus('Error: Select a group with a saved release template first.', 'error'); return; }
@@ -897,7 +894,7 @@ function generateBatchRows() {
 }
 
 async function scheduleGeneratedBatch() {
-  const telegramGroupId = batchGroupSelect.value;
+  const telegramGroupId = selectedManagedGroupId;
   const schedule = scheduleForGroup(telegramGroupId);
   const rows = generatedBatchRows.filter((row) => row.enabled && !row.disabled);
   if (!rows.length) { setStatus('Error: Select at least one ready event date.', 'error'); return; }
@@ -918,12 +915,6 @@ async function scheduleGeneratedBatch() {
   setStatus('Batch scheduling finished.', 'success');
 }
 
-const unifiedGroupSelect = document.getElementById('unified-group-select');
-if (unifiedGroupSelect) {
-  unifiedGroupSelect.addEventListener('change', async () => {
-    await selectManagedGroup(unifiedGroupSelect.value);
-  });
-}
 groupActionClose?.addEventListener('click', closeGroupActionDialog);
 groupActionDialog?.addEventListener('click', (event) => {
   if (event.target === groupActionDialog) closeGroupActionDialog();
@@ -939,10 +930,6 @@ managedScheduleForm.elements.poll_release_day_of_week.addEventListener('change',
 weeklyShiftEditor.addEventListener('input', updateTemplatePollPreview);
 weeklyShiftEditor.addEventListener('change', updateTemplatePollPreview);
 
-advancePollForm.elements.telegram_group_id.addEventListener('change', () => {
-  const groupId = advancePollForm.elements.telegram_group_id.value;
-  syncOneOffPollFormFromSavedSchedule(groupId);
-});
 advancePollForm.elements.event_date.addEventListener('change', updateOneOffTimingPreview);
 
 advancePollForm.addEventListener('submit', async (event) => {
@@ -1110,18 +1097,6 @@ async function loadManagedGroups() {
       adminManagedUserSummary.textContent = `${managedGroups.length} group${managedGroups.length === 1 ? '' : 's'} detected for ${selectedUser.telegram_display_name || selectedUser.telegram_username}.`;
     }
   }
-  const options = managedGroups.map((group) => {
-    return `<option value="${group.id}">${escapeHtml(managedGroupOptionLabel(group))}</option>`;
-  }).join('');
-  document.querySelectorAll('.managed-group-select').forEach((select) => {
-    const current = select.value;
-    select.innerHTML = options || '<option value="">Add group first</option>';
-    if (current && managedGroups.some((group) => group.id === current)) select.value = current;
-    else if (selectedManagedGroupId && managedGroups.some((group) => group.id === selectedManagedGroupId)) select.value = selectedManagedGroupId;
-    else if (select.options.length > 0) {
-      select.selectedIndex = 0;
-    }
-  });
   if (!managedGroups.some((group) => group.id === selectedManagedGroupId)) {
     selectedManagedGroupId = '';
     hideManagedWorkflowSections();

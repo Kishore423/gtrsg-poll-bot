@@ -79,8 +79,11 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
 - Task 7 dashboard flow: managed groups are auto-detected by webhook updates and
   rendered as clickable rows. Each row still has **Verify bot** and delete
   actions; clicking the row opens a popup with **Weekly default template**,
-  **Skip days**, **Custom poll**, and **Send test poll** actions. The template,
-  skip-days, and one-off poll cards stay hidden until a group workflow is chosen.
+  **Skip days**, and **Custom poll** actions. The template, skip-days, and
+  one-off poll cards stay hidden until a group workflow is chosen. Those workflow
+  cards bind to the clicked group without showing another Telegram-group
+  dropdown. Test-poll actions remain inside the weekly template and one-off poll
+  sections.
   Admins first search the Admin roster by display name; selecting one user scopes
   group rows and managed schedules to that user's single `bot_id`. Verification
   succeeds only after Telegram accepts a test message sent by that bot to the

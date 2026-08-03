@@ -29,7 +29,9 @@
 > Task 7 changed the main dashboard Managed groups section: groups are
 > auto-detected when a user's bot is added to Telegram, the **Verify bot** button
 > remains beside each group, and clicking a group opens a popup for **Weekly
-> default template**, **Skip days**, **Custom poll**, or **Send test poll**.
+> default template**, **Skip days**, or **Custom poll**. Those workflow cards
+> bind to the clicked group without another Telegram-group dropdown. Test-poll
+> actions remain inside the weekly template and one-off poll sections.
 > Admins first search the Admin roster by display name; selecting one user scopes
 > group rows and managed schedules to that user's single `bot_id`. **Verify bot**
 > reports success only after Telegram accepts a test message sent by that bot to
