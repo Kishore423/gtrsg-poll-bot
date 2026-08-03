@@ -123,7 +123,9 @@ Vercel Cron** for hosting/scheduling.
   get a generic response but no OTP/session. A private `/start` to the login bot
   only enrolls that conversation for future delivery, and its webhook ignores
   group/poll activity. `app_users` stores no email; Telegram ID is the
-  authorization key, while handle and display name are metadata.
+  authorization key, while handle and display name are metadata. The shared
+  login UI exposes an editable six-digit field immediately after **Send code**
+  and enables verification when the challenge response arrives.
 - Webhook updates are de-duplicated (`beginWebhookEvent`/`finishWebhookEvent`);
   preserve that. Any configured webhook bot route (`PRIMARY`, `WHCL`, `PSA`)
   auto-captures a managed Telegram group from bot membership updates or received
@@ -202,7 +204,7 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   `REQUIRE_ADMIN_AUTH=true`; management APIs require a valid Telegram session.
 - The poll editor has one form-level **Send immediately** action beside **Review and
   schedule**; it sends every shift row currently in the form.
-- Production deploy `dpl_8w6D9dZ9cvFGpceg1CD7HUdh9rDv` was promoted on
+- Production deploy `dpl_8QFBVTn1qB6FAGGZRwfQ5Af1qLEP` was promoted on
   2026-08-03 and aliased to `https://gtrsg-poll-bot.vercel.app`; it includes
   dedicated @user_login_otp_bot authentication.
 - The managed dashboard includes a Release rules summary, a unified **Group template &

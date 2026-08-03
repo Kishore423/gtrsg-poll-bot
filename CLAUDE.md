@@ -111,7 +111,10 @@ WHCL/PSA bots keep running until `scripts/migrate-to-multi-tenant.js` backfills
   The email column was removed on 2026-07-24; handles and display names are
   refreshable metadata only.
 - `public/telegram-auth.js` is the shared login client for Home, Polls, and Admin.
-  The active UI, API, repository, and `app_users` schema are Telegram-only.
+  The active UI, API, repository, and `app_users` schema are Telegram-only. The
+  six-digit field becomes editable immediately after **Send code** while the
+  server prepares the browser-bound challenge; verification enables when that
+  response arrives.
 - `GET /api/me` returns Telegram identity, role, and `bot_id`. `/api/admin/*`
   remains admin-only and all other management APIs remain tenant-scoped.
 
@@ -340,7 +343,7 @@ live only in Vercel env + the local (gitignored) `.env`.
 - The poll editor has one form-level **Send immediately** action beside **Review and
   schedule**. It sends all shift rows currently in the form; shift rows only have a
   Remove action.
-- Production deploy `dpl_8w6D9dZ9cvFGpceg1CD7HUdh9rDv` was promoted on
+- Production deploy `dpl_8QFBVTn1qB6FAGGZRwfQ5Af1qLEP` was promoted on
   2026-08-03 and aliased to `https://gtrsg-poll-bot.vercel.app`; it includes
   dedicated @user_login_otp_bot authentication.
 - The managed dashboard now includes a Release rules summary, a renamed **Group

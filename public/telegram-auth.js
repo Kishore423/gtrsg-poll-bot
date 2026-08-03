@@ -4,6 +4,7 @@
   const challengeKey = 'gtrsg-telegram-otp';
   let session = JSON.parse(sessionStorage.getItem(sessionKey) || 'null');
   let challenge = JSON.parse(sessionStorage.getItem(challengeKey) || 'null');
+  let requestInFlight = false;
 
   const elements = () => ({
     overlay: document.getElementById('auth-overlay'),
@@ -67,6 +68,25 @@
     window.setTimeout(() => code?.focus(), 0);
   }
 
+  function showPendingCodeStep(identifierValue) {
+    const { identifier, codeStep, code, send, verify, change, setup } = elements();
+    if (identifier) {
+      identifier.value = identifierValue;
+      identifier.disabled = true;
+    }
+    if (codeStep) codeStep.hidden = false;
+    if (code) code.disabled = false;
+    if (send) send.hidden = true;
+    if (verify) {
+      verify.hidden = false;
+      verify.disabled = true;
+      verify.textContent = 'Preparing verification...';
+    }
+    if (change) change.hidden = true;
+    if (setup) setup.hidden = true;
+    window.setTimeout(() => code?.focus(), 0);
+  }
+
   function showLogin(message = '') {
     const { overlay } = elements();
     if (overlay) overlay.hidden = false;
@@ -108,22 +128,27 @@
       identifier?.focus();
       return;
     }
-    if (send) {
-      send.disabled = true;
-      send.textContent = 'Sending code...';
-    }
+    requestInFlight = true;
+    showPendingCodeStep(value);
     setMessage('');
-    const response = await nativeFetch('/api/auth/telegram/otp/request', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier: value }),
-    });
-    const result = await response.json().catch(() => ({}));
+    let response;
+    let result;
+    try {
+      response = await nativeFetch('/api/auth/telegram/otp/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: value }),
+      });
+      result = await response.json().catch(() => ({}));
+    } catch {
+      requestInFlight = false;
+      showIdentifierStep();
+      setMessage('Unable to reach the sign-in service. Please try again.');
+      return;
+    }
+    requestInFlight = false;
     if (!response.ok) {
-      if (send) {
-        send.disabled = false;
-        send.textContent = 'Send code';
-      }
+      showIdentifierStep();
       setMessage(result.error || 'Unable to send a Telegram code.');
       return;
     }
@@ -192,6 +217,7 @@
     const { form, verify, change, code } = elements();
     form?.addEventListener('submit', (event) => {
       event.preventDefault();
+      if (requestInFlight) return;
       if (challenge) verifyOtp();
       else requestOtp();
     });
