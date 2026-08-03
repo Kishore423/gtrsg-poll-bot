@@ -96,15 +96,17 @@ WHCL/PSA bots keep running until `scripts/migrate-to-multi-tenant.js` backfills
 
 **Task 3 (done) — what changed, so nothing gets "fixed" back:**
 - `src/telegramAuth.js` accepts an approved Telegram handle or numeric ID, then
-  sends a six-digit OTP to the immutable `telegram_user_id` through that user's
-  assigned bot. Admins without a bot use the configured `TELEGRAM_AUTH_BOT`.
+  sends a six-digit OTP to the immutable `telegram_user_id` through the dedicated
+  `LOGIN` bot configured by `TELEGRAM_LOGIN_BOT_TOKEN`. Polling-bot assignments
+  are never used for authentication delivery.
 - OTP challenges expire after five minutes, are bound to the requesting browser,
   allow five attempts, are consumed atomically, and produce a 12-hour HMAC-signed
   session. Successful sends have a one-minute cooldown and a five-per-hour cap.
 - Unknown Telegram identities receive the same generic browser response but no
   database challenge, OTP, or session. Admins add approved identities manually.
-- A private `/start` message only opens the bot conversation so it can deliver
-  future OTPs; it does not authenticate the browser.
+- A private `/start` message to the dedicated login bot only opens the
+  conversation so it can deliver future OTPs; it does not authenticate the
+  browser. The `LOGIN` webhook ignores group and poll activity.
 - `app_users.telegram_user_id` is unique and is the authorization join key.
   The email column was removed on 2026-07-24; handles and display names are
   refreshable metadata only.
@@ -150,6 +152,9 @@ The app currently ships BOTH, selected at runtime:
   service bots are live: WHCL = @Flexi_wheelchair_bot (id 8632673727),
   PSA = @Pax_services_bot (id 8764384354). Tokens live only in `.env` /
   Vercel env — never commit them.
+- **Login bot**: `LOGIN` is the dedicated @user_login_otp_bot configured by
+  `TELEGRAM_LOGIN_BOT_TOKEN`. It sends authentication OTPs only and never
+  captures groups or handles poll updates.
 - **Webhook, not polling**: Telegram → `POST /api/telegram/:service`
   (`src/server.js` → `src/processUpdate.js`). Authenticated by the
   `X-Telegram-Bot-Api-Secret-Token` header (`TELEGRAM_WEBHOOK_SECRET`).
@@ -335,9 +340,9 @@ live only in Vercel env + the local (gitignored) `.env`.
 - The poll editor has one form-level **Send immediately** action beside **Review and
   schedule**. It sends all shift rows currently in the form; shift rows only have a
   Remove action.
-- Production deploy `dpl_HuCt1EFJqUqseHNFtPXayzcWm7iX` was promoted on
+- Production deploy `dpl_8w6D9dZ9cvFGpceg1CD7HUdh9rDv` was promoted on
   2026-08-03 and aliased to `https://gtrsg-poll-bot.vercel.app`; it includes
-  Telegram bot OTP login.
+  dedicated @user_login_otp_bot authentication.
 - The managed dashboard now includes a Release rules summary, a renamed **Group
   release template** section with service-specific timing previews, and a **Create
   one-off poll** section with inline timing preview. Default release batches are
@@ -399,10 +404,13 @@ live only in Vercel env + the local (gitignored) `.env`.
   confirmation Sat 12:00, Asia/Singapore. This is historical state and should be
   changed in production data to Wednesday 17:00; the application now derives PSA
   cutoff/confirmation as Friday 08:00/12:00 when creating managed polls.
-- **Telegram auth deployment (2026-07-24):** the identity migration is applied,
-  existing users are mapped by immutable Telegram ID, and Vercel Production has
-  `APP_SESSION_SECRET`, `TELEGRAM_AUTH_BOT=PSA`, and
-  `REQUIRE_ADMIN_AUTH=true`.
+- **Telegram auth configuration:** the identity migration is applied and
+  existing users are mapped by immutable Telegram ID. Vercel Production requires
+  `APP_SESSION_SECRET`, `TELEGRAM_LOGIN_BOT_TOKEN`, and
+  `REQUIRE_ADMIN_AUTH=true`. `scripts/set-webhook.js` always registers the
+  dedicated login bot at `/api/telegram/login`, even when polling bots come from
+  the database. OTP requests also idempotently ensure that webhook from inside
+  the Vercel runtime, so login-bot registration self-heals after deployments.
 
 ## Commands
 

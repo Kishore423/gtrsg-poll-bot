@@ -14,13 +14,18 @@ const SESSION_SECRET = 'test-session-secret-that-is-long-enough';
 
 function fakeTelegram() {
   const messages = [];
+  const webhooks = [];
   return {
     messages,
-    async getMe(service) {
-      return { id: 8764384354, username: service === 'PSA' ? 'Pax_services_bot' : 'User_login_bot' };
+    webhooks,
+    async getMe() {
+      return { id: 8877665544, username: 'Login_bot' };
     },
     async sendMessage(service, chatId, html) {
       messages.push({ service, chatId: String(chatId), html });
+    },
+    async setWebhook(service, url, secret) {
+      webhooks.push({ service, url, secret });
     },
   };
 }
@@ -51,6 +56,8 @@ async function seeded({ nowMs = Date.now() } = {}) {
     db,
     telegram,
     sessionSecret: SESSION_SECRET,
+    loginWebhookUrl: 'https://example.test/api/telegram/login',
+    loginWebhookSecret: 'webhook-secret',
     now: () => clock,
     generateOtp: () => '123456',
   });
@@ -81,9 +88,9 @@ function runMiddleware(middleware, req) {
 test('Telegram OTP authenticates an approved handle through its immutable Telegram ID', async () => {
   const { auth, telegram, botId } = await seeded();
   const started = await auth.requestOtp('@YiDan');
-  assert.equal(started.bot_username, 'User_login_bot');
+  assert.equal(started.bot_username, 'Login_bot');
   assert.equal(telegram.messages.length, 1);
-  assert.equal(telegram.messages[0].service, botId);
+  assert.equal(telegram.messages[0].service, 'LOGIN');
   assert.equal(telegram.messages[0].chatId, '977476515');
   assert.match(telegram.messages[0].html, /123456/);
 
@@ -98,14 +105,26 @@ test('Telegram OTP authenticates an approved handle through its immutable Telegr
 test('numeric Telegram IDs can request OTPs without using mutable handles', async () => {
   const { auth, telegram } = await seeded();
   await auth.requestOtp('2132609363');
-  assert.equal(telegram.messages[0].service, 'PSA');
+  assert.equal(telegram.messages[0].service, 'LOGIN');
   assert.equal(telegram.messages[0].chatId, '2132609363');
+});
+
+test('OTP requests register the dedicated login webhook once per runtime', async () => {
+  const { auth, telegram, advance } = await seeded();
+  await auth.requestOtp('yidan');
+  advance(61_000);
+  await auth.requestOtp('yidan');
+  assert.deepEqual(telegram.webhooks, [{
+    service: 'LOGIN',
+    url: 'https://example.test/api/telegram/login',
+    secret: 'webhook-secret',
+  }]);
 });
 
 test('unknown Telegram identifiers receive a generic challenge but no message or session', async () => {
   const { auth, telegram } = await seeded();
   const started = await auth.requestOtp('@unknown_user');
-  assert.equal(started.bot_username, 'Pax_services_bot');
+  assert.equal(started.bot_username, 'Login_bot');
   assert.equal(telegram.messages.length, 0);
   await assert.rejects(
     () => auth.verifyOtp(started.challenge_id, started.verifier, '123456'),
@@ -167,14 +186,14 @@ test('successfully sent OTPs are limited to five per hour', async () => {
   assert.equal(context.telegram.messages.length, 5);
 });
 
-test('plain private /start enrolls an approved user with the delivery bot', async () => {
-  const { auth, telegram, botId } = await seeded();
+test('plain private /start enrolls an approved user with the dedicated login bot', async () => {
+  const { auth, telegram } = await seeded();
   assert.equal(parsePrivateStart({ message: {
     text: '/start',
     chat: { id: 977476515, type: 'group' },
     from: { id: 977476515 },
   } }), null);
-  const result = await auth.completeFromUpdate(botId, {
+  const result = await auth.completeFromUpdate('LOGIN', {
     message: {
       text: '/start login_setup',
       chat: { id: 977476515, type: 'private' },
@@ -187,7 +206,7 @@ test('plain private /start enrolls an approved user with the delivery bot', asyn
 
 test('plain private /start ignores unknown users and the wrong delivery bot', async () => {
   const { auth, telegram } = await seeded();
-  const unknown = await auth.completeFromUpdate('PSA', {
+  const unknown = await auth.completeFromUpdate('LOGIN', {
     message: {
       text: '/start login_setup',
       chat: { id: 555555555, type: 'private' },

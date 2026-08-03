@@ -341,6 +341,21 @@ test('webhook: primary bot group message captures general managed group', async 
   });
 });
 
+test('webhook: dedicated login bot never captures Telegram groups', async () => {
+  await withServer(async ({ db, baseUrl }) => {
+    const res = await fetch(`${baseUrl}/api/telegram/login`, json('POST', {
+      update_id: 5,
+      message: {
+        message_id: 1,
+        chat: { id: -100890, type: 'supergroup', title: 'Must stay unmanaged' },
+        text: '/start',
+      },
+    }));
+    assert.equal(res.status, 200);
+    assert.deepEqual(await db.listTelegramGroups(), []);
+  });
+});
+
 test('full flow: link group, send poll, vote, results ranked, confirm', async () => {
   await withServer(async ({ db, telegram, baseUrl }) => {
     // 1. Link the WHCL bot's group.

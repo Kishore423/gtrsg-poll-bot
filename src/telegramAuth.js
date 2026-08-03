@@ -89,7 +89,9 @@ function createTelegramAuth({
   db,
   telegram,
   sessionSecret,
-  authBotKey = 'PSA',
+  authBotKey = 'LOGIN',
+  loginWebhookUrl = null,
+  loginWebhookSecret = null,
   now = () => Date.now(),
   otpTtlMs = OTP_TTL_MS,
   otpResendCooldownMs = OTP_RESEND_COOLDOWN_MS,
@@ -103,6 +105,20 @@ function createTelegramAuth({
   if (sessionSecret && Buffer.byteLength(sessionSecret) < 32) {
     throw new Error('APP_SESSION_SECRET must be at least 32 characters');
   }
+  let loginWebhookPromise = null;
+
+  async function ensureLoginWebhook() {
+    if (!loginWebhookUrl || !loginWebhookSecret || !telegram?.setWebhook) return;
+    if (!loginWebhookPromise) {
+      loginWebhookPromise = telegram
+        .setWebhook(authBotKey, loginWebhookUrl, loginWebhookSecret)
+        .catch((error) => {
+          loginWebhookPromise = null;
+          throw error;
+        });
+    }
+    await loginWebhookPromise;
+  }
 
   async function requestOtp(rawIdentifier) {
     if (!sessionSecret || !telegram) throw new Error('Telegram login is not configured');
@@ -111,10 +127,11 @@ function createTelegramAuth({
       throw authError('Enter a valid Telegram ID or handle', 400);
     }
 
+    await ensureLoginWebhook();
     const user = db.getAppUserByTelegramIdentifier
       ? await db.getAppUserByTelegramIdentifier(identifier)
       : await db.getAppUserByTelegramId(identifier);
-    const deliveryBotKey = user?.bot_id || authBotKey;
+    const deliveryBotKey = authBotKey;
     const bot = await telegram.getMe(deliveryBotKey);
     if (!bot?.username) throw new Error('The Telegram login bot needs a username');
 
@@ -215,8 +232,7 @@ function createTelegramAuth({
     if (!start) return null;
     const user = await db.getAppUserByTelegramId(start.telegramUserId);
     if (!user) return null;
-    const deliveryBotKey = user.bot_id || authBotKey;
-    if (String(service).toUpperCase() !== String(deliveryBotKey).toUpperCase()) return null;
+    if (String(service).toUpperCase() !== String(authBotKey).toUpperCase()) return null;
     await telegram.sendMessage(service, start.chatId,
       '<b>Telegram sign-in is ready.</b>\nReturn to the Gops poll website and request a code.');
     return { handled: 'telegram_login_setup' };

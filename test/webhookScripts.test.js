@@ -6,7 +6,8 @@ test('webhook configuration includes every explicitly configured bot', () => {
   assert.deepEqual(getConfiguredBots({
     TELEGRAM_TOKEN_WHCL: 'whcl-token',
     TELEGRAM_TOKEN_PSA: 'psa-token',
-  }), [['WHCL', 'whcl-token'], ['PSA', 'psa-token']]);
+    TELEGRAM_LOGIN_BOT_TOKEN: 'login-token',
+  }), [['WHCL', 'whcl-token'], ['PSA', 'psa-token'], ['LOGIN', 'login-token']]);
 });
 
 test('webhook configuration rejects one token assigned to multiple routes', () => {

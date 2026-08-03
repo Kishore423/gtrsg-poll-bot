@@ -115,13 +115,15 @@ Vercel Cron** for hosting/scheduling.
   (those use the webhook secret / cron bearer instead).
   `/api/auth/telegram/otp/request` accepts an approved handle or numeric ID and
   sends a six-digit code to the immutable `app_users.telegram_user_id` through
-  the user's assigned bot, or `TELEGRAM_AUTH_BOT` for an admin without a bot.
+  the dedicated `LOGIN` bot configured by `TELEGRAM_LOGIN_BOT_TOKEN`. Polling-bot
+  assignments are never used for authentication delivery.
   `/api/auth/telegram/otp/verify` consumes the five-minute browser-bound challenge
   and issues a signed 12-hour session. Codes allow five attempts and successful
   sends have a one-minute cooldown plus a five-per-hour cap. Unknown identities
-  get a generic response but no OTP/session. A private `/start` only enrolls the
-  bot conversation for future delivery. `app_users` stores no email; Telegram ID
-  is the authorization key, while handle and display name are metadata.
+  get a generic response but no OTP/session. A private `/start` to the login bot
+  only enrolls that conversation for future delivery, and its webhook ignores
+  group/poll activity. `app_users` stores no email; Telegram ID is the
+  authorization key, while handle and display name are metadata.
 - Webhook updates are de-duplicated (`beginWebhookEvent`/`finishWebhookEvent`);
   preserve that. Any configured webhook bot route (`PRIMARY`, `WHCL`, `PSA`)
   auto-captures a managed Telegram group from bot membership updates or received
@@ -145,6 +147,7 @@ Vercel Cron** for hosting/scheduling.
   `TELEGRAM_TOKEN_PSA` fall back to PRIMARY.
 - WHCL bot: @Flexi_wheelchair_bot (id 8632673727).
 - PSA bot: @Pax_services_bot (id 8764384354).
+- Login bot: @user_login_otp_bot (`LOGIN`; authentication only).
 
 ## Deployment (Vercel + Supabase)
 
@@ -157,8 +160,8 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   configured bot and rejects duplicate token values so one bot cannot get multiple
   webhook URLs. `TELEGRAM_BOT_USERNAME` is unused in code (omit).
 - Prod-required env (app.js throws): `APP_SESSION_SECRET` (32+ characters),
-  `TELEGRAM_WEBHOOK_SECRET`, `CRON_SECRET`, `DATABASE_URL`, `BOT_TOKEN_ENC_KEY`.
-  `TELEGRAM_AUTH_BOT` selects the shared login route and defaults to `PSA`.
+  `TELEGRAM_WEBHOOK_SECRET`, `CRON_SECRET`, `DATABASE_URL`, `BOT_TOKEN_ENC_KEY`,
+  and `TELEGRAM_LOGIN_BOT_TOKEN`.
 - **DATABASE_URL = Supabase SESSION pooler (5432).** `postgres.js` uses prepared
   statements (no `prepare:false`); do NOT switch to the transaction pooler (6543)
   without adding `prepare:false`.
@@ -199,9 +202,9 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   `REQUIRE_ADMIN_AUTH=true`; management APIs require a valid Telegram session.
 - The poll editor has one form-level **Send immediately** action beside **Review and
   schedule**; it sends every shift row currently in the form.
-- Production deploy `dpl_HuCt1EFJqUqseHNFtPXayzcWm7iX` was promoted on
+- Production deploy `dpl_8w6D9dZ9cvFGpceg1CD7HUdh9rDv` was promoted on
   2026-08-03 and aliased to `https://gtrsg-poll-bot.vercel.app`; it includes
-  Telegram bot OTP login.
+  dedicated @user_login_otp_bot authentication.
 - The managed dashboard includes a Release rules summary, a unified **Group template &
   automatic releases** section (template settings and template test polls), and a
   **Create one-off poll** section with inline timing preview and integrated test button.
@@ -288,10 +291,13 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   generation skips active existing polls by default.
 - **Footgun**: don't run `npm run dev-telegram` after webhooks are live — it deletes
   the production webhooks (long-polls). Re-run `set-webhook` to restore.
-- **Telegram auth deployment (2026-07-24):** the identity migration is applied,
-  existing users are mapped by immutable Telegram ID, and Vercel Production has
-  `APP_SESSION_SECRET`, `TELEGRAM_AUTH_BOT=PSA`, and
-  `REQUIRE_ADMIN_AUTH=true`.
+- **Telegram auth configuration:** the identity migration is applied and
+  existing users are mapped by immutable Telegram ID. Vercel Production requires
+  `APP_SESSION_SECRET`, `TELEGRAM_LOGIN_BOT_TOKEN`, and
+  `REQUIRE_ADMIN_AUTH=true`. `scripts/set-webhook.js` always registers the
+  dedicated login bot at `/api/telegram/login`, even when polling bots come from
+  the database. OTP requests also idempotently ensure that webhook from inside
+  the Vercel runtime, so login-bot registration self-heals after deployments.
 
 ## Commands
 

@@ -19,7 +19,7 @@ const { runScheduledPolls, runScheduledConfirmations, runScheduledClosures } = r
 const { scopeGroups, assertGroupAccess, filterRowsByUserBot } = require('./tenancy');
 const { encryptToken, generateWebhookSecret } = require('./crypto');
 
-const SERVICES = ['PRIMARY', 'WHCL', 'PSA'];
+const SERVICES = ['PRIMARY', 'WHCL', 'PSA', 'LOGIN'];
 const ROUTED_SERVICES = ['WHCL', 'PSA'];
 
 function isValidTime(value) {
@@ -788,7 +788,9 @@ function createServer(db, telegram, options = {}) {
     const loginResult = options.completeTelegramLogin
       ? await options.completeTelegramLogin(service, req.body)
       : null;
-    const result = loginResult || await processTelegramUpdate(db, service, req.body, { botRef });
+    const result = loginResult || (service === 'LOGIN'
+      ? { handled: 'ignored_login_bot_update' }
+      : await processTelegramUpdate(db, service, req.body, { botRef }));
     if (result.summary) console.log(result.summary);
     // Always 200 so Telegram doesn't retry.
     res.status(200).json({ ok: true });
