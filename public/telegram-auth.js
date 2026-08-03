@@ -25,6 +25,12 @@
     uploadPhoto: document.getElementById('nav-upload-photo'),
     signOut: document.getElementById('nav-sign-out'),
     accountStatus: document.getElementById('nav-account-status'),
+    avatar: document.getElementById('nav-user-avatar'),
+    profileViewer: document.getElementById('profile-viewer'),
+    profileViewerImage: document.getElementById('profile-viewer-image'),
+    closeProfileViewer: document.getElementById('close-profile-viewer'),
+    deleteProfilePhoto: document.getElementById('delete-profile-photo'),
+    profileViewerStatus: document.getElementById('profile-viewer-status'),
   });
 
   function setMessage(message = '', kind = '') {
@@ -132,6 +138,7 @@
           : '';
       }
       avatar.classList?.toggle('has-photo', Boolean(renderedUser.profile_photo_data));
+      avatar.title = renderedUser.profile_photo_data ? 'View profile picture' : '';
     }
     container.hidden = false;
   }
@@ -147,6 +154,68 @@
     const { navUser, accountMenu } = elements();
     if (accountMenu) accountMenu.hidden = true;
     navUser?.setAttribute('aria-expanded', 'false');
+  }
+
+  function createProfileViewer() {
+    if (document.getElementById('profile-viewer')) return;
+    const viewer = document.createElement('div');
+    viewer.id = 'profile-viewer';
+    viewer.className = 'profile-viewer';
+    viewer.hidden = true;
+    viewer.setAttribute('role', 'dialog');
+    viewer.setAttribute('aria-modal', 'true');
+    viewer.setAttribute('aria-label', 'Profile picture');
+    viewer.innerHTML = `
+      <div class="profile-viewer-panel">
+        <button id="close-profile-viewer" class="profile-viewer-close" type="button" aria-label="Close profile picture">X</button>
+        <img id="profile-viewer-image" class="profile-viewer-image" alt="Your profile picture" />
+        <button id="delete-profile-photo" class="delete-profile-photo" type="button">Delete profile picture</button>
+        <p id="profile-viewer-status" class="profile-viewer-status" aria-live="polite"></p>
+      </div>`;
+    document.body.appendChild(viewer);
+  }
+
+  function closeProfileViewer() {
+    const { profileViewer, profileViewerImage } = elements();
+    if (profileViewer) profileViewer.hidden = true;
+    if (profileViewerImage) profileViewerImage.removeAttribute('src');
+  }
+
+  function openProfileViewer(event) {
+    if (!renderedUser?.profile_photo_data) return false;
+    event?.stopPropagation();
+    closeAccountMenu();
+    const { profileViewer, profileViewerImage, closeProfileViewer: closeButton, profileViewerStatus } = elements();
+    if (!profileViewer || !profileViewerImage) return false;
+    profileViewerImage.src = renderedUser.profile_photo_data;
+    if (profileViewerStatus) profileViewerStatus.textContent = '';
+    profileViewer.hidden = false;
+    closeButton?.focus();
+    return true;
+  }
+
+  async function deleteProfilePhoto() {
+    const { deleteProfilePhoto: button, profileViewerStatus } = elements();
+    if (button) button.disabled = true;
+    if (profileViewerStatus) {
+      profileViewerStatus.textContent = 'Deleting profile picture...';
+      profileViewerStatus.className = 'profile-viewer-status';
+    }
+    try {
+      const response = await window.fetch('/api/me/profile-photo', { method: 'DELETE' });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Unable to delete profile picture.');
+      renderUser({ profile_photo_data: null });
+      closeProfileViewer();
+      setAccountStatus('Profile picture deleted.', 'success');
+    } catch (error) {
+      if (profileViewerStatus) {
+        profileViewerStatus.textContent = error.message;
+        profileViewerStatus.className = 'profile-viewer-status error';
+      }
+    } finally {
+      if (button) button.disabled = false;
+    }
   }
 
   function toggleAccountMenu() {
@@ -328,9 +397,11 @@
   }
 
   function init() {
+    createProfileViewer();
     const {
       form, verify, change, code, navUser, accountMenu,
-      profilePhotoInput, uploadPhoto, signOut,
+      profilePhotoInput, uploadPhoto, signOut, avatar, profileViewer,
+      closeProfileViewer: closeViewer, deleteProfilePhoto: deletePhoto,
     } = elements();
     form?.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -343,7 +414,10 @@
     code?.addEventListener('input', () => {
       code.value = code.value.replace(/\D/g, '').slice(0, 6);
     });
-    navUser?.addEventListener('click', toggleAccountMenu);
+    navUser?.addEventListener('click', (event) => {
+      if (event.target === avatar && openProfileViewer(event)) return;
+      toggleAccountMenu();
+    });
     uploadPhoto?.addEventListener('click', () => profilePhotoInput?.click());
     profilePhotoInput?.addEventListener('change', uploadProfilePhoto);
     signOut?.addEventListener('click', () => {
@@ -351,11 +425,19 @@
       clearChallenge();
       window.location.reload();
     });
+    closeViewer?.addEventListener('click', closeProfileViewer);
+    deletePhoto?.addEventListener('click', deleteProfilePhoto);
+    profileViewer?.addEventListener('click', (event) => {
+      if (event.target === profileViewer) closeProfileViewer();
+    });
     document.addEventListener('click', (event) => {
       if (!accountMenu?.hidden && !event.target.closest('.nav-account')) closeAccountMenu();
     });
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') closeAccountMenu();
+      if (event.key === 'Escape') {
+        closeAccountMenu();
+        closeProfileViewer();
+      }
     });
     if (challenge) {
       showCodeStep(challenge);

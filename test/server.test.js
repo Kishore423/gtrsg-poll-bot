@@ -218,6 +218,14 @@ test('a signed-in user can upload only a bounded profile picture to their own ac
     assert.equal((await uploaded.json()).profile_photo_data, profilePhotoData);
     assert.equal((await db.getAppUserByTelegramId('1001')).profile_photo_data, profilePhotoData);
 
+    const deleted = await fetch(`${baseUrl}/api/me/profile-photo`, {
+      method: 'DELETE',
+      headers,
+    });
+    assert.equal(deleted.status, 200);
+    assert.deepEqual(await deleted.json(), { deleted: true });
+    assert.equal((await db.getAppUserByTelegramId('1001')).profile_photo_data, null);
+
     const invalid = await fetch(`${baseUrl}/api/me/profile-photo`, json('PATCH', {
       profile_photo_data: 'data:text/html;base64,PGgxPk5vPC9oMT4=',
     }, headers));

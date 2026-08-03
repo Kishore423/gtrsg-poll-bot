@@ -107,6 +107,14 @@
     .nav-account-status { margin: 0.3rem 0.7rem 0.45rem; font-size: 0.76rem; line-height: 1.35; color: var(--ink-soft); }
     .nav-account-status.success { color: var(--green-dark); }
     .nav-account-status.error { color: var(--red); }
+    .profile-viewer { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; padding: 1.5rem; background: rgba(0,0,0,0.76); }
+    .profile-viewer-panel { position: relative; display: grid; justify-items: center; gap: 1rem; width: min(92vw, 34rem); }
+    .profile-viewer-image { display: block; max-width: 100%; max-height: 70vh; border-radius: 8px; object-fit: contain; box-shadow: 0 20px 60px rgba(0,0,0,0.35); }
+    .profile-viewer-close { position: absolute; top: 0.6rem; right: 0.6rem; width: 2.4rem; height: 2.4rem; border: 0; border-radius: 50%; background: rgba(0,0,0,0.72); color: #fff; font: inherit; font-size: 1rem; font-weight: 700; cursor: pointer; }
+    .delete-profile-photo { border: 1px solid rgba(255,255,255,0.7); border-radius: 8px; padding: 0.65rem 0.9rem; background: rgba(0,0,0,0.45); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+    .delete-profile-photo:hover { background: var(--red); border-color: var(--red); }
+    .profile-viewer-status { min-height: 1.2rem; margin: 0; color: #fff; font-size: 0.85rem; text-align: center; }
+    .profile-viewer-status.error { color: #ffd4cf; }
 
     #nav-status {
       font-size: 0.82rem;
@@ -449,7 +457,7 @@
       #nav-status { display: none; }
       .nav-account { margin-left: 0; }
       .nav-user { gap: 0.3rem; font-size: 0.8rem; }
-      .nav-user-avatar { display: none; }
+      .nav-user-avatar { display: grid; }
       .nav-user-name { max-width: 6.5rem; }
       .details-list li { grid-template-columns: 1fr; }
     }

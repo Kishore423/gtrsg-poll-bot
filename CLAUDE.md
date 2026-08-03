@@ -409,7 +409,9 @@ live only in Vercel env + the local (gitignored) `.env`.
   API, and stored in `app_users.profile_photo_data`; users can update only their
   own picture. Admin user rows expose an Edit dialog for Telegram ID, handle,
   display name, role, enabled status, and the assigned bot's Telegram display
-  name. Bot tokens and immutable bot handles are intentionally never displayed.
+  name. Clicking an existing avatar opens a full-screen profile viewer with a
+  translucent black backdrop, an X close control, and a self-only delete action.
+  Bot tokens and immutable bot handles are intentionally never displayed.
 - `webhook_events` had traffic (20 rows) → both bots' production webhooks are
   registered and delivering.
 - PSA group's observed weekly schedule at the time: release Fri 17:00,

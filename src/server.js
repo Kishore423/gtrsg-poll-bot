@@ -155,6 +155,15 @@ function createServer(db, telegram, options = {}) {
     res.json({ profile_photo_data: user.profile_photo_data });
   }));
 
+  app.delete('/api/me/profile-photo', wrap(async (req, res) => {
+    if (!db.setAppUserProfilePhoto) {
+      return res.status(501).json({ error: 'Supabase production database is required' });
+    }
+    const user = await db.setAppUserProfilePhoto(req.appUser.id, null);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ deleted: true });
+  }));
+
   function publicBot(bot) {
     if (!bot) return null;
     return {

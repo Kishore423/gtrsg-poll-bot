@@ -62,3 +62,10 @@ test('every signed-in page includes the shared account actions', () => {
     assert.match(html, /id="nav-sign-out"/);
   }
 });
+
+test('profile viewer controls are created by the shared auth client', () => {
+  const source = readFileSync(join(__dirname, '..', 'public', 'telegram-auth.js'), 'utf8');
+  assert.match(source, /id="close-profile-viewer"/);
+  assert.match(source, /id="delete-profile-photo"/);
+  assert.match(source, /method: 'DELETE'/);
+});
