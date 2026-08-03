@@ -258,6 +258,13 @@ test('tenant scoping limits managed groups to the caller bot', async () => {
     assert.equal(listed.status, 200);
     assert.deepEqual((await listed.json()).map((group) => group.id), [groupA]);
 
+    const attemptedOverride = await fetch(
+      `${baseUrl}/api/telegram-groups?bot_id=bot-b&refresh=1`,
+      { headers: asUser },
+    );
+    assert.equal(attemptedOverride.status, 200);
+    assert.deepEqual((await attemptedOverride.json()).map((group) => group.id), [groupA]);
+
     const hiddenVerify = await fetch(`${baseUrl}/api/telegram-groups/${groupB}/verify`, {
       method: 'POST',
       headers: asUser,
