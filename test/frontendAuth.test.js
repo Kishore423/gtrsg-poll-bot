@@ -118,3 +118,13 @@ test('weekly and one-off forms expose editable confirmation timing', () => {
   assert.doesNotMatch(source, /body\.confirmation_time = '12:00'/);
   assert.match(source, /Confirmation date and time must be after release date and time/);
 });
+
+test('weekly default and one-off scheduling show group-specific success popups', () => {
+  const html = readFileSync(join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = readFileSync(join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(html, /id="action-feedback-dialog"/);
+  assert.match(html, /id="action-feedback-message"/);
+  assert.match(source, /Default template saved for \$\{group\?\.group_name/);
+  assert.match(source, /One-off poll scheduled for \$\{group\.group_name\}/);
+  assert.match(source, /actionFeedbackMessage\.textContent = message/);
+});

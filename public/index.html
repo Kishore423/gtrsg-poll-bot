@@ -221,6 +221,15 @@
       justify-self: center;
     }
 
+    .feedback-dialog {
+      width: min(92vw, 400px);
+      text-align: center;
+      padding: 1.5rem;
+    }
+
+    .feedback-dialog h2 { margin-bottom: 0.5rem; }
+    .feedback-dialog p { margin: 0 0 1.25rem; color: var(--ink-soft); line-height: 1.5; }
+
     .managed-group-row {
       cursor: pointer;
     }
@@ -973,6 +982,14 @@
         <button type="button" class="secondary" data-group-workflow="skip">Skip days</button>
         <button type="button" class="secondary" data-group-workflow="custom">Custom poll</button>
       </div>
+    </div>
+  </div>
+
+  <div id="action-feedback-dialog" class="group-dialog-backdrop" hidden>
+    <div class="group-dialog feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="action-feedback-title" aria-describedby="action-feedback-message">
+      <h2 id="action-feedback-title">Completed</h2>
+      <p id="action-feedback-message" aria-live="polite"></p>
+      <button type="button" class="primary" id="action-feedback-close">OK</button>
     </div>
   </div>
 

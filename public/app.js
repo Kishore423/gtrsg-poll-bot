@@ -26,6 +26,9 @@ const groupActionDialog = document.getElementById('group-action-dialog');
 const groupActionTitle = document.getElementById('group-action-title');
 const groupActionSubtitle = document.getElementById('group-action-subtitle');
 const groupActionClose = document.getElementById('group-action-close');
+const actionFeedbackDialog = document.getElementById('action-feedback-dialog');
+const actionFeedbackMessage = document.getElementById('action-feedback-message');
+const actionFeedbackClose = document.getElementById('action-feedback-close');
 const managedScheduleSection = document.getElementById('managed-schedule-section');
 const skipDaysSection = document.getElementById('skip-days-section');
 const advancePollSection = document.getElementById('advance-poll-section');
@@ -95,6 +98,17 @@ async function openGroupActionDialog(telegramGroupId) {
 
 function closeGroupActionDialog() {
   if (groupActionDialog) groupActionDialog.hidden = true;
+}
+
+function showActionFeedback(message) {
+  if (!actionFeedbackDialog || !actionFeedbackMessage) return;
+  actionFeedbackMessage.textContent = message;
+  actionFeedbackDialog.hidden = false;
+  actionFeedbackClose?.focus();
+}
+
+function closeActionFeedback() {
+  if (actionFeedbackDialog) actionFeedbackDialog.hidden = true;
 }
 
 function showManagedWorkflow(workflow) {
@@ -984,6 +998,15 @@ groupActionClose?.addEventListener('click', closeGroupActionDialog);
 groupActionDialog?.addEventListener('click', (event) => {
   if (event.target === groupActionDialog) closeGroupActionDialog();
 });
+actionFeedbackClose?.addEventListener('click', closeActionFeedback);
+actionFeedbackDialog?.addEventListener('click', (event) => {
+  if (event.target === actionFeedbackDialog) closeActionFeedback();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && actionFeedbackDialog && !actionFeedbackDialog.hidden) {
+    closeActionFeedback();
+  }
+});
 groupActionDialog?.querySelectorAll('[data-group-workflow]').forEach((button) => {
   button.addEventListener('click', () => showManagedWorkflow(button.dataset.groupWorkflow));
 });
@@ -1062,6 +1085,7 @@ async function submitOneOffPoll(isTest = false) {
     if (triggerRes.ok) window.alert('poll sent, please check telegram');
   } else {
     setStatus(`Scheduled for ${formatLocalDateTime(result.resolved_release_at)}.`, 'success');
+    showActionFeedback(`One-off poll scheduled for ${group.group_name}.`);
   }
   const selectedGroupId = telegramGroupId;
   advancePollForm.reset();
@@ -1311,6 +1335,7 @@ managedScheduleForm.addEventListener('submit', async (event) => {
   body.poll_release_day_of_week = Number(body.poll_release_day_of_week);
   body.confirmation_day_of_week = Number(body.confirmation_day_of_week);
 
+  setStatus('Saving weekly default...', 'pending');
   const response = await fetch('/api/weekly-schedules', { method: 'PUT',
     headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const result = await response.json();
@@ -1329,6 +1354,8 @@ managedScheduleForm.addEventListener('submit', async (event) => {
   }
   updateTemplatePollPreview();
   setStatus('Weekly default saved.', 'success');
+  const group = groupById(body.telegram_group_id);
+  showActionFeedback(`Default template saved for ${group?.group_name || 'the selected Telegram group'}.`);
 });
 
 // renderScheduledPolls and loadScheduledPolls moved to polls.js
