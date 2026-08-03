@@ -78,3 +78,9 @@ test('admin Home scopes managed groups through a display-name user search', () =
   assert.match(source, /telegram_display_name/);
   assert.match(source, /String\(group\.bot_id\) === String\(selectedUser\.bot_id\)/);
 });
+
+test('managed group labels use only the stored Telegram group name', () => {
+  const source = readFileSync(join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(source, /function managedGroupOptionLabel\(group\) \{\s*return group\.group_name \|\| '';\s*\}/);
+  assert.doesNotMatch(source, /return `\$\{name\} \(\$\{label\}\)`/);
+});

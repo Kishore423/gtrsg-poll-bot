@@ -126,25 +126,8 @@ function servicePill(service) {
     : '<span class="pill pill-whcl">Wheelchair</span>';
 }
 
-function serviceLabel(service) {
-  if (service === 'PSA') return 'PSA bot';
-  if (service === 'WHCL') return 'Wheelchair bot';
-  return 'General bot';
-}
-
 function managedGroupOptionLabel(group) {
-  const service = group.service || group.bot_id;
-  const label = serviceLabel(service);
-  const name = group.group_name || '';
-  const lowerName = name.toLowerCase();
-  if (service === 'PSA' && lowerName.includes('(psa)')) {
-    return name.replace(/\(psa\)/ig, '(PSA bot)');
-  }
-  if (service === 'WHCL' && lowerName.includes('(wheelchair)')) {
-    return name.replace(/\(wheelchair\)/ig, '(Wheelchair bot)');
-  }
-  if (lowerName.includes(label.toLowerCase())) return name;
-  return `${name} (${label})`;
+  return group.group_name || '';
 }
 
 function setStatus(message, kind) {

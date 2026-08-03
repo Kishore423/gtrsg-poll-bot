@@ -152,10 +152,8 @@ Vercel Cron** for hosting/scheduling.
   managed group (`service=null`, `bot_id='PRIMARY'`). One bot can be mapped to
   multiple managed groups because each distinct `(telegram_chat_id, bot_id)` gets
   its own row and templates/polls are scoped by `telegram_group_id`.
-  Dashboard group labels show service routes as `PSA bot`, `Wheelchair bot`, or
-  `General bot`; if the Telegram group title already contains `(PSA)` or
-  `(wheelchair)`, the UI rewrites that suffix to include `bot` instead of
-  appending a duplicate service label.
+  Managed-group names are displayed exactly as stored by Telegram; the UI does
+  not append bot/service text such as `(PSA bot)` to the group name.
 - Use CommonJS + the Node built-in test runner. Run `npm test` and
   `npm run check` after behavior changes.
 - After every code change, review both `CLAUDE.md` and `AGENTS.md` and keep them

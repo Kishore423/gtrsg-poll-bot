@@ -179,10 +179,8 @@ The app currently ships BOTH, selected at runtime:
   row and templates/polls are scoped by `telegram_group_id`. `src/telegramUpdates.js`
   parses updates; `src/telegram.js` is the Bot API client (sendPoll,
   sendMessage, editMessage, stopPoll, setWebhook).
-  Dashboard group labels show service routes as `PSA bot`, `Wheelchair bot`, or
-  `General bot`; if the Telegram group title already contains `(PSA)` or
-  `(wheelchair)`, the UI rewrites that suffix to include `bot` instead of
-  appending a duplicate service label.
+  Managed-group names are displayed exactly as stored by Telegram; the UI does
+  not append bot/service text such as `(PSA bot)` to the group name.
 - **Data layer**: repository with two implementations sharing one async
   interface — `src/db/postgres.js` (Supabase Postgres via the `postgres` lib,
   `DATABASE_URL`) and `src/db/memory.js` (tests + local). `scripts/migrate.js`
