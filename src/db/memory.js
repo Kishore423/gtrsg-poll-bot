@@ -248,12 +248,14 @@ function createMemoryDb() {
       telegram_user_id = null,
       telegram_username = null,
       telegram_display_name = null,
+      profile_photo_data = null,
     }) {
       const user = {
         id: `app-user-${++appUserSeq}`,
         telegram_user_id: telegram_user_id ? String(telegram_user_id) : null,
         telegram_username,
         telegram_display_name,
+        profile_photo_data,
         role,
         bot_id: bot_id ? String(bot_id) : null,
         enabled: true,
@@ -292,6 +294,30 @@ function createMemoryDb() {
       user.telegram_user_id = String(telegram_user_id);
       user.telegram_username = telegram_username;
       user.telegram_display_name = telegram_display_name;
+      return { ...user };
+    },
+
+    async updateAppUser(id, {
+      telegram_user_id,
+      telegram_username,
+      telegram_display_name,
+      role,
+      enabled,
+    }) {
+      const user = appUsers.find((item) => item.id === String(id));
+      if (!user) return null;
+      user.telegram_user_id = String(telegram_user_id);
+      user.telegram_username = telegram_username;
+      user.telegram_display_name = telegram_display_name;
+      user.role = role;
+      user.enabled = Boolean(enabled);
+      return { ...user };
+    },
+
+    async setAppUserProfilePhoto(id, profilePhotoData) {
+      const user = appUsers.find((item) => item.id === String(id));
+      if (!user) return null;
+      user.profile_photo_data = profilePhotoData;
       return { ...user };
     },
 

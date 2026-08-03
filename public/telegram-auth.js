@@ -5,6 +5,7 @@
   let session = JSON.parse(sessionStorage.getItem(sessionKey) || 'null');
   let challenge = JSON.parse(sessionStorage.getItem(challengeKey) || 'null');
   let requestInFlight = false;
+  let renderedUser = null;
 
   const elements = () => ({
     overlay: document.getElementById('auth-overlay'),
@@ -18,6 +19,12 @@
     setup: document.getElementById('telegram-setup'),
     botLink: document.getElementById('telegram-bot-link'),
     message: document.getElementById('auth-error'),
+    navUser: document.getElementById('nav-user'),
+    accountMenu: document.getElementById('nav-account-menu'),
+    profilePhotoInput: document.getElementById('nav-profile-photo-input'),
+    uploadPhoto: document.getElementById('nav-upload-photo'),
+    signOut: document.getElementById('nav-sign-out'),
+    accountStatus: document.getElementById('nav-account-status'),
   });
 
   function setMessage(message = '', kind = '') {
@@ -110,16 +117,106 @@
     const name = document.getElementById('nav-user-name');
     const avatar = document.getElementById('nav-user-avatar');
     if (!container || !name || !user) return;
+    renderedUser = { ...(renderedUser || {}), ...user };
 
-    const displayName = user.telegram_display_name
-      || (user.telegram_username ? `@${user.telegram_username}` : '')
+    const displayName = renderedUser.telegram_display_name
+      || (renderedUser.telegram_username ? `@${renderedUser.telegram_username}` : '')
       || 'Telegram user';
     name.textContent = displayName;
     name.title = displayName;
     if (avatar) {
       avatar.textContent = displayName.replace(/^@/, '').trim().charAt(0).toUpperCase() || 'T';
+      if (avatar.style) {
+        avatar.style.backgroundImage = renderedUser.profile_photo_data
+          ? `url("${renderedUser.profile_photo_data}")`
+          : '';
+      }
+      avatar.classList?.toggle('has-photo', Boolean(renderedUser.profile_photo_data));
     }
     container.hidden = false;
+  }
+
+  function setAccountStatus(message = '', kind = '') {
+    const { accountStatus } = elements();
+    if (!accountStatus) return;
+    accountStatus.textContent = message;
+    accountStatus.className = `nav-account-status ${kind}`.trim();
+  }
+
+  function closeAccountMenu() {
+    const { navUser, accountMenu } = elements();
+    if (accountMenu) accountMenu.hidden = true;
+    navUser?.setAttribute('aria-expanded', 'false');
+  }
+
+  function toggleAccountMenu() {
+    const { navUser, accountMenu } = elements();
+    if (!accountMenu) return;
+    accountMenu.hidden = !accountMenu.hidden;
+    navUser?.setAttribute('aria-expanded', String(!accountMenu.hidden));
+    if (!accountMenu.hidden) setAccountStatus('');
+  }
+
+  function resizeProfilePhoto(file) {
+    return new Promise((resolve, reject) => {
+      if (!file?.type?.startsWith('image/')) {
+        reject(new Error('Choose a JPEG, PNG, or WebP image.'));
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        reject(new Error('Choose an image smaller than 5 MB.'));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Unable to read that image.'));
+      reader.onload = () => {
+        const image = new Image();
+        image.onerror = () => reject(new Error('Unable to open that image.'));
+        image.onload = () => {
+          const size = Math.min(256, image.naturalWidth, image.naturalHeight);
+          const sourceX = Math.max(0, (image.naturalWidth - size) / 2);
+          const sourceY = Math.max(0, (image.naturalHeight - size) / 2);
+          const canvas = document.createElement('canvas');
+          canvas.width = 256;
+          canvas.height = 256;
+          const context = canvas.getContext('2d');
+          context.fillStyle = '#ffffff';
+          context.fillRect(0, 0, 256, 256);
+          context.drawImage(image, sourceX, sourceY, size, size, 0, 0, 256, 256);
+          const dataUrl = canvas.toDataURL('image/webp', 0.84);
+          if (dataUrl.length > 275000) {
+            reject(new Error('The resized image is still too large. Choose a simpler image.'));
+            return;
+          }
+          resolve(dataUrl);
+        };
+        image.src = String(reader.result);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function uploadProfilePhoto(event) {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+    setAccountStatus('Preparing picture...');
+    try {
+      const profilePhotoData = await resizeProfilePhoto(file);
+      const response = await window.fetch('/api/me/profile-photo', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_photo_data: profilePhotoData }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Unable to save profile picture.');
+      renderUser({ profile_photo_data: result.profile_photo_data });
+      setAccountStatus('Profile picture updated.', 'success');
+    } catch (error) {
+      setAccountStatus(error.message, 'error');
+    } finally {
+      input.value = '';
+    }
   }
 
   window.fetch = async (input, init = {}) => {
@@ -231,7 +328,10 @@
   }
 
   function init() {
-    const { form, verify, change, code } = elements();
+    const {
+      form, verify, change, code, navUser, accountMenu,
+      profilePhotoInput, uploadPhoto, signOut,
+    } = elements();
     form?.addEventListener('submit', (event) => {
       event.preventDefault();
       if (requestInFlight) return;
@@ -242,6 +342,20 @@
     change?.addEventListener('click', changeAccount);
     code?.addEventListener('input', () => {
       code.value = code.value.replace(/\D/g, '').slice(0, 6);
+    });
+    navUser?.addEventListener('click', toggleAccountMenu);
+    uploadPhoto?.addEventListener('click', () => profilePhotoInput?.click());
+    profilePhotoInput?.addEventListener('change', uploadProfilePhoto);
+    signOut?.addEventListener('click', () => {
+      clearSession();
+      clearChallenge();
+      window.location.reload();
+    });
+    document.addEventListener('click', (event) => {
+      if (!accountMenu?.hidden && !event.target.closest('.nav-account')) closeAccountMenu();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeAccountMenu();
     });
     if (challenge) {
       showCodeStep(challenge);

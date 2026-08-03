@@ -1,0 +1,2 @@
+-- Applied directly to the linked Supabase project before this migration was
+-- added to source control. Kept as a no-op history placeholder.

@@ -39,12 +39,28 @@ function resolveTelegramGroupService(group, fallback = 'PRIMARY') {
   return group?.bot_id || group?.service || fallback;
 }
 
+function validateProfilePhotoData(value) {
+  const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(String(value || ''));
+  if (!match) {
+    const error = new Error('Profile picture must be a JPEG, PNG, or WebP image');
+    error.statusCode = 400;
+    throw error;
+  }
+  const bytes = Buffer.from(match[2], 'base64');
+  if (!bytes.length || bytes.length > 200 * 1024) {
+    const error = new Error('Profile picture must be 200 KB or smaller');
+    error.statusCode = 400;
+    throw error;
+  }
+  return `data:image/${match[1]};base64,${match[2]}`;
+}
+
 // db: repository (memory or postgres). telegram: Telegram client.
 // options: { labelService, confirmationHour, confirmationTimezoneOffset,
 //            webUsername, webPassword, telegramWebhookSecret, cronSecret }
 function createServer(db, telegram, options = {}) {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: '300kb' }));
   app.use(express.static(path.join(__dirname, '..', 'public')));
 
   // Serve index.html for the root path. express.static handles /index.html and
@@ -103,6 +119,7 @@ function createServer(db, telegram, options = {}) {
       telegram_user_id: req.appUser.telegram_user_id,
       telegram_username: req.appUser.telegram_username,
       telegram_display_name: req.appUser.telegram_display_name,
+      profile_photo_data: req.appUser.profile_photo_data,
       role: req.appUser.role,
       bot_id: req.appUser.bot_id,
     });
@@ -127,6 +144,16 @@ function createServer(db, telegram, options = {}) {
       error: err.statusCode ? err.message : 'Server error. Check logs.',
     });
   });
+
+  app.patch('/api/me/profile-photo', wrap(async (req, res) => {
+    if (!db.setAppUserProfilePhoto) {
+      return res.status(501).json({ error: 'Supabase production database is required' });
+    }
+    const profilePhotoData = validateProfilePhotoData(req.body?.profile_photo_data);
+    const user = await db.setAppUserProfilePhoto(req.appUser.id, profilePhotoData);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ profile_photo_data: user.profile_photo_data });
+  }));
 
   function publicBot(bot) {
     if (!bot) return null;
@@ -190,10 +217,13 @@ function createServer(db, telegram, options = {}) {
     const users = await db.listAppUsers();
     const bots = db.listBots ? await db.listBots() : [];
     const botMap = new Map(bots.map((bot) => [String(bot.id), publicBot(bot)]));
-    res.json(users.map((user) => ({
-      ...user,
-      bot: user.bot_id ? botMap.get(String(user.bot_id)) || null : null,
-    })));
+    res.json(users.map((user) => {
+      const { profile_photo_data: omittedProfilePhoto, ...publicUser } = user;
+      return {
+        ...publicUser,
+        bot: user.bot_id ? botMap.get(String(user.bot_id)) || null : null,
+      };
+    }));
   }));
 
   app.get('/api/admin/bots', wrap(async (req, res) => {
@@ -237,20 +267,63 @@ function createServer(db, telegram, options = {}) {
   }));
 
   app.patch('/api/admin/users/:id', wrap(async (req, res) => {
-    const role = req.body?.role;
-    const enabled = req.body?.enabled;
-    let row = null;
-    if (role !== undefined) {
-      if (!['admin', 'user'].includes(String(role))) return res.status(400).json({ error: 'Role must be admin or user' });
-      if (!db.setAppUserRole) return res.status(501).json({ error: 'Supabase production database is required' });
-      row = await db.setAppUserRole(req.params.id, String(role));
+    if (!db.listAppUsers || !db.updateAppUser) {
+      return res.status(501).json({ error: 'Supabase production database is required' });
     }
-    if (enabled !== undefined) {
-      if (!db.setAppUserEnabled) return res.status(501).json({ error: 'Supabase production database is required' });
-      row = await db.setAppUserEnabled(req.params.id, Boolean(enabled));
+    const users = await db.listAppUsers();
+    const current = users.find((user) => String(user.id) === String(req.params.id));
+    if (!current) return res.status(404).json({ error: 'User not found' });
+    const telegramUserId = String(req.body?.telegram_user_id ?? current.telegram_user_id ?? '').trim();
+    const telegramUsername = String(req.body?.telegram_username ?? current.telegram_username ?? '')
+      .trim().replace(/^@/, '') || null;
+    const telegramDisplayName = String(
+      req.body?.telegram_display_name ?? current.telegram_display_name ?? ''
+    ).trim() || null;
+    const role = String(req.body?.role ?? current.role);
+    const enabled = req.body?.enabled === undefined ? current.enabled !== false : Boolean(req.body.enabled);
+    if (!/^\d+$/.test(telegramUserId)) {
+      return res.status(400).json({ error: 'A numeric Telegram user ID is required' });
     }
+    if (telegramUsername && !/^[A-Za-z0-9_]{5,32}$/.test(telegramUsername)) {
+      return res.status(400).json({ error: 'Telegram handle must be 5-32 letters, numbers, or underscores' });
+    }
+    if (telegramDisplayName && telegramDisplayName.length > 80) {
+      return res.status(400).json({ error: 'Display name must be 80 characters or fewer' });
+    }
+    if (!['admin', 'user'].includes(role)) {
+      return res.status(400).json({ error: 'Role must be admin or user' });
+    }
+    const duplicate = users.find((user) => String(user.id) !== String(current.id) && (
+      String(user.telegram_user_id) === telegramUserId
+      || (telegramUsername && String(user.telegram_username || '').toLowerCase() === telegramUsername.toLowerCase())
+    ));
+    if (duplicate) return res.status(409).json({ error: 'Telegram ID or handle is already assigned' });
+    const row = await db.updateAppUser(req.params.id, {
+      telegram_user_id: telegramUserId,
+      telegram_username: telegramUsername,
+      telegram_display_name: telegramDisplayName,
+      role,
+      enabled,
+    });
     if (!row) return res.status(404).json({ error: 'User not found' });
-    res.json(row);
+    let bot = current.bot_id && db.getBot ? publicBot(await db.getBot(current.bot_id)) : null;
+    if (req.body?.bot_name !== undefined) {
+      const botName = String(req.body.bot_name || '').trim();
+      if (!current.bot_id) return res.status(400).json({ error: 'This user does not have a bot' });
+      if (!botName || botName.length > 64) {
+        return res.status(400).json({ error: 'Bot name must be 1-64 characters' });
+      }
+      const remote = await telegram.getMyName(current.bot_id).catch(() => null);
+      if (remote?.name !== botName) await telegram.setMyName(current.bot_id, botName);
+      const confirmed = await telegram.getMyName(current.bot_id).catch(() => ({ name: botName }));
+      const me = await telegram.getMe(current.bot_id).catch(() => ({}));
+      bot = publicBot(await db.setBotTelegramIdentity(current.bot_id, {
+        bot_name: confirmed?.name || botName,
+        telegram_username: me.username || bot?.telegram_username || null,
+        telegram_bot_id: me.id || bot?.telegram_bot_id || null,
+      }));
+    }
+    res.json({ ...row, bot });
   }));
 
   app.delete('/api/admin/users/:id', wrap(async (req, res) => {

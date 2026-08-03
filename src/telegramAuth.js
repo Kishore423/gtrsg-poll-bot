@@ -249,6 +249,7 @@ function createTelegramAuth({
       telegram_user_id: String(appUser.telegram_user_id),
       telegram_username: appUser.telegram_username || null,
       telegram_display_name: appUser.telegram_display_name || null,
+      profile_photo_data: appUser.profile_photo_data || null,
       role: appUser.role,
       bot_id: appUser.bot_id || null,
     };

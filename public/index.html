@@ -99,9 +99,18 @@
     .nav-links a.active { background: var(--green-light); color: var(--green-dark); font-weight: 600; }
 
     .nav-spacer { flex: 1; }
-    .nav-user { min-width: 0; display: flex; align-items: center; gap: 0.5rem; margin-left: auto; font-size: 0.88rem; font-weight: 600; }
+    .nav-account { position: relative; margin-left: auto; }
+    .nav-user { min-width: 0; display: flex; align-items: center; gap: 0.5rem; border: 0; padding: 0.25rem; background: transparent; color: var(--ink); font: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer; }
     .nav-user-avatar { width: 1.8rem; height: 1.8rem; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto; background: var(--green-light); color: var(--green-dark); font-size: 0.78rem; }
+    .nav-user-avatar.has-photo { color: transparent; background-position: center; background-size: cover; }
     .nav-user-name { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .nav-account-menu { position: absolute; top: calc(100% + 0.65rem); right: 0; width: 14.5rem; padding: 0.45rem; background: #fff; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 30px rgba(16,24,40,0.16); }
+    .nav-account-menu button { width: 100%; border: 0; border-radius: 7px; padding: 0.65rem 0.7rem; text-align: left; background: transparent; color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
+    .nav-account-menu button:hover { background: var(--bg); }
+    .nav-account-menu .sign-out { color: var(--red); }
+    .nav-account-status { margin: 0.3rem 0.7rem 0.45rem; font-size: 0.76rem; line-height: 1.35; color: var(--ink-soft); }
+    .nav-account-status.success { color: var(--green-dark); }
+    .nav-account-status.error { color: var(--red); }
 
     header { margin-bottom: 1.75rem; padding-top: 0.5rem; }
 
@@ -825,9 +834,17 @@
       <li data-admin-only data-admin-nav hidden><a href="/admin">Admin</a></li>
     </ul>
     <div class="nav-spacer"></div>
-    <div id="nav-user" class="nav-user" hidden aria-label="Signed-in user">
-      <span id="nav-user-avatar" class="nav-user-avatar" aria-hidden="true"></span>
-      <span id="nav-user-name" class="nav-user-name"></span>
+    <div class="nav-account">
+      <button id="nav-user" class="nav-user" type="button" hidden aria-label="Account menu" aria-expanded="false">
+        <span id="nav-user-avatar" class="nav-user-avatar" aria-hidden="true"></span>
+        <span id="nav-user-name" class="nav-user-name"></span>
+      </button>
+      <div id="nav-account-menu" class="nav-account-menu" hidden>
+        <button id="nav-upload-photo" type="button">Upload profile picture</button>
+        <input id="nav-profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+        <button id="nav-sign-out" class="sign-out" type="button">Sign out</button>
+        <p id="nav-account-status" class="nav-account-status" aria-live="polite"></p>
+      </div>
     </div>
   </nav>
 

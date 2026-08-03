@@ -167,17 +167,67 @@ test('admin APIs create a user bot mapping, register webhook, and sync bot renam
     const users = await listed.json();
     assert.equal(users[0].bot.telegram_username, 'new_user_bot');
     assert.equal(Object.hasOwn(users[0], 'email'), false);
+    assert.equal(Object.hasOwn(users[0], 'profile_photo_data'), false);
+
+    const editedRes = await fetch(`${baseUrl}/api/admin/users/${body.id}`, json('PATCH', {
+      telegram_user_id: '123456780',
+      telegram_username: 'edited_user',
+      telegram_display_name: 'Edited User',
+      role: 'admin',
+      enabled: false,
+      bot_name: 'Edited User Bot',
+    }, headers));
+    assert.equal(editedRes.status, 200);
+    const edited = await editedRes.json();
+    assert.equal(edited.telegram_user_id, '123456780');
+    assert.equal(edited.telegram_username, 'edited_user');
+    assert.equal(edited.telegram_display_name, 'Edited User');
+    assert.equal(edited.role, 'admin');
+    assert.equal(edited.enabled, false);
+    assert.equal(edited.bot.bot_name, 'Edited User Bot');
 
     const renamedRes = await fetch(`${baseUrl}/api/admin/bots/${body.bot_id}`, json('PATCH', {
       bot_name: 'Renamed Bot',
     }, headers));
     assert.equal(renamedRes.status, 200);
-    assert.deepEqual(renamed, [{ botId: body.bot_id, name: 'Renamed Bot' }]);
+    assert.deepEqual(renamed, [
+      { botId: body.bot_id, name: 'Edited User Bot' },
+      { botId: body.bot_id, name: 'Renamed Bot' },
+    ]);
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
     if (previousKey === undefined) delete process.env.BOT_TOKEN_ENC_KEY;
     else process.env.BOT_TOKEN_ENC_KEY = previousKey;
   }
+});
+
+test('a signed-in user can upload only a bounded profile picture to their own account', async () => {
+  await withServer(async ({ db, baseUrl }) => {
+    const userId = await db.createAppUser({
+      telegram_user_id: '1001',
+      telegram_username: 'profile_user',
+      telegram_display_name: 'Profile User',
+    });
+    assert.equal(userId, 'app-user-1');
+    const headers = { Authorization: 'Bearer user' };
+    const profilePhotoData = `data:image/png;base64,${Buffer.from('small profile image').toString('base64')}`;
+    const uploaded = await fetch(`${baseUrl}/api/me/profile-photo`, json('PATCH', {
+      profile_photo_data: profilePhotoData,
+    }, headers));
+    assert.equal(uploaded.status, 200);
+    assert.equal((await uploaded.json()).profile_photo_data, profilePhotoData);
+    assert.equal((await db.getAppUserByTelegramId('1001')).profile_photo_data, profilePhotoData);
+
+    const invalid = await fetch(`${baseUrl}/api/me/profile-photo`, json('PATCH', {
+      profile_photo_data: 'data:text/html;base64,PGgxPk5vPC9oMT4=',
+    }, headers));
+    assert.equal(invalid.status, 400);
+  }, {
+    requireAdminAuth: true,
+    verifyUser: async (req) => req.headers.authorization === 'Bearer user'
+      ? { id: 'app-user-1', telegram_user_id: '1001', role: 'user', bot_id: null }
+      : null,
+  });
 });
 
 test('tenant scoping limits managed groups to the caller bot', async () => {

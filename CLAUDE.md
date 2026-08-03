@@ -403,7 +403,13 @@ live only in Vercel env + the local (gitignored) `.env`.
   mapped by immutable Telegram ID and the Kishore account has the admin role.
   Home, Polls, and Admin show the user's admin-managed
   `telegram_display_name` in the navbar after authentication, with the Telegram
-  handle as a fallback when no display name is set.
+  handle as a fallback when no display name is set. Clicking that identity opens
+  the shared account menu for profile-picture upload and Sign out. Profile
+  pictures are resized to 256x256 WebP in the browser, capped at 200 KB by the
+  API, and stored in `app_users.profile_photo_data`; users can update only their
+  own picture. Admin user rows expose an Edit dialog for Telegram ID, handle,
+  display name, role, enabled status, and the assigned bot's Telegram display
+  name. Bot tokens and immutable bot handles are intentionally never displayed.
 - `webhook_events` had traffic (20 rows) → both bots' production webhooks are
   registered and delivering.
 - PSA group's observed weekly schedule at the time: release Fri 17:00,

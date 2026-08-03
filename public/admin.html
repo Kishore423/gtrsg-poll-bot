@@ -19,9 +19,18 @@
     .nav-links a { display:block; padding:.4rem .85rem; border-radius:8px; color:var(--ink-soft); text-decoration:none; font-weight:500; font-size:.9rem; }
     .nav-links a.active { background:var(--green-light); color:var(--green-dark); font-weight:600; }
     .nav-spacer { flex:1; }
-    .nav-user { min-width:0; display:flex; align-items:center; gap:.5rem; margin-left:auto; font-size:.88rem; font-weight:600; }
+    .nav-account { position:relative; margin-left:auto; }
+    .nav-user { min-width:0; display:flex; align-items:center; gap:.5rem; border:0; padding:.25rem; background:transparent; color:var(--ink); font-size:.88rem; font-weight:600; cursor:pointer; }
     .nav-user-avatar { width:1.8rem; height:1.8rem; border-radius:50%; display:grid; place-items:center; flex:0 0 auto; background:var(--green-light); color:var(--green-dark); font-size:.78rem; }
+    .nav-user-avatar.has-photo { color:transparent; background-position:center; background-size:cover; }
     .nav-user-name { max-width:14rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .nav-account-menu { position:absolute; top:calc(100% + .65rem); right:0; width:14.5rem; padding:.45rem; background:#fff; border:1px solid var(--border); border-radius:8px; box-shadow:0 12px 30px rgba(16,24,40,.16); }
+    .nav-account-menu button { width:100%; padding:.65rem .7rem; text-align:left; background:transparent; color:var(--ink); font-weight:600; }
+    .nav-account-menu button:hover { background:var(--bg); }
+    .nav-account-menu .sign-out { color:var(--red); }
+    .nav-account-status { margin:.3rem .7rem .45rem; font-size:.76rem; line-height:1.35; color:var(--ink-soft); }
+    .nav-account-status.success { color:var(--green-dark); }
+    .nav-account-status.error { color:var(--red); }
     main { max-width:960px; margin:0 auto; padding:2rem 1.5rem 5rem; }
     header { margin-bottom:1.5rem; }
     h1 { margin:0 0 .35rem; font-size:1.45rem; }
@@ -46,6 +55,17 @@
     tr:last-child td { border-bottom:0; }
     .muted { color:var(--ink-soft); }
     .row-actions { display:flex; gap:.4rem; flex-wrap:wrap; justify-content:flex-end; }
+    dialog { width:min(92vw,34rem); border:1px solid var(--border); border-radius:10px; padding:0; color:var(--ink); box-shadow:0 20px 60px rgba(16,24,40,.22); }
+    dialog::backdrop { background:rgba(28,34,48,.48); }
+    .dialog-body { padding:1.4rem; }
+    .dialog-header { display:flex; align-items:start; justify-content:space-between; gap:1rem; margin-bottom:1rem; }
+    .dialog-header h2 { margin:0; font-size:1.15rem; }
+    .dialog-header p { margin:.3rem 0 0; font-size:.85rem; }
+    .edit-user-form { display:grid; grid-template-columns:1fr 1fr; gap:.9rem; }
+    .edit-user-form .full { grid-column:1 / -1; }
+    .checkbox-field { flex-direction:row; align-items:center; align-self:center; text-transform:none; font-size:.9rem; color:var(--ink); }
+    .checkbox-field input { width:1.05rem; height:1.05rem; }
+    .dialog-actions { grid-column:1 / -1; display:flex; justify-content:flex-end; gap:.65rem; padding-top:.35rem; }
     .auth-overlay { position:fixed; inset:0; display:grid; place-items:center; background:rgba(244,246,248,.92); z-index:1000; }
     .auth-dialog { width:min(92vw,32rem); background:#fff; border:1px solid var(--border); border-radius:10px; padding:1.8rem; box-shadow:0 18px 50px rgba(16,24,40,.18); }
     .auth-dialog h2 { margin:0 0 .35rem; }
@@ -76,6 +96,8 @@
       .nav-user { gap:.3rem; font-size:.8rem; }
       .nav-user-avatar { display:none; }
       .nav-user-name { max-width:6.5rem; }
+      .edit-user-form { grid-template-columns:1fr; }
+      .edit-user-form .full, .dialog-actions { grid-column:1; }
     }
   </style>
 </head>
@@ -112,9 +134,17 @@
       <li><a href="/admin" class="active">Admin</a></li>
     </ul>
     <div class="nav-spacer"></div>
-    <div id="nav-user" class="nav-user" hidden aria-label="Signed-in user">
-      <span id="nav-user-avatar" class="nav-user-avatar" aria-hidden="true"></span>
-      <span id="nav-user-name" class="nav-user-name"></span>
+    <div class="nav-account">
+      <button id="nav-user" class="nav-user" type="button" hidden aria-label="Account menu" aria-expanded="false">
+        <span id="nav-user-avatar" class="nav-user-avatar" aria-hidden="true"></span>
+        <span id="nav-user-name" class="nav-user-name"></span>
+      </button>
+      <div id="nav-account-menu" class="nav-account-menu" hidden>
+        <button id="nav-upload-photo" type="button">Upload profile picture</button>
+        <input id="nav-profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+        <button id="nav-sign-out" class="sign-out" type="button">Sign out</button>
+        <p id="nav-account-status" class="nav-account-status" aria-live="polite"></p>
+      </div>
     </div>
   </nav>
 
@@ -147,6 +177,32 @@
       </div>
     </section>
   </main>
+
+  <dialog id="edit-user-dialog">
+    <div class="dialog-body">
+      <div class="dialog-header">
+        <div>
+          <h2>Edit user</h2>
+          <p>Update the approved Telegram identity and its assigned bot name.</p>
+        </div>
+      </div>
+      <form id="edit-user-form" class="edit-user-form">
+        <input name="id" type="hidden" />
+        <label>Telegram user ID<input name="telegram_user_id" inputmode="numeric" required /></label>
+        <label>Telegram handle<input name="telegram_username" placeholder="@username" /></label>
+        <label class="full">Display name<input name="telegram_display_name" maxlength="80" /></label>
+        <label>Role<select name="role"><option value="user">User</option><option value="admin">Admin</option></select></label>
+        <label class="checkbox-field"><input name="enabled" type="checkbox" /> Account enabled</label>
+        <label class="full">Bot display name<input name="bot_name" maxlength="64" /></label>
+        <p id="edit-user-bot-handle" class="muted full"></p>
+        <p id="edit-user-status" class="status full" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button id="cancel-edit-user" type="button" class="secondary">Cancel</button>
+          <button type="submit" class="primary">Save changes</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
 
   <script src="/telegram-auth.js"></script>
   <script src="/admin.js"></script>

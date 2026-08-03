@@ -125,7 +125,13 @@ Vercel Cron** for hosting/scheduling.
   group/poll activity. `app_users` stores no email; Telegram ID is the
   authorization key, while handle and display name are metadata. Home, Polls,
   and Admin show the admin-managed `telegram_display_name` in the navbar after
-  authentication, falling back to the Telegram handle when needed. The shared
+  authentication, falling back to the Telegram handle when needed. Clicking the
+  identity opens a shared account menu with profile-picture upload and Sign out.
+  Uploads are resized to 256x256 WebP client-side, capped at 200 KB server-side,
+  and saved to the caller's own `app_users.profile_photo_data`. Admin user rows
+  have an Edit dialog for Telegram ID, handle, display name, role, enabled
+  status, and the assigned bot's Telegram display name; bot tokens and immutable
+  bot handles are never returned for editing. The shared
   login UI exposes an editable six-digit field immediately after **Send code**
   and enables verification when the challenge response arrives.
 - Webhook updates are de-duplicated (`beginWebhookEvent`/`finishWebhookEvent`);

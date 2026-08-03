@@ -11,7 +11,8 @@ function createPostgresDb(sql = createSql()) {
     await sql`alter table app_users
       add column if not exists telegram_user_id bigint,
       add column if not exists telegram_username text,
-      add column if not exists telegram_display_name text`;
+      add column if not exists telegram_display_name text,
+      add column if not exists profile_photo_data text`;
     await sql`create unique index if not exists app_users_telegram_user_id_key
       on app_users(telegram_user_id) where telegram_user_id is not null`;
     await sql`create unique index if not exists app_users_telegram_username_key
@@ -376,7 +377,8 @@ function createPostgresDb(sql = createSql()) {
     async listAppUsers() {
       return sql`
         select u.id, u.telegram_user_id::text, u.telegram_username,
-               u.telegram_display_name, u.role, u.enabled, u.bot_id, u.created_at,
+               u.telegram_display_name, u.profile_photo_data, u.role, u.enabled,
+               u.bot_id, u.created_at,
                b.bot_name, b.telegram_username, b.name_synced_at
         from app_users u left join bots b on b.id = u.bot_id
         order by u.role desc, coalesce(u.telegram_display_name, u.telegram_username)`;
@@ -386,7 +388,7 @@ function createPostgresDb(sql = createSql()) {
       await initPromise;
       const [row] = await sql`
         select id, telegram_user_id::text, telegram_username,
-               telegram_display_name, role, enabled, bot_id
+               telegram_display_name, profile_photo_data, role, enabled, bot_id
         from app_users where telegram_user_id = ${telegramUserId} and enabled`;
       return row || null;
     },
@@ -396,7 +398,7 @@ function createPostgresDb(sql = createSql()) {
       const normalized = String(identifier).toLowerCase();
       const [row] = await sql`
         select id, telegram_user_id::text, telegram_username,
-               telegram_display_name, role, enabled, bot_id
+               telegram_display_name, profile_photo_data, role, enabled, bot_id
         from app_users
         where enabled and (
           telegram_user_id::text = ${String(identifier)}
@@ -420,7 +422,39 @@ function createPostgresDb(sql = createSql()) {
           updated_at = now()
         where id = ${id}
         returning id, telegram_user_id::text, telegram_username,
-                  telegram_display_name, role, enabled, bot_id`;
+                  telegram_display_name, profile_photo_data, role, enabled, bot_id`;
+      return row || null;
+    },
+
+    async updateAppUser(id, {
+      telegram_user_id,
+      telegram_username,
+      telegram_display_name,
+      role,
+      enabled,
+    }) {
+      await initPromise;
+      const [row] = await sql`
+        update app_users set
+          telegram_user_id = ${telegram_user_id},
+          telegram_username = ${telegram_username},
+          telegram_display_name = ${telegram_display_name},
+          role = ${role},
+          enabled = ${enabled},
+          updated_at = now()
+        where id = ${id}
+        returning id, telegram_user_id::text, telegram_username,
+                  telegram_display_name, profile_photo_data, role, enabled, bot_id`;
+      return row || null;
+    },
+
+    async setAppUserProfilePhoto(id, profilePhotoData) {
+      await initPromise;
+      const [row] = await sql`
+        update app_users set profile_photo_data = ${profilePhotoData}, updated_at = now()
+        where id = ${id}
+        returning id, telegram_user_id::text, telegram_username,
+                  telegram_display_name, profile_photo_data, role, enabled, bot_id`;
       return row || null;
     },
 

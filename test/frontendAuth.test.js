@@ -28,20 +28,37 @@ function loadAuthClient(nodes) {
 }
 
 test('navbar renders the admin-managed Telegram display name', () => {
+  const classes = new Set();
   const nodes = {
     'nav-user': { hidden: true },
     'nav-user-name': { textContent: '', title: '' },
-    'nav-user-avatar': { textContent: '' },
+    'nav-user-avatar': {
+      textContent: '',
+      style: {},
+      classList: { toggle: (name, enabled) => enabled ? classes.add(name) : classes.delete(name) },
+    },
   };
   const auth = loadAuthClient(nodes);
 
   auth.renderUser({
     telegram_display_name: 'Yi Dan',
     telegram_username: 'different_handle',
+    profile_photo_data: 'data:image/png;base64,cGhvdG8=',
   });
 
   assert.equal(nodes['nav-user'].hidden, false);
   assert.equal(nodes['nav-user-name'].textContent, 'Yi Dan');
   assert.equal(nodes['nav-user-name'].title, 'Yi Dan');
   assert.equal(nodes['nav-user-avatar'].textContent, 'Y');
+  assert.match(nodes['nav-user-avatar'].style.backgroundImage, /data:image\/png/);
+  assert.equal(classes.has('has-photo'), true);
+});
+
+test('every signed-in page includes the shared account actions', () => {
+  for (const file of ['index.html', 'polls.html', 'admin.html']) {
+    const html = readFileSync(join(__dirname, '..', 'public', file), 'utf8');
+    assert.match(html, /id="nav-upload-photo"/);
+    assert.match(html, /id="nav-profile-photo-input"/);
+    assert.match(html, /id="nav-sign-out"/);
+  }
 });
