@@ -99,8 +99,8 @@ function resolvePollSchedule(input, now = new Date()) {
   }
 
   if (Number.isNaN(closeAt.getTime()) || closeAt <= releaseAt) throw new Error('Closing time must be after release time');
-  if (Number.isNaN(confirmationAt.getTime()) || confirmationAt < releaseAt) {
-    throw new Error('Confirmation time must be at or after release time');
+  if (Number.isNaN(confirmationAt.getTime()) || confirmationAt <= releaseAt) {
+    throw new Error('Confirmation time must be after release time');
   }
   return { releaseAt, closeAt, confirmationAt, source, timezone };
 }

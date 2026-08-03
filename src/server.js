@@ -766,16 +766,26 @@ function createServer(db, telegram, options = {}) {
         eventDate: body.event_date,
         releaseDay: weekly.poll_release_day_of_week,
         releaseTime: String(weekly.poll_release_time).slice(0, 5),
+        confirmationDay: weekly.confirmation_day_of_week,
+        confirmationTime: String(weekly.confirmation_time).slice(0, 5),
       });
       body.specific_release_at = body.send_immediately ? body.specific_release_at : timing.releaseAt;
       body.close_at = timing.closeAt;
-      body.confirmation_at = isTest && body.confirmation_at ? body.confirmation_at : timing.confirmationAt;
+      body.confirmation_at = (isCustom || isTest) && body.confirmation_at
+        ? body.confirmation_at
+        : timing.confirmationAt;
     }
     if (body.send_immediately && !weekly && !body.specific_release_at &&
         body.specific_release_day_of_week === undefined && !body.specific_release_time) {
       body.specific_release_at = new Date().toISOString();
     }
-    const resolved = resolvePollSchedule({ ...body, weekly_schedule: weekly });
+    let resolved;
+    try {
+      resolved = resolvePollSchedule({ ...body, weekly_schedule: weekly });
+    } catch (error) {
+      error.statusCode = 400;
+      throw error;
+    }
     const shifts = Array.isArray(body.shifts) ? body.shifts : [];
     if (!body.telegram_group_id || !body.event_date || !body.poll_question || shifts.length === 0 || shifts.length > 10) {
       return res.status(400).json({ error: 'Group, event date, poll question, and shifts are required' });

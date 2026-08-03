@@ -159,6 +159,8 @@ async function generateScheduledPollsFromTemplates(db, now = new Date()) {
         releaseDate,
         releaseDay: schedule.poll_release_day_of_week,
         releaseTime,
+        confirmationDay: schedule.confirmation_day_of_week,
+        confirmationTime: String(schedule.confirmation_time || '').slice(0, 5),
       });
       const { title, question } = pollTextForEvent({
         groupName: schedule.group_name || 'GTRSG',

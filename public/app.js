@@ -107,6 +107,11 @@ function showManagedWorkflow(workflow) {
       : managedScheduleSection;
   if (section) {
     section.hidden = false;
+    if (workflow === 'template') {
+      syncWeeklyTemplateFormFromSavedSchedule(selectedManagedGroupId);
+    } else if (workflow === 'custom') {
+      syncOneOffPollFormFromSavedSchedule(selectedManagedGroupId);
+    }
     section.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   closeGroupActionDialog();
@@ -152,6 +157,14 @@ function nextWeekdayOnOrAfter(dateText, targetDay) {
   return addLocalDays(dateText, diff);
 }
 
+function weeklyDateTimeAfter(releaseDate, releaseTime, targetDay, targetTime) {
+  let date = nextWeekdayOnOrAfter(releaseDate, targetDay);
+  if (date === releaseDate && targetTime.slice(0, 5) <= releaseTime.slice(0, 5)) {
+    date = addLocalDays(date, 7);
+  }
+  return `${date}T${targetTime.slice(0, 5)}`;
+}
+
 function serviceForGroup(telegramGroupId) {
   const group = managedGroups.find((g) => g.id === telegramGroupId);
   return group?.service || group?.bot_id || 'WHCL';
@@ -163,6 +176,16 @@ function managedTimingForEvent({ telegramGroupId, eventDateVal, schedule }) {
   const releaseTime = (schedule?.poll_release_time || DEFAULT_RELEASE_TIME).slice(0, 5);
   const releaseDate = releaseDateForEvent(eventDateVal, releaseDay);
   const releaseAt = `${releaseDate}T${releaseTime}`;
+  const hasConfiguredConfirmation = schedule?.confirmation_day_of_week !== undefined &&
+    Boolean(schedule?.confirmation_time);
+  const configuredConfirmationAt = hasConfiguredConfirmation
+    ? weeklyDateTimeAfter(
+      releaseDate,
+      releaseTime,
+      Number(schedule.confirmation_day_of_week),
+      String(schedule.confirmation_time),
+    )
+    : null;
 
   if (service === 'PSA') {
     const cutoffDate = nextWeekdayOnOrAfter(releaseDate, 5);
@@ -170,7 +193,7 @@ function managedTimingForEvent({ telegramGroupId, eventDateVal, schedule }) {
       service,
       releaseAt,
       closeAt: `${cutoffDate}T08:00`,
-      confirmationAt: `${cutoffDate}T12:00`,
+      confirmationAt: configuredConfirmationAt || `${cutoffDate}T12:00`,
     };
   }
 
@@ -179,7 +202,7 @@ function managedTimingForEvent({ telegramGroupId, eventDateVal, schedule }) {
     service,
     releaseAt,
     closeAt: `${cutoffDate}T08:00`,
-    confirmationAt: `${cutoffDate}T08:00`,
+    confirmationAt: configuredConfirmationAt || `${cutoffDate}T08:00`,
   };
 }
 
@@ -270,6 +293,8 @@ function defaultScheduleForGroup(telegramGroupId) {
     telegram_group_id: telegramGroupId,
     poll_release_day_of_week: DEFAULT_RELEASE_DAY,
     poll_release_time: DEFAULT_RELEASE_TIME,
+    confirmation_day_of_week: 5,
+    confirmation_time: '12:00',
     timezone: 'Asia/Singapore',
     enabled: true,
   };
@@ -392,7 +417,16 @@ function pollOptionLabelsForShifts(shifts) {
   return labels;
 }
 
-function buildScheduledPollPayload({ telegramGroupId, eventDateVal, schedule, shifts, isCustom, sendImmediately = false, isTest = false }) {
+function buildScheduledPollPayload({
+  telegramGroupId,
+  eventDateVal,
+  schedule,
+  shifts,
+  isCustom,
+  sendImmediately = false,
+  isTest = false,
+  confirmationAt = null,
+}) {
   const group = groupById(telegramGroupId);
   const timing = managedTimingForEvent({ telegramGroupId, eventDateVal, schedule });
   let { title, pollQuestion } = pollTextForEvent({ group, eventDateVal, shifts });
@@ -411,7 +445,7 @@ function buildScheduledPollPayload({ telegramGroupId, eventDateVal, schedule, sh
     specific_release_at: immediate ? undefined : timing.releaseAt,
     send_immediately: immediate,
     close_at: timing.closeAt,
-    confirmation_at: timing.confirmationAt,
+    confirmation_at: confirmationAt || timing.confirmationAt,
     weekly_schedule_id: schedule.id,
     timezone: 'Asia/Singapore',
     confirmation_header: isTest ? 'Confirmed slots (TEST)' : 'Confirmed slots',
@@ -432,16 +466,18 @@ function activePollForDate(telegramGroupId, eventDateVal) {
   );
 }
 
-function timingSummaryHtml({ telegramGroupId, eventDateVal, schedule }) {
+function timingSummaryHtml({ telegramGroupId, eventDateVal, schedule, confirmationAt = null }) {
   const group = groupById(telegramGroupId);
   if (!group) return 'Select a group.';
   const effectiveSchedule = schedule || defaultScheduleForGroup(telegramGroupId);
   const service = serviceForGroup(telegramGroupId);
   const timing = eventDateVal ? managedTimingForEvent({ telegramGroupId, eventDateVal, schedule: effectiveSchedule }) : null;
+  if (timing && confirmationAt) timing.confirmationAt = confirmationAt;
   const coverage = service === 'PSA' ? 'following 2 weeks' : 'following Monday-Sunday';
+  const confirmationRule = `Confirmation ${DAY_NAMES[effectiveSchedule.confirmation_day_of_week]} ${String(effectiveSchedule.confirmation_time).slice(0, 5)}.`;
   const rule = service === 'PSA'
-    ? 'Cutoff Friday 08:00, confirmation Friday 12:00.'
-    : 'Cutoff and confirmation 1 day before each event at 08:00.';
+    ? `Cutoff Friday 08:00. ${confirmationRule}`
+    : `Cutoff 1 day before each event at 08:00. ${confirmationRule}`;
   const source = schedule ? '' : 'Default timing: ';
   return timing
     ? `${servicePill(service)} <strong>${escapeHtml(group.group_name)}</strong><br>Release ${formatLocalDateTime(timing.releaseAt)} · Cutoff ${formatLocalDateTime(timing.closeAt)} · Confirmation ${formatLocalDateTime(timing.confirmationAt)}`
@@ -664,6 +700,7 @@ function syncOneOffPollFormFromSavedSchedule(telegramGroupId = advancePollForm.e
   } else {
     addShiftRow();
   }
+  syncOneOffConfirmationFromTiming();
   updateOneOffTimingPreview();
 }
 
@@ -694,7 +731,10 @@ function syncWeeklyTemplateFormFromSavedSchedule(telegramGroupId) {
   managedScheduleForm.elements.telegram_group_id.value = telegramGroupId || '';
   managedScheduleForm.elements.poll_release_day_of_week.value = String(schedule.poll_release_day_of_week ?? DEFAULT_RELEASE_DAY);
   managedScheduleForm.elements.poll_release_time.value = String(schedule.poll_release_time || DEFAULT_RELEASE_TIME).slice(0, 5);
+  managedScheduleForm.elements.confirmation_day_of_week.value = String(schedule.confirmation_day_of_week ?? 5);
+  managedScheduleForm.elements.confirmation_time.value = String(schedule.confirmation_time || '12:00').slice(0, 5);
   setTimeWheelPickerValue(document.querySelector('[data-name="poll_release_time"]'), managedScheduleForm.elements.poll_release_time.value);
+  setTimeWheelPickerValue(document.querySelector('[data-name="confirmation_time"]'), managedScheduleForm.elements.confirmation_time.value);
 
   weeklyShiftEditor.innerHTML = '';
   const shifts = Array.isArray(schedule.shifts) ? schedule.shifts : [];
@@ -779,6 +819,8 @@ function updateTemplateTimingPreview() {
   const schedule = {
     poll_release_day_of_week: Number(managedScheduleForm.elements.poll_release_day_of_week.value),
     poll_release_time: managedScheduleForm.elements.poll_release_time.value,
+    confirmation_day_of_week: Number(managedScheduleForm.elements.confirmation_day_of_week.value),
+    confirmation_time: managedScheduleForm.elements.confirmation_time.value,
   };
   templateTimingPreview.innerHTML = timingSummaryHtml({ telegramGroupId, schedule });
 }
@@ -796,6 +838,8 @@ function updateTemplatePollPreview() {
   const formSchedule = {
     poll_release_day_of_week: Number(managedScheduleForm.elements.poll_release_day_of_week.value || DEFAULT_RELEASE_DAY),
     poll_release_time: managedScheduleForm.elements.poll_release_time.value || DEFAULT_RELEASE_TIME,
+    confirmation_day_of_week: Number(managedScheduleForm.elements.confirmation_day_of_week.value ?? 5),
+    confirmation_time: managedScheduleForm.elements.confirmation_time.value || '12:00',
   };
   const schedule = formSchedule;
   const editorShifts = normalizeShifts(shiftRowsFromContainer(weeklyShiftEditor)
@@ -825,9 +869,30 @@ function updateOneOffTimingPreview() {
   const telegramGroupId = advancePollForm.elements.telegram_group_id.value;
   const eventDateVal = advancePollForm.elements.event_date.value;
   const schedule = scheduleForGroup(telegramGroupId);
+  const confirmationDate = advancePollForm.elements.confirmation_date.value;
+  const confirmationTime = advancePollForm.elements.one_off_confirmation_time.value;
+  const confirmationAt = confirmationDate && confirmationTime
+    ? `${confirmationDate}T${confirmationTime}`
+    : null;
   oneOffTimingPreview.innerHTML = eventDateVal
-    ? timingSummaryHtml({ telegramGroupId, eventDateVal, schedule })
+    ? timingSummaryHtml({ telegramGroupId, eventDateVal, schedule, confirmationAt })
     : timingSummaryHtml({ telegramGroupId, schedule });
+}
+
+function syncOneOffConfirmationFromTiming() {
+  const telegramGroupId = advancePollForm.elements.telegram_group_id.value;
+  const eventDateVal = advancePollForm.elements.event_date.value;
+  if (!telegramGroupId || !eventDateVal) {
+    advancePollForm.elements.confirmation_date.value = '';
+    return;
+  }
+  const schedule = scheduleForGroup(telegramGroupId) || defaultScheduleForGroup(telegramGroupId);
+  const timing = managedTimingForEvent({ telegramGroupId, eventDateVal, schedule });
+  advancePollForm.elements.confirmation_date.value = timing.confirmationAt.slice(0, 10);
+  setTimeWheelPickerValue(
+    document.querySelector('[data-name="one_off_confirmation_time"]'),
+    timing.confirmationAt.slice(11, 16),
+  );
 }
 
 function updateBatchSummary() {
@@ -927,10 +992,17 @@ managedScheduleForm.elements.poll_release_day_of_week.addEventListener('change',
   updateTemplateTimingPreview();
   updateTemplatePollPreview();
 });
+managedScheduleForm.elements.confirmation_day_of_week.addEventListener('change', () => {
+  updateTemplateTimingPreview();
+  updateTemplatePollPreview();
+});
 weeklyShiftEditor.addEventListener('input', updateTemplatePollPreview);
 weeklyShiftEditor.addEventListener('change', updateTemplatePollPreview);
 
-advancePollForm.elements.event_date.addEventListener('change', updateOneOffTimingPreview);
+advancePollForm.elements.event_date.addEventListener('change', () => {
+  syncOneOffConfirmationFromTiming();
+  updateOneOffTimingPreview();
+});
 
 advancePollForm.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -942,7 +1014,11 @@ document.getElementById('weekly-send-test').addEventListener('click', submitWeek
 async function submitOneOffPoll(isTest = false) {
   const telegramGroupId = advancePollForm.elements.telegram_group_id.value;
   const eventDateVal    = advancePollForm.elements.event_date.value;
-  if (!telegramGroupId || !eventDateVal) return setStatus('Error: Select a group and event date.', 'error');
+  const confirmationDate = advancePollForm.elements.confirmation_date.value;
+  const confirmationTime = advancePollForm.elements.one_off_confirmation_time.value;
+  if (!telegramGroupId || !eventDateVal || !confirmationDate || !confirmationTime) {
+    return setStatus('Error: Event and confirmation date/time are required.', 'error');
+  }
   const schedule = scheduleForGroup(telegramGroupId) || defaultScheduleForGroup(telegramGroupId);
   const group = managedGroups.find((g) => g.id === telegramGroupId);
   if (!group) return setStatus('Error: Group not found.', 'error');
@@ -956,7 +1032,24 @@ async function submitOneOffPoll(isTest = false) {
   if (!shifts.length)          return setStatus('Error: Add at least one shift.', 'error');
   if (shifts.some((s) => !s._ok)) return setStatus('Error: Fill start, end and slots for every shift.', 'error');
   shifts.forEach((s) => delete s._ok);
-  const payload = buildScheduledPollPayload({ telegramGroupId, eventDateVal, schedule, shifts, isCustom: true, sendImmediately: isTest, isTest });
+  const confirmationAt = `${confirmationDate}T${confirmationTime}`;
+  const payload = buildScheduledPollPayload({
+    telegramGroupId,
+    eventDateVal,
+    schedule,
+    shifts,
+    isCustom: true,
+    sendImmediately: isTest,
+    isTest,
+    confirmationAt,
+  });
+  const releaseAt = payload.send_immediately
+    ? new Date()
+    : new Date(`${payload.specific_release_at}:00+08:00`);
+  const confirmationInstant = new Date(`${confirmationAt}:00+08:00`);
+  if (Number.isNaN(confirmationInstant.getTime()) || confirmationInstant <= releaseAt) {
+    return setStatus('Error: Confirmation date and time must be after release date and time.', 'error');
+  }
   const preview = `${payload.title}\n${payload.poll_question}\n${shifts.map((s) => `${s.label}: ${s.capacity}`).join('\n')}\n${isTest ? 'Type: TEST POLL (Immediate)' : `Release: ${payload.specific_release_at}\nCloses: ${payload.close_at}`}`;
   if (!window.confirm(`${isTest ? 'Send this test poll immediately?' : 'Schedule this poll?'}\n\n${preview}`)) return;
   setStatus(isTest ? 'Sending test poll…' : 'Creating poll…', 'pending');
@@ -1171,9 +1264,10 @@ async function loadManagedSchedules({ syncEditor = true } = {}) {
         const group = managedGroups.find((item) => item.id === s.telegram_group_id);
         const service = group?.service || group?.bot_id || 'WHCL';
         const groupLabel = group ? managedGroupOptionLabel(group) : s.group_name;
+        const confirmationDay = DAY_NAMES[s.confirmation_day_of_week];
         const serviceRule = service === 'PSA'
-          ? 'PSA cutoff Fri 08:00, confirmation Fri 12:00'
-          : 'Wheelchair cutoff/confirmation day-before 08:00';
+          ? 'PSA cutoff Fri 08:00'
+          : 'Wheelchair cutoff day-before 08:00';
       const shiftsDesc = Array.isArray(s.shifts) && s.shifts.length 
         ? s.shifts.map((sh) => `${sh.label} (${sh.capacity} slots)`).join(', ')
         : 'No template shifts';
@@ -1181,8 +1275,8 @@ async function loadManagedSchedules({ syncEditor = true } = {}) {
           <div class="schedule-row">
             <span>
               ${servicePill(service)} <strong>${escapeHtml(groupLabel)}</strong>: 
-              Release: ${releaseDay} at ${s.poll_release_time}<br>
-            <small style="color: var(--ink-soft);">${escapeHtml(serviceRule)}</small><br>
+              Release: ${releaseDay} at ${String(s.poll_release_time).slice(0, 5)}<br>
+            <small style="color: var(--ink-soft);">Confirmation: ${confirmationDay} at ${String(s.confirmation_time).slice(0, 5)}. ${escapeHtml(serviceRule)}.</small><br>
             <small style="color: var(--ink-soft);">${escapeHtml(shiftsDesc)}</small>
           </span>
           <button type="button" class="danger-link delete-schedule" data-id="${s.id}">Delete</button>
@@ -1215,8 +1309,7 @@ managedScheduleForm.addEventListener('submit', async (event) => {
   const shifts = shiftRowsFromContainer(weeklyShiftEditor).map(({ complete, ...shift }) => shift);
   body.shifts = shifts;
   body.poll_release_day_of_week = Number(body.poll_release_day_of_week);
-  body.confirmation_day_of_week = 5;
-  body.confirmation_time = '12:00';
+  body.confirmation_day_of_week = Number(body.confirmation_day_of_week);
 
   const response = await fetch('/api/weekly-schedules', { method: 'PUT',
     headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -1608,6 +1701,19 @@ async function bootstrap() {
       updateTemplateTimingPreview();
       updateTemplatePollPreview();
     });
+  }
+  const confirmationTimePicker = document.querySelector('[data-name="confirmation_time"]');
+  if (confirmationTimePicker) {
+    createTimeWheelPicker(confirmationTimePicker, '12:00');
+    managedScheduleForm.elements.confirmation_time.addEventListener('change', () => {
+      updateTemplateTimingPreview();
+      updateTemplatePollPreview();
+    });
+  }
+  const oneOffConfirmationTimePicker = document.querySelector('[data-name="one_off_confirmation_time"]');
+  if (oneOffConfirmationTimePicker) {
+    createTimeWheelPicker(oneOffConfirmationTimePicker, '12:00');
+    advancePollForm.elements.one_off_confirmation_time.addEventListener('change', updateOneOffTimingPreview);
   }
 
   if (config.legacyEnabled) {

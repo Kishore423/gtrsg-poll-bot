@@ -25,23 +25,36 @@ function nextWeekdayOnOrAfter(dateText, targetDay) {
   return addLocalDays(dateText, diff);
 }
 
+function weeklyDateTimeAfter(releaseDate, releaseTime, targetDay, targetTime) {
+  let date = nextWeekdayOnOrAfter(releaseDate, targetDay);
+  if (date === releaseDate && String(targetTime).slice(0, 5) <= String(releaseTime).slice(0, 5)) {
+    date = addLocalDays(date, 7);
+  }
+  return `${date}T${String(targetTime).slice(0, 5)}`;
+}
+
 function managedTimingForEvent({
   service,
   eventDate,
   releaseDay = DEFAULT_RELEASE_DAY,
   releaseTime = DEFAULT_RELEASE_TIME,
   releaseDate: explicitReleaseDate,
+  confirmationDay,
+  confirmationTime,
 }) {
   const normalizedService = service === 'PSA' ? 'PSA' : 'WHCL';
   const releaseDate = explicitReleaseDate || releaseDateForEvent(eventDate, releaseDay);
   const releaseAt = `${releaseDate}T${releaseTime}`;
+  const configuredConfirmationAt = confirmationDay !== undefined && confirmationTime
+    ? weeklyDateTimeAfter(releaseDate, releaseTime, confirmationDay, confirmationTime)
+    : null;
 
   if (normalizedService === 'PSA') {
     const cutoffDate = nextWeekdayOnOrAfter(releaseDate, PSA_CUTOFF_DAY);
     return {
       releaseAt,
       closeAt: `${cutoffDate}T${PSA_CUTOFF_TIME}`,
-      confirmationAt: `${cutoffDate}T${PSA_CONFIRMATION_TIME}`,
+      confirmationAt: configuredConfirmationAt || `${cutoffDate}T${PSA_CONFIRMATION_TIME}`,
     };
   }
 
@@ -49,7 +62,7 @@ function managedTimingForEvent({
   return {
     releaseAt,
     closeAt: `${cutoffDate}T${WHCL_CUTOFF_TIME}`,
-    confirmationAt: `${cutoffDate}T${WHCL_CUTOFF_TIME}`,
+    confirmationAt: configuredConfirmationAt || `${cutoffDate}T${WHCL_CUTOFF_TIME}`,
   };
 }
 

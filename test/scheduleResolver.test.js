@@ -42,6 +42,11 @@ test('weekly confirmation fallback is resolved and frozen with the poll', () => 
 test('missing schedule and invalid chronology are rejected', () => {
   assert.throws(() => resolvePollSchedule(times, now), /No release schedule/);
   assert.throws(() => resolvePollSchedule({ ...times, specific_release_at: '2026-07-11T09:00:00Z' }, now), /Closing time/);
+  assert.throws(() => resolvePollSchedule({
+    close_at: '2026-07-10T12:00:00Z',
+    confirmation_at: '2026-07-09T09:00:00Z',
+    specific_release_at: '2026-07-09T09:00:00Z',
+  }, now), /Confirmation time must be after release time/);
 });
 
 test('past release is rejected unless send immediately is explicit', () => {

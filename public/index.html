@@ -461,6 +461,14 @@
       align-items: end;
     }
 
+    .one-off-timing-grid {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1rem;
+      align-items: end;
+    }
+
     #weekly-shift-editor {
       display: flex;
       flex-direction: column;
@@ -658,6 +666,9 @@
       .nav-user-name { max-width: 6.5rem; }
       .managed-user-filter { grid-template-columns: 1fr; }
       .template-release-grid {
+        grid-template-columns: 1fr;
+      }
+      .one-off-timing-grid {
         grid-template-columns: 1fr;
       }
       .shift-row {
@@ -987,6 +998,13 @@
               </select>
             </label>
             <label>Release time<div class="time-wheel-picker" data-name="poll_release_time"></div></label>
+            <label>Confirmation day
+              <select name="confirmation_day_of_week" required>
+                <option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option>
+                <option value="4">Thursday</option><option value="5" selected>Friday</option><option value="6">Saturday</option><option value="0">Sunday</option>
+              </select>
+            </label>
+            <label>Confirmation time<div class="time-wheel-picker" data-name="confirmation_time"></div></label>
           </div>
           <div id="template-timing-preview" class="timing-preview">Select a group to preview its release rule.</div>
 
@@ -1043,7 +1061,11 @@
     <p class="hint">Starts from the selected group's saved default template. Adjust only the fields needed for a one-off exception; if a default poll already exists for that date it will be automatically removed.</p>
     <form id="advance-poll-form">
       <input type="hidden" name="telegram_group_id" />
-      <label>Event date<input type="date" name="event_date" required /></label>
+      <div class="one-off-timing-grid">
+        <label>Event date<input type="date" name="event_date" required /></label>
+        <label>Confirmation date<input type="date" name="confirmation_date" required /></label>
+        <label>Confirmation time<div class="time-wheel-picker" data-name="one_off_confirmation_time"></div></label>
+      </div>
       <div id="one-off-timing-preview" class="timing-preview">Select a group and event date to preview timing.</div>
       <div id="shift-editor"></div>
       <button type="button" id="add-shift" class="secondary">Add shift</button>

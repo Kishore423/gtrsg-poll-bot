@@ -221,6 +221,8 @@ test('automatic template generation creates missing WHCL polls and skips exclude
         enabled: true,
         poll_release_day_of_week: 3,
         poll_release_time: '17:00',
+        confirmation_day_of_week: 4,
+        confirmation_time: '10:30',
         timezone: 'Asia/Singapore',
         shifts: [{ label: '0800-1700', start_time: '08:00', end_time: '17:00', capacity: 1 }],
       }];
@@ -246,6 +248,7 @@ test('automatic template generation creates missing WHCL polls and skips exclude
     '2026-07-26',
   ]);
   assert.equal(created[0].resolved_release_at, '2026-07-15T09:00:00.000Z');
+  assert.equal(created[0].resolved_confirmation_at, '2026-07-16T02:30:00.000Z');
   const wedPoll = created.find((payload) => payload.event_date === '2026-07-22');
   assert.equal(wedPoll.resolved_release_at, '2026-07-15T09:00:00.000Z');
   assert.equal(wedPoll.close_at, '2026-07-21T00:00:00.000Z');

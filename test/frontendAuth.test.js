@@ -96,3 +96,14 @@ test('managed workflows stay bound to the clicked group without duplicate select
   assert.match(html, /id="send-test-poll"/);
   assert.match(html, /\.group-dialog-actions button:last-child:nth-child\(odd\)[\s\S]*?justify-self: center/);
 });
+
+test('weekly and one-off forms expose editable confirmation timing', () => {
+  const html = readFileSync(join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = readFileSync(join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(html, /select name="confirmation_day_of_week"/);
+  assert.match(html, /data-name="confirmation_time"/);
+  assert.match(html, /input type="date" name="confirmation_date" required/);
+  assert.match(html, /data-name="one_off_confirmation_time"/);
+  assert.doesNotMatch(source, /body\.confirmation_time = '12:00'/);
+  assert.match(source, /Confirmation date and time must be after release date and time/);
+});

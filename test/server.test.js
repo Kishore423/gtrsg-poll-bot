@@ -994,6 +994,70 @@ test('WHCL template test poll preserves short confirmation delay for near dates'
   }
 });
 
+test('one-off poll preserves custom confirmation and rejects confirmation at release', async () => {
+  let createdPayload = null;
+  const groupId = '11111111-1111-4111-8111-111111111111';
+  const scheduleId = '22222222-2222-4222-8222-222222222222';
+  const db = {
+    async getWeeklySchedule() {
+      return {
+        id: scheduleId,
+        telegram_group_id: groupId,
+        enabled: true,
+        poll_release_day_of_week: 3,
+        poll_release_time: '17:00',
+        confirmation_day_of_week: 5,
+        confirmation_time: '12:00',
+        timezone: 'Asia/Singapore',
+      };
+    },
+    async getTelegramGroup() {
+      return {
+        id: groupId,
+        telegram_chat_id: '-1001',
+        group_name: 'Wheelchair',
+        service: 'WHCL',
+        bot_id: 'WHCL',
+        enabled: true,
+      };
+    },
+    async getActivePollForDate() {
+      return null;
+    },
+    async createScheduledEvent(payload) {
+      createdPayload = payload;
+      return 'custom-poll-id';
+    },
+  };
+  const server = createServer(db, makeTelegram(), { enableLegacyWorkflow: false }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const payload = {
+    telegram_group_id: groupId,
+    weekly_schedule_id: scheduleId,
+    event_date: '2099-01-05',
+    poll_question: 'Mon, 5Jan99 - 1 slot for 0800-1700',
+    confirmation_at: '2099-01-01T12:00',
+    is_custom: true,
+    shifts: [{ label: '0800-1700', start_time: '08:00', end_time: '17:00', capacity: 1 }],
+  };
+  try {
+    const response = await fetch(`${baseUrl}/api/scheduled-polls`, json('POST', payload));
+    assert.equal(response.status, 201);
+    assert.equal(createdPayload.resolved_release_at, '2098-12-31T09:00:00.000Z');
+    assert.equal(createdPayload.resolved_confirmation_at, '2099-01-01T04:00:00.000Z');
+
+    const invalid = await fetch(`${baseUrl}/api/scheduled-polls`, json('POST', {
+      ...payload,
+      confirmation_at: '2098-12-31T17:00',
+    }));
+    assert.equal(invalid.status, 400);
+    assert.match((await invalid.json()).error, /Confirmation time must be after release time/);
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
+});
+
 test('duplicate webhook update is processed exactly once', async () => {
   await withServer(async ({ db, baseUrl }) => {
     const body = { update_id: 40, my_chat_member: {

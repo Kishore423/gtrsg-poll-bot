@@ -211,10 +211,12 @@ The app currently ships BOTH, selected at runtime:
   release is Wednesday 17:00 SGT. Legacy weekly sending releases WHCL slots for
   the following Monday-Sunday week and PSA slots for the following two
   Monday-Sunday weeks. Managed poll creation uses service-specific timing from
-  `src/scheduleRules.js`: PSA cuts off Friday 08:00 SGT and confirms Friday
-  12:00 SGT; WHCL cuts off 1 day before the event date at 08:00 SGT and, because
-  no separate WHCL confirmation time was specified, confirms at the same 08:00
-  cutoff. Vercel Hobby only allows daily cron, so `vercel.json` currently runs
+  `src/scheduleRules.js`: PSA cuts off Friday 08:00 SGT and WHCL cuts off 1 day
+  before the event date at 08:00 SGT. Weekly templates persist an independently
+  configurable confirmation weekday/time; when absent, legacy defaults remain
+  PSA Friday 12:00 and WHCL at its day-before 08:00 cutoff. One-off polls persist
+  an explicit confirmation date/time. Every confirmation must resolve strictly
+  after its poll release. Vercel Hobby only allows daily cron, so `vercel.json` currently runs
   `/api/cron/scheduler` once daily; exact Wednesday 17:00 / Friday 12:00 delivery
   needs either Vercel Pro hourly cron, an external scheduler, or manual trigger.
   The managed scheduler now auto-generates missing default polls from each saved
