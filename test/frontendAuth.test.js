@@ -94,4 +94,5 @@ test('managed workflows stay bound to the clicked group without duplicate select
   assert.match(html, /type="hidden" name="telegram_group_id"/);
   assert.match(html, /id="weekly-send-test"/);
   assert.match(html, /id="send-test-poll"/);
+  assert.match(html, /\.group-dialog-actions button:last-child:nth-child\(odd\)[\s\S]*?justify-self: center/);
 });
