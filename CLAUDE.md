@@ -81,6 +81,14 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   actions; clicking the row opens a popup with **Weekly default template**,
   **Skip days**, **Custom poll**, and **Send test poll** actions. The template,
   skip-days, and one-off poll cards stay hidden until a group workflow is chosen.
+  Admins first search the Admin roster by display name; selecting one user scopes
+  group rows and managed schedules to that user's single `bot_id`. Verification
+  succeeds only after Telegram accepts a test message sent by that bot to the
+  exact selected group. Bot removal membership updates disable the matching
+  `(Telegram chat, bot)` row, so managed lists contain current memberships only;
+  a later add or group message re-enables the same row. Admin user selection also
+  refreshes that bot's saved memberships against Telegram to retire stale rows
+  whose removal webhook predates this behavior.
 - Task 8 migration: `npm run migrate:multi-tenant` creates/reuses WHCL and PSA
   bot records from `TELEGRAM_TOKEN_WHCL` / `TELEGRAM_TOKEN_PSA`, assigns legacy
   `telegram_groups.bot_id` service rows to `bot_ref`, and upserts the seed
@@ -343,9 +351,9 @@ live only in Vercel env + the local (gitignored) `.env`.
 - The poll editor has one form-level **Send immediately** action beside **Review and
   schedule**. It sends all shift rows currently in the form; shift rows only have a
   Remove action.
-- Production deploy `dpl_8QFBVTn1qB6FAGGZRwfQ5Af1qLEP` was promoted on
-  2026-08-03 and aliased to `https://gtrsg-poll-bot.vercel.app`; it includes
-  dedicated @user_login_otp_bot authentication.
+- The 2026-08-03 production release at `https://gtrsg-poll-bot.vercel.app`
+  includes admin user-scoped managed groups and current Telegram membership
+  refresh.
 - The managed dashboard now includes a Release rules summary, a renamed **Group
   release template** section with service-specific timing previews, and a **Create
   one-off poll** section with inline timing preview. Default release batches are

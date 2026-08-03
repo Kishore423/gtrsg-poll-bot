@@ -174,6 +174,7 @@ function createMemoryDb() {
     async listTelegramGroups({ botId = null } = {}) {
       // botId scopes the list to one user's bot; admins pass nothing to see all.
       return telegramGroups
+        .filter((group) => group.enabled !== false)
         .filter((group) => !botId ||
           String(group.bot_ref || group.bot_id) === String(botId))
         .map((group) => ({ ...group, bot_id: group.bot_ref || group.bot_id }));
@@ -490,6 +491,15 @@ function createMemoryDb() {
         Object.assign(group, { group_name, service, bot_ref: bot_ref || group.bot_ref, enabled: true });
       }
       return group.id;
+    },
+
+    async setTelegramGroupEnabledByChatAndBot(telegramChatId, botId, enabled) {
+      const group = telegramGroups.find((item) =>
+        item.telegram_chat_id === String(telegramChatId) &&
+        String(item.bot_ref || item.bot_id) === String(botId));
+      if (!group) return false;
+      group.enabled = Boolean(enabled);
+      return true;
     },
 
     async beginWebhookEvent(updateId, botId, updateType) {

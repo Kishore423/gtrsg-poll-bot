@@ -328,6 +328,8 @@
     .pill-sent { background: var(--green-light); color: var(--green-dark); }
     .pill-muted { background: #f4f6f8; color: var(--ink-soft); border: 1px solid var(--border); }
     .pill-custom { background: #4f46e5; color: white; }
+    .managed-user-filter { display: grid; grid-template-columns: minmax(0, 24rem) 1fr; gap: 0.75rem 1rem; align-items: end; margin: 1rem 0 1.15rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+    .managed-user-filter .hint { margin: 0 0 0.15rem; }
     .pill-test { background: var(--red); color: white; }
 
     .empty-state {
@@ -648,6 +650,7 @@
       .nav-user { gap: 0.3rem; font-size: 0.8rem; }
       .nav-user-avatar { display: grid; }
       .nav-user-name { max-width: 6.5rem; }
+      .managed-user-filter { grid-template-columns: 1fr; }
       .template-release-grid {
         grid-template-columns: 1fr;
       }
@@ -921,6 +924,13 @@
   <section class="card" id="managed-groups-section">
     <h2>Managed Telegram groups</h2>
     <p class="hint">Groups appear here automatically after the assigned Telegram bot is added to the group. Click a group to manage its template, skip days, custom poll, or test poll.</p>
+    <div id="admin-managed-user-filter" class="managed-user-filter" data-admin-only hidden>
+      <label for="admin-managed-user-search">Search user by display name
+        <input id="admin-managed-user-search" list="admin-managed-user-options" autocomplete="off" placeholder="Start typing a display name" />
+      </label>
+      <datalist id="admin-managed-user-options"></datalist>
+      <p id="admin-managed-user-summary" class="hint">Select a user to view the groups detected for their assigned bot.</p>
+    </div>
     <form id="managed-group-form" hidden>
       <label>Group name<input name="group_name" required /></label>
       <label>Telegram chat ID<input name="telegram_chat_id" inputmode="numeric" placeholder="-1001234567890" required /></label>

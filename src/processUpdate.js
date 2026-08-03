@@ -38,11 +38,11 @@ async function processTelegramUpdate(db, service, update, { botRef = null } = {}
   try {
 
   if (event.type === 'group_membership') {
+    const route = managedGroupRoute(service, { botRef });
     if (['WHCL', 'PSA'].includes(service)) {
       await db.setTarget(service, { chat_id: event.chatId, title: event.title, active: event.active });
     }
     if (event.active && db.upsertTelegramGroupFromWebhook) {
-      const route = managedGroupRoute(service, { botRef });
       await db.upsertTelegramGroupFromWebhook({
         telegram_chat_id: event.chatId,
         group_name: event.title || `${service} group`,
@@ -50,6 +50,13 @@ async function processTelegramUpdate(db, service, update, { botRef = null } = {}
         bot_id: route.bot_id,
         bot_ref: route.bot_ref,
       });
+    }
+    if (!event.active && db.setTelegramGroupEnabledByChatAndBot) {
+      await db.setTelegramGroupEnabledByChatAndBot(
+        event.chatId,
+        route.bot_ref || route.bot_id,
+        false,
+      );
     }
     const result = {
       handled: 'group_membership',

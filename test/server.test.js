@@ -310,6 +310,64 @@ test('admins are not filtered by bot tenancy', async () => {
       : null });
 });
 
+test('admin group refresh scopes to one bot and disables stale memberships', async () => {
+  const db = createMemoryDb();
+  await db.upsertTelegramGroupFromWebhook({
+    telegram_chat_id: -1001,
+    group_name: 'Current group',
+    service: null,
+    bot_id: 'bot-a',
+  });
+  await db.upsertTelegramGroupFromWebhook({
+    telegram_chat_id: -1002,
+    group_name: 'Former group',
+    service: null,
+    bot_id: 'bot-a',
+  });
+  await db.upsertTelegramGroupFromWebhook({
+    telegram_chat_id: -1003,
+    group_name: 'Different user group',
+    service: null,
+    bot_id: 'bot-b',
+  });
+  const checkedChats = [];
+  const telegram = {
+    async getMe(botId) {
+      assert.equal(botId, 'bot-a');
+      return { id: 7001 };
+    },
+    async call(botId, method, params) {
+      assert.equal(botId, 'bot-a');
+      assert.equal(method, 'getChatMember');
+      assert.equal(params.user_id, 7001);
+      checkedChats.push(String(params.chat_id));
+      return { status: String(params.chat_id) === '-1002' ? 'left' : 'administrator' };
+    },
+  };
+  const server = createServer(db, telegram, {
+    requireAdminAuth: true,
+    verifyUser: async (req) => req.headers.authorization === 'Bearer admin'
+      ? { id: 'admin-1', telegram_user_id: '1002', role: 'admin', bot_id: null }
+      : null,
+  }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const response = await fetch(`${baseUrl}/api/telegram-groups?bot_id=bot-a&refresh=1`, {
+      headers: { Authorization: 'Bearer admin' },
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).map((group) => group.group_name), ['Current group']);
+    assert.deepEqual(checkedChats.sort(), ['-1001', '-1002']);
+    assert.deepEqual(
+      (await db.listTelegramGroups({ botId: 'bot-a' })).map((group) => group.group_name),
+      ['Current group'],
+    );
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
+});
+
 test('webhook: bot added to a group captures that service target', async () => {
   await withServer(async ({ db, baseUrl }) => {
     const res = await fetch(`${baseUrl}/api/telegram/whcl`, json('POST', {
@@ -329,6 +387,31 @@ test('webhook: bot added to a group captures that service target', async () => {
     assert.equal(groups[0].group_name, 'GTRSG Wheelchair');
     assert.equal(groups[0].service, 'WHCL');
     assert.equal(groups[0].bot_id, 'WHCL');
+  });
+});
+
+test('webhook: bot removed from a group hides that managed group', async () => {
+  await withServer(async ({ db, baseUrl }) => {
+    const added = await fetch(`${baseUrl}/api/telegram/whcl`, json('POST', {
+      update_id: 11,
+      my_chat_member: {
+        chat: { id: -100123, type: 'supergroup', title: 'Former Wheelchair Group' },
+        new_chat_member: { status: 'administrator' },
+      },
+    }));
+    assert.equal(added.status, 200);
+    assert.equal((await db.listTelegramGroups()).length, 1);
+
+    const removed = await fetch(`${baseUrl}/api/telegram/whcl`, json('POST', {
+      update_id: 12,
+      my_chat_member: {
+        chat: { id: -100123, type: 'supergroup', title: 'Former Wheelchair Group' },
+        new_chat_member: { status: 'left' },
+      },
+    }));
+    assert.equal(removed.status, 200);
+    assert.equal(await db.getTarget('WHCL'), null);
+    assert.deepEqual(await db.listTelegramGroups(), []);
   });
 });
 
@@ -533,6 +616,7 @@ test('webhook: per-user bot route validates its own secret and captures the grou
 
 test('verify group prefers WHCL service over stale PRIMARY bot_id', async () => {
   let verifiedService = null;
+  let verificationDelivery = null;
   const db = {
     async getTelegramGroup() {
       return {
@@ -556,9 +640,10 @@ test('verify group prefers WHCL service over stale PRIMARY bot_id', async () => 
       assert.deepEqual(params, { chat_id: '-100123', user_id: 99 });
       return { status: 'administrator', can_post_messages: true };
     },
-    async sendMessage(service) {
+    async sendMessage(service, chatId, html) {
       assert.equal(service, 'WHCL');
-      return { message_id: 1 };
+      verificationDelivery = { chatId, html };
+      return { message_id: 51 };
     },
   };
   const server = createServer(db, telegram, { enableLegacyWorkflow: false }).listen(0);
@@ -570,7 +655,12 @@ test('verify group prefers WHCL service over stale PRIMARY bot_id', async () => 
     assert.equal(response.status, 200);
     assert.equal(body.present, true);
     assert.equal(body.can_post_messages, true);
+    assert.equal(body.message_sent, true);
+    assert.equal(body.message_id, 51);
+    assert.equal(body.group_name, 'Wheelchair group');
     assert.equal(verifiedService, 'WHCL');
+    assert.equal(verificationDelivery.chatId, '-100123');
+    assert.match(verificationDelivery.html, /Wheelchair group/);
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   }

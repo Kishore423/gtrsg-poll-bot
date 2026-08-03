@@ -30,6 +30,14 @@
 > auto-detected when a user's bot is added to Telegram, the **Verify bot** button
 > remains beside each group, and clicking a group opens a popup for **Weekly
 > default template**, **Skip days**, **Custom poll**, or **Send test poll**.
+> Admins first search the Admin roster by display name; selecting one user scopes
+> group rows and managed schedules to that user's single `bot_id`. **Verify bot**
+> reports success only after Telegram accepts a test message sent by that bot to
+> the exact selected group. Bot removal membership updates disable the matching
+> `(Telegram chat, bot)` row, so managed lists contain current memberships only;
+> a later add or group message re-enables the same row. Admin user selection also
+> refreshes that bot's saved memberships against Telegram to retire stale rows
+> whose removal webhook predates this behavior.
 >
 > Task 8 added `npm run migrate:multi-tenant` /
 > `scripts/migrate-to-multi-tenant.js` to create/reuse WHCL/PSA bot rows, assign
@@ -214,9 +222,9 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   `REQUIRE_ADMIN_AUTH=true`; management APIs require a valid Telegram session.
 - The poll editor has one form-level **Send immediately** action beside **Review and
   schedule**; it sends every shift row currently in the form.
-- Production deploy `dpl_8QFBVTn1qB6FAGGZRwfQ5Af1qLEP` was promoted on
-  2026-08-03 and aliased to `https://gtrsg-poll-bot.vercel.app`; it includes
-  dedicated @user_login_otp_bot authentication.
+- The 2026-08-03 production release at `https://gtrsg-poll-bot.vercel.app`
+  includes admin user-scoped managed groups and current Telegram membership
+  refresh.
 - The managed dashboard includes a Release rules summary, a unified **Group template &
   automatic releases** section (template settings and template test polls), and a
   **Create one-off poll** section with inline timing preview and integrated test button.

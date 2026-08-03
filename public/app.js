@@ -34,17 +34,24 @@ const batchReleaseDateInput = document.getElementById('batch-release-date');
 const batchSummary = document.getElementById('batch-summary');
 const batchList = document.getElementById('batch-list');
 const batchScheduleBtn = document.getElementById('batch-schedule');
+const adminManagedUserFilter = document.getElementById('admin-managed-user-filter');
+const adminManagedUserSearch = document.getElementById('admin-managed-user-search');
+const adminManagedUserOptions = document.getElementById('admin-managed-user-options');
+const adminManagedUserSummary = document.getElementById('admin-managed-user-summary');
 
 const SERVICE_ORDER = ['WHCL', 'PSA'];
 const SERVICE_NAMES = { WHCL: 'Wheelchair', PSA: 'Passenger Service Associate' };
 const DEFAULT_RELEASE_DAY = 3;
 const DEFAULT_RELEASE_TIME = '17:00';
 let managedGroups = [];
+let allManagedGroups = [];
 let managedSchedules = [];
 let scheduledPolls = [];
 let generatedBatchRows = [];
 let pollExclusions = [];
 let selectedManagedGroupId = '';
+let adminManagedUsers = [];
+let selectedAdminManagedUserId = '';
 
 const managedWorkflowSections = [managedScheduleSection, skipDaysSection, advancePollSection].filter(Boolean);
 
@@ -212,6 +219,44 @@ function formatLocalDate(dateText) {
 function groupById(telegramGroupId) {
   return managedGroups.find((group) => group.id === telegramGroupId);
 }
+
+function adminUserSearchLabel(user) {
+  const displayName = user.telegram_display_name || user.telegram_username || `Telegram ${user.telegram_user_id}`;
+  return user.telegram_username ? `${displayName} - @${user.telegram_username}` : displayName;
+}
+
+function selectedAdminManagedUser() {
+  return adminManagedUsers.find((user) => String(user.id) === selectedAdminManagedUserId) || null;
+}
+
+async function loadAdminManagedUsers() {
+  if (currentUser?.role !== 'admin') return;
+  const response = await fetch('/api/admin/users');
+  const result = await response.json().catch(() => []);
+  if (!response.ok) throw new Error(result.error || 'Unable to load users for managed groups');
+  adminManagedUsers = result;
+  adminManagedUserOptions.innerHTML = adminManagedUsers.map((user) =>
+    `<option value="${escapeHtml(adminUserSearchLabel(user))}"></option>`).join('');
+  adminManagedUserFilter.hidden = false;
+}
+
+adminManagedUserSearch?.addEventListener('input', async () => {
+  const query = adminManagedUserSearch.value.trim().toLowerCase();
+  const selected = adminManagedUsers.find((user) =>
+    adminUserSearchLabel(user).toLowerCase() === query);
+  if (!selected && query) return;
+  const nextUserId = selected ? String(selected.id) : '';
+  if (nextUserId === selectedAdminManagedUserId) return;
+  selectedAdminManagedUserId = nextUserId;
+  selectedManagedGroupId = '';
+  hideManagedWorkflowSections();
+  try {
+    await loadManagedGroups();
+    await loadManagedSchedules();
+  } catch (error) {
+    setStatus(`Error: ${error.message}`, 'error');
+  }
+});
 
 function scheduleForGroup(telegramGroupId) {
   return managedSchedules.find((s) => s.telegram_group_id === telegramGroupId && s.enabled);
@@ -1057,9 +1102,31 @@ async function submitWeeklyTestPoll() {
 }
 
 async function loadManagedGroups() {
-  const response = await fetch('/api/telegram-groups');
+  const selectedUser = selectedAdminManagedUser();
+  const groupUrl = currentUser?.role === 'admin' && selectedUser?.bot_id
+    ? `/api/telegram-groups?bot_id=${encodeURIComponent(selectedUser.bot_id)}&refresh=1`
+    : '/api/telegram-groups';
+  const response = await fetch(groupUrl);
   if (response.status === 501) return;
-  managedGroups = await response.json();
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    throw new Error(result.error || 'Unable to refresh managed groups');
+  }
+  allManagedGroups = await response.json();
+  managedGroups = currentUser?.role === 'admin'
+    ? (selectedUser?.bot_id
+      ? allManagedGroups.filter((group) => String(group.bot_id) === String(selectedUser.bot_id))
+      : [])
+    : allManagedGroups;
+  if (currentUser?.role === 'admin' && adminManagedUserSummary) {
+    if (!selectedUser) {
+      adminManagedUserSummary.textContent = 'Select a user to view the groups detected for their assigned bot.';
+    } else if (!selectedUser.bot_id) {
+      adminManagedUserSummary.textContent = `${selectedUser.telegram_display_name || selectedUser.telegram_username} does not have a bot assigned.`;
+    } else {
+      adminManagedUserSummary.textContent = `${managedGroups.length} group${managedGroups.length === 1 ? '' : 's'} detected for ${selectedUser.telegram_display_name || selectedUser.telegram_username}.`;
+    }
+  }
   const options = managedGroups.map((group) => {
     return `<option value="${group.id}">${escapeHtml(managedGroupOptionLabel(group))}</option>`;
   }).join('');
@@ -1085,7 +1152,9 @@ async function loadManagedGroups() {
           <button type="button" class="secondary verify-group" data-id="${group.id}">Verify bot</button>
           <button type="button" class="danger-link delete-group" data-id="${group.id}">Delete</button>
       </span>
-    </div>`).join('') : '<p class="hint">No managed groups yet. Add a user bot from Admin, then add that Telegram bot to its group.</p>';
+    </div>`).join('') : `<p class="hint">${currentUser?.role === 'admin' && !selectedUser
+      ? 'Search and select a user above.'
+      : 'No groups have been detected for this user bot. Add the bot to a Telegram group, then send a message in that group.'}</p>`;
   managedGroupList.querySelectorAll('.managed-group-row').forEach((row) => {
     const open = () => openGroupActionDialog(row.dataset.id);
     row.addEventListener('click', open);
@@ -1100,8 +1169,8 @@ async function loadManagedGroups() {
     const response = await fetch(`/api/telegram-groups/${button.dataset.id}/verify`, { method: 'POST' });
     const result = await response.json();
     setStatus(response.ok
-      ? `Bot status: ${result.status}${result.can_post_messages ? ', can post' : ', posting permission missing'}`
-      : `Error: ${result.error}`, response.ok && result.present && result.can_post_messages ? 'success' : 'error');
+      ? `Verification message sent to ${result.group_name}.`
+      : `Error: ${result.error}`, response.ok && result.message_sent ? 'success' : 'error');
   }));
   managedGroupList.querySelectorAll('.delete-group').forEach((button) => button.addEventListener('click', async (event) => {
     event.stopPropagation();
@@ -1133,7 +1202,11 @@ managedGroupForm.addEventListener('submit', async (event) => {
 async function loadManagedSchedules({ syncEditor = true } = {}) {
   const response = await fetch('/api/weekly-schedules');
   if (response.status === 501) return;
-  managedSchedules = await response.json();
+  const rows = await response.json();
+  const visibleGroupIds = new Set(managedGroups.map((group) => String(group.id)));
+  managedSchedules = currentUser?.role === 'admin'
+    ? rows.filter((schedule) => visibleGroupIds.has(String(schedule.telegram_group_id)))
+    : rows;
   if (managedScheduleList) {
       managedScheduleList.innerHTML = managedSchedules.map((s) => {
         const releaseDay = DAY_NAMES[s.poll_release_day_of_week];
@@ -1562,11 +1635,13 @@ async function bootstrap() {
     document.querySelectorAll('[data-admin-only]').forEach((element) => {
       element.hidden = currentUser.role !== 'admin';
     });
+    if (currentUser.role === 'admin') await loadAdminManagedUsers();
   } else {
     currentUser = { role: 'admin' };
     document.querySelectorAll('[data-admin-nav]').forEach((element) => {
       element.hidden = false;
     });
+    await loadAdminManagedUsers();
   }
   const releaseTimePicker = document.querySelector('[data-name="poll_release_time"]');
   if (releaseTimePicker) {

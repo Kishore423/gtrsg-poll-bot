@@ -69,3 +69,12 @@ test('profile viewer controls are created by the shared auth client', () => {
   assert.match(source, /id="delete-profile-photo"/);
   assert.match(source, /method: 'DELETE'/);
 });
+
+test('admin Home scopes managed groups through a display-name user search', () => {
+  const html = readFileSync(join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const source = readFileSync(join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(html, /id="admin-managed-user-search"/);
+  assert.match(html, /id="admin-managed-user-options"/);
+  assert.match(source, /telegram_display_name/);
+  assert.match(source, /String\(group\.bot_id\) === String\(selectedUser\.bot_id\)/);
+});

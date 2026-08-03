@@ -10,7 +10,7 @@ const {
   runWeeklySend,
   sendDueConfirmations,
 } = require('./scheduler');
-const { buildConfirmationMessage, NOT_AVAILABLE_OPTION } = require('./pollBuilder');
+const { buildConfirmationMessage, NOT_AVAILABLE_OPTION, escapeHtml } = require('./pollBuilder');
 const { buildConfirmationState } = require('./confirmation');
 const { processTelegramUpdate } = require('./processUpdate');
 const { resolvePollSchedule } = require('./scheduleResolver');
@@ -549,7 +549,34 @@ function createServer(db, telegram, options = {}) {
   }));
 
   app.get('/api/telegram-groups', wrap(async (req, res) => {
-    res.json(db.listTelegramGroups ? await db.listTelegramGroups(scopeGroups(req.appUser)) : []);
+    if (!db.listTelegramGroups) return res.json([]);
+    const requestedBotId = req.appUser?.role === 'admin' && req.query.bot_id
+      ? String(req.query.bot_id)
+      : null;
+    const groupScope = requestedBotId ? { botId: requestedBotId } : scopeGroups(req.appUser);
+    let groups = await db.listTelegramGroups(groupScope);
+
+    if (requestedBotId && req.query.refresh === '1' && db.setTelegramGroupEnabledByChatAndBot) {
+      const me = await telegram.getMe(requestedBotId);
+      const membershipRows = await Promise.all(groups.map(async (group) => {
+        const membership = await telegram.call(requestedBotId, 'getChatMember', {
+          chat_id: group.telegram_chat_id,
+          user_id: me.id,
+        });
+        const active = !['left', 'kicked'].includes(membership.status);
+        if (!active) {
+          await db.setTelegramGroupEnabledByChatAndBot(
+            group.telegram_chat_id,
+            requestedBotId,
+            false,
+          );
+        }
+        return active ? group : null;
+      }));
+      groups = membershipRows.filter(Boolean);
+    }
+
+    res.json(groups);
   }));
 
   app.post('/api/telegram-groups', wrap(async (req, res) => {
@@ -592,15 +619,45 @@ function createServer(db, telegram, options = {}) {
     }
     const present = !['left', 'kicked'].includes(membership.status);
     const can_post_messages = membership.can_post_messages ?? ['creator', 'administrator', 'member'].includes(membership.status);
-    if (present && can_post_messages) {
-      try {
-        await telegram.sendMessage(service, group.telegram_chat_id,
-          `🤖 <b>Bot Verification Successful</b>\n\nThis bot (service: <b>${service}</b>) is successfully linked and has posting permissions in this group.`);
-      } catch (err) {
-        console.error(`Verification message failed for ${group.group_name}:`, err.message);
-      }
+    if (!present) {
+      return res.status(409).json({
+        error: `The bot is no longer a member of ${group.group_name}`,
+        present,
+        status: membership.status,
+        can_post_messages,
+      });
     }
-    res.json({ present, status: membership.status, can_post_messages });
+    if (!can_post_messages) {
+      return res.status(409).json({
+        error: `The bot does not have permission to post in ${group.group_name}`,
+        present,
+        status: membership.status,
+        can_post_messages,
+      });
+    }
+    let verificationMessage;
+    try {
+      verificationMessage = await telegram.sendMessage(
+        service,
+        group.telegram_chat_id,
+        `<b>Bot verification successful</b>\n\nThis bot can send messages to <b>${escapeHtml(group.group_name)}</b>.`
+      );
+    } catch (err) {
+      return res.status(502).json({
+        error: `Telegram did not accept the verification message for ${group.group_name}: ${err.message}`,
+        present,
+        status: membership.status,
+        can_post_messages,
+      });
+    }
+    res.json({
+      present,
+      status: membership.status,
+      can_post_messages,
+      message_sent: true,
+      message_id: verificationMessage?.message_id || null,
+      group_name: group.group_name,
+    });
   }));
 
   app.get('/api/weekly-schedules', wrap(async (req, res) => {

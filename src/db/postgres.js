@@ -289,11 +289,12 @@ function createPostgresDb(sql = createSql()) {
             coalesce(bot_ref::text, bot_id) as bot_id, bot_ref, enabled
           from telegram_groups
           where coalesce(bot_ref::text, bot_id) = ${String(botId)}
+            and enabled
           order by group_name`;
       }
       return sql`select id,telegram_chat_id::text,group_name,service,
           coalesce(bot_ref::text, bot_id) as bot_id, bot_ref, enabled
-        from telegram_groups order by group_name`;
+        from telegram_groups where enabled order by group_name`;
     },
 
     async assignTelegramGroupsToBot(oldBotId, botId) {
@@ -596,6 +597,15 @@ function createPostgresDb(sql = createSql()) {
           updated_at=now()
         returning id`;
       return row.id;
+    },
+    async setTelegramGroupEnabledByChatAndBot(telegramChatId, botId, enabled) {
+      const rows = await sql`
+        update telegram_groups
+        set enabled=${Boolean(enabled)}, updated_at=now()
+        where telegram_chat_id=${telegramChatId}
+          and coalesce(bot_ref::text, bot_id)=${String(botId)}
+        returning id`;
+      return rows.length > 0;
     },
     async getTelegramGroup(id) {
       const [row] = await sql`select id,telegram_chat_id::text,group_name,service,
