@@ -98,6 +98,11 @@
     .nav-links a:hover { background: var(--bg); color: var(--ink); }
     .nav-links a.active { background: var(--green-light); color: var(--green-dark); font-weight: 600; }
 
+    .nav-spacer { flex: 1; }
+    .nav-user { min-width: 0; display: flex; align-items: center; gap: 0.5rem; margin-left: auto; font-size: 0.88rem; font-weight: 600; }
+    .nav-user-avatar { width: 1.8rem; height: 1.8rem; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto; background: var(--green-light); color: var(--green-dark); font-size: 0.78rem; }
+    .nav-user-name { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
     header { margin-bottom: 1.75rem; padding-top: 0.5rem; }
 
     h1 {
@@ -620,6 +625,12 @@
       }
     }
     @media (max-width: 480px) {
+      nav { padding: 0 0.75rem; gap: 0.45rem; }
+      .nav-brand { font-size: 0.9rem; }
+      .nav-links a { padding: 0.4rem 0.55rem; font-size: 0.82rem; }
+      .nav-user { gap: 0.3rem; font-size: 0.8rem; }
+      .nav-user-avatar { display: none; }
+      .nav-user-name { max-width: 6.5rem; }
       .template-release-grid {
         grid-template-columns: 1fr;
       }
@@ -813,6 +824,11 @@
       <li><a href="/polls.html">Polls</a></li>
       <li data-admin-only data-admin-nav hidden><a href="/admin">Admin</a></li>
     </ul>
+    <div class="nav-spacer"></div>
+    <div id="nav-user" class="nav-user" hidden aria-label="Signed-in user">
+      <span id="nav-user-avatar" class="nav-user-avatar" aria-hidden="true"></span>
+      <span id="nav-user-name" class="nav-user-name"></span>
+    </div>
   </nav>
 
   <main>

@@ -123,7 +123,9 @@ Vercel Cron** for hosting/scheduling.
   get a generic response but no OTP/session. A private `/start` to the login bot
   only enrolls that conversation for future delivery, and its webhook ignores
   group/poll activity. `app_users` stores no email; Telegram ID is the
-  authorization key, while handle and display name are metadata. The shared
+  authorization key, while handle and display name are metadata. Home, Polls,
+  and Admin show the admin-managed `telegram_display_name` in the navbar after
+  authentication, falling back to the Telegram handle when needed. The shared
   login UI exposes an editable six-digit field immediately after **Send code**
   and enables verification when the challenge response arrives.
 - Webhook updates are de-duplicated (`beginWebhookEvent`/`finishWebhookEvent`);

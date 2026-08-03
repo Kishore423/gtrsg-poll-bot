@@ -124,6 +124,7 @@ async function loadAdminAfterAuth() {
   const me = await fetch('/api/me');
   if (!me.ok) return window.gtrsgAuth.showLogin('Admin access required.');
   currentUser = await me.json();
+  window.gtrsgAuth.renderUser(currentUser);
   if (currentUser.role !== 'admin') {
     window.location.href = '/';
     return;

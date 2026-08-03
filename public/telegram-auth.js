@@ -105,6 +105,23 @@
     sessionStorage.removeItem(challengeKey);
   }
 
+  function renderUser(user) {
+    const container = document.getElementById('nav-user');
+    const name = document.getElementById('nav-user-name');
+    const avatar = document.getElementById('nav-user-avatar');
+    if (!container || !name || !user) return;
+
+    const displayName = user.telegram_display_name
+      || (user.telegram_username ? `@${user.telegram_username}` : '')
+      || 'Telegram user';
+    name.textContent = displayName;
+    name.title = displayName;
+    if (avatar) {
+      avatar.textContent = displayName.replace(/^@/, '').trim().charAt(0).toUpperCase() || 'T';
+    }
+    container.hidden = false;
+  }
+
   window.fetch = async (input, init = {}) => {
     const url = typeof input === 'string' ? input : input.url;
     const isManagementApi = url.startsWith('/api/') && !url.startsWith('/api/auth/');
@@ -237,6 +254,7 @@
     init,
     showLogin,
     clearSession,
+    renderUser,
     hasSession: () => Boolean(session?.access_token),
   };
 })();

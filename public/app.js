@@ -1558,6 +1558,7 @@ async function bootstrap() {
       return;
     }
     currentUser = await meResponse.json();
+    window.gtrsgAuth.renderUser(currentUser);
     document.querySelectorAll('[data-admin-only]').forEach((element) => {
       element.hidden = currentUser.role !== 'admin';
     });

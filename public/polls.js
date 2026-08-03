@@ -270,6 +270,14 @@ async function bootstrap() {
     window.gtrsgAuth.showLogin();
     return;
   }
+  if (config.required) {
+    const meResponse = await fetch('/api/me');
+    if (!meResponse.ok) {
+      window.gtrsgAuth.showLogin('Session expired. Sign in with Telegram again.');
+      return;
+    }
+    window.gtrsgAuth.renderUser(await meResponse.json());
+  }
   await loadPollsPage();
 }
 

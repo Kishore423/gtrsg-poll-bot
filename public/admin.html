@@ -18,6 +18,10 @@
     .nav-links { display:flex; gap:.25rem; list-style:none; margin:0; padding:0; }
     .nav-links a { display:block; padding:.4rem .85rem; border-radius:8px; color:var(--ink-soft); text-decoration:none; font-weight:500; font-size:.9rem; }
     .nav-links a.active { background:var(--green-light); color:var(--green-dark); font-weight:600; }
+    .nav-spacer { flex:1; }
+    .nav-user { min-width:0; display:flex; align-items:center; gap:.5rem; margin-left:auto; font-size:.88rem; font-weight:600; }
+    .nav-user-avatar { width:1.8rem; height:1.8rem; border-radius:50%; display:grid; place-items:center; flex:0 0 auto; background:var(--green-light); color:var(--green-dark); font-size:.78rem; }
+    .nav-user-name { max-width:14rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     main { max-width:960px; margin:0 auto; padding:2rem 1.5rem 5rem; }
     header { margin-bottom:1.5rem; }
     h1 { margin:0 0 .35rem; font-size:1.45rem; }
@@ -65,6 +69,14 @@
     .telegram-change-account { min-height:3rem; background:#fff; color:var(--ink); border:1px solid var(--border); }
     .telegram-setup { margin:0; color:var(--ink-soft); font-size:.88rem; line-height:1.45; }
     .telegram-setup a { color:#147fb1; font-weight:700; }
+    @media (max-width:640px) {
+      nav { padding:0 .75rem; gap:.45rem; }
+      .nav-brand { font-size:.9rem; }
+      .nav-links a { padding:.4rem .55rem; font-size:.82rem; }
+      .nav-user { gap:.3rem; font-size:.8rem; }
+      .nav-user-avatar { display:none; }
+      .nav-user-name { max-width:6.5rem; }
+    }
   </style>
 </head>
 <body>
@@ -99,6 +111,11 @@
       <li><a href="/polls.html">Polls</a></li>
       <li><a href="/admin" class="active">Admin</a></li>
     </ul>
+    <div class="nav-spacer"></div>
+    <div id="nav-user" class="nav-user" hidden aria-label="Signed-in user">
+      <span id="nav-user-avatar" class="nav-user-avatar" aria-hidden="true"></span>
+      <span id="nav-user-name" class="nav-user-name"></span>
+    </div>
   </nav>
 
   <main>

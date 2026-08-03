@@ -401,6 +401,9 @@ live only in Vercel env + the local (gitignored) `.env`.
 - **Production auth is enabled**: Vercel sets `REQUIRE_ADMIN_AUTH=true`, so
   management APIs require a valid Telegram session. Existing enabled users are
   mapped by immutable Telegram ID and the Kishore account has the admin role.
+  Home, Polls, and Admin show the user's admin-managed
+  `telegram_display_name` in the navbar after authentication, with the Telegram
+  handle as a fallback when no display name is set.
 - `webhook_events` had traffic (20 rows) → both bots' production webhooks are
   registered and delivering.
 - PSA group's observed weekly schedule at the time: release Fri 17:00,
