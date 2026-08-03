@@ -288,6 +288,108 @@ test('tenant scoping limits managed groups to the caller bot', async () => {
       : null });
 });
 
+test('tenant scoping permits own templates and custom replacements but blocks other bots', async () => {
+  const groupA = {
+    id: '11111111-1111-4111-8111-111111111111',
+    telegram_chat_id: '-1001',
+    group_name: 'User A group',
+    service: 'WHCL',
+    bot_id: 'bot-a',
+  };
+  const groupB = {
+    id: '22222222-2222-4222-8222-222222222222',
+    telegram_chat_id: '-1002',
+    group_name: 'User B group',
+    service: 'WHCL',
+    bot_id: 'bot-b',
+  };
+  const schedules = new Map();
+  const deletedPolls = [];
+  const createdPolls = [];
+  const db = {
+    async getTelegramGroup(id) {
+      return [groupA, groupB].find((group) => group.id === id) || null;
+    },
+    async upsertManagedWeeklySchedule(body) {
+      const schedule = { id: `${body.telegram_group_id}-schedule`, bot_id: 'bot-a', ...body };
+      schedules.set(schedule.id, schedule);
+      return schedule;
+    },
+    async getWeeklySchedule(id) {
+      return schedules.get(id) || null;
+    },
+    async getActivePollForDate(groupId) {
+      return groupId === groupA.id
+        ? { id: 'default-poll-a', status: 'scheduled', is_custom: false }
+        : null;
+    },
+    async deleteScheduledPoll(id) {
+      deletedPolls.push(id);
+    },
+    async createScheduledEvent(payload) {
+      createdPolls.push(payload);
+      return 'custom-poll-a';
+    },
+  };
+  const server = createServer(db, makeTelegram(), {
+    requireAdminAuth: true,
+    verifyUser: async (req) => req.headers.authorization === 'Bearer user-a'
+      ? { id: 'user-a', telegram_user_id: '1003', role: 'user', bot_id: 'bot-a' }
+      : null,
+  }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const headers = { Authorization: 'Bearer user-a' };
+  const template = {
+    poll_release_day_of_week: 3,
+    poll_release_time: '17:00',
+    confirmation_day_of_week: 5,
+    confirmation_time: '12:00',
+    shifts: [{ label: '0800-1700', start_time: '08:00', end_time: '17:00', capacity: 1 }],
+  };
+  try {
+    const ownTemplate = await fetch(`${baseUrl}/api/weekly-schedules`, json('PUT', {
+      ...template,
+      telegram_group_id: groupA.id,
+    }, headers));
+    assert.equal(ownTemplate.status, 200);
+    const scheduleA = await ownTemplate.json();
+
+    const foreignTemplate = await fetch(`${baseUrl}/api/weekly-schedules`, json('PUT', {
+      ...template,
+      telegram_group_id: groupB.id,
+    }, headers));
+    assert.equal(foreignTemplate.status, 404);
+
+    const customPayload = {
+      telegram_group_id: groupA.id,
+      weekly_schedule_id: scheduleA.id,
+      event_date: '2099-01-05',
+      poll_question: 'Custom wheelchair poll',
+      confirmation_at: '2099-01-01T12:00',
+      is_custom: true,
+      shifts: template.shifts,
+    };
+    const ownCustom = await fetch(`${baseUrl}/api/scheduled-polls`, json('POST', customPayload, headers));
+    assert.equal(ownCustom.status, 201);
+    assert.deepEqual(deletedPolls, ['default-poll-a']);
+    assert.equal(createdPolls[0].telegram_group_id, groupA.id);
+    assert.equal(createdPolls[0].is_custom, true);
+
+    const foreignSchedule = { ...template, id: 'foreign-schedule', telegram_group_id: groupB.id, bot_id: 'bot-b' };
+    schedules.set(foreignSchedule.id, foreignSchedule);
+    const foreignCustom = await fetch(`${baseUrl}/api/scheduled-polls`, json('POST', {
+      ...customPayload,
+      telegram_group_id: groupB.id,
+      weekly_schedule_id: foreignSchedule.id,
+    }, headers));
+    assert.equal(foreignCustom.status, 404);
+    assert.equal(createdPolls.length, 1);
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
+});
+
 test('admins are not filtered by bot tenancy', async () => {
   await withServer(async ({ db, baseUrl }) => {
     await db.upsertTelegramGroupFromWebhook({

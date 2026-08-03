@@ -241,6 +241,10 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   The Polls page table is intentionally ordered by event date ascending
   (earliest first, latest last), both from `listScheduledPolls()` and in the
   frontend before rendering/filtering.
+  Home and Polls both keep a role-gated **Admin** navbar item: `/api/me` reveals
+  it for admins on every page load, while normal users never see it. Normal-user
+  managed groups, weekly templates, and custom replacement polls remain scoped
+  server-side to the bot assigned to that user.
   The filter bar filters by event date, Telegram group, and poll type (`test`,
   `custom`, `batch_default`); it intentionally does not include status or bot
   type filters because the Telegram group selection already identifies the group

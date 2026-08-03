@@ -63,6 +63,17 @@ test('every signed-in page includes the shared account actions', () => {
   }
 });
 
+test('Home and Polls expose an Admin nav item only through role-gated markup', () => {
+  for (const file of ['index.html', 'polls.html']) {
+    const html = readFileSync(join(__dirname, '..', 'public', file), 'utf8');
+    assert.match(html, /<li[^>]*data-admin-nav[^>]*hidden[^>]*><a href="\/admin">Admin<\/a><\/li>/);
+  }
+
+  const pollsSource = readFileSync(join(__dirname, '..', 'public', 'polls.js'), 'utf8');
+  assert.match(pollsSource, /element\.hidden = user\?\.role !== 'admin'/);
+  assert.match(pollsSource, /renderRoleNavigation\(currentUser\)/);
+});
+
 test('profile viewer controls are created by the shared auth client', () => {
   const source = readFileSync(join(__dirname, '..', 'public', 'telegram-auth.js'), 'utf8');
   assert.match(source, /id="close-profile-viewer"/);

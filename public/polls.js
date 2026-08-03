@@ -23,6 +23,12 @@ let managedGroups  = [];
 let scheduledPolls = [];
 let visiblePolls = [];
 
+function renderRoleNavigation(user) {
+  document.querySelectorAll('[data-admin-nav]').forEach((element) => {
+    element.hidden = user?.role !== 'admin';
+  });
+}
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
@@ -276,7 +282,11 @@ async function bootstrap() {
       window.gtrsgAuth.showLogin('Session expired. Sign in with Telegram again.');
       return;
     }
-    window.gtrsgAuth.renderUser(await meResponse.json());
+    const currentUser = await meResponse.json();
+    window.gtrsgAuth.renderUser(currentUser);
+    renderRoleNavigation(currentUser);
+  } else {
+    renderRoleNavigation({ role: 'admin' });
   }
   await loadPollsPage();
 }
