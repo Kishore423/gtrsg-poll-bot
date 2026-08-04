@@ -33,6 +33,8 @@
 > auto-detected when a user's bot is added to Telegram, the **Verify bot** button
 > remains beside each group, and clicking a group opens a popup for **Weekly
 > default template**, **Skip days**, or **Custom poll**. Those workflow cards
+> have no manual group-delete control; a Telegram membership removal disables
+> and hides that bot/group row automatically.
 > bind to the clicked group without another Telegram-group dropdown. Test-poll
 > actions remain inside the weekly template and one-off poll sections. All three
 > workflows render as full-width command rows with Lucide icons, supporting

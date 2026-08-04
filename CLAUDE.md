@@ -80,8 +80,9 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   refresh read-only bot names/handles from Telegram. `/api/admin/*` is protected
   by `requireAdmin` when auth is on.
 - Task 7 dashboard flow: managed groups are auto-detected by webhook updates and
-  rendered as clickable rows. Each row still has **Verify bot** and delete
-  actions; clicking the row opens a popup with **Weekly default template**,
+  rendered as clickable rows. Each row keeps **Verify bot** but has no manual
+  delete action; Telegram membership removal disables and hides the row
+  automatically. Clicking the row opens a popup with **Weekly default template**,
   **Skip days**, and **Custom poll** actions. The template, skip-days, and
   one-off poll cards stay hidden until a group workflow is chosen. Those workflow
   cards bind to the clicked group without showing another Telegram-group

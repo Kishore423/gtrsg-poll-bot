@@ -99,6 +99,7 @@ test('managed group labels use only the stored Telegram group name', () => {
 test('managed workflows stay bound to the clicked group without duplicate selectors', () => {
   const html = readFileSync(join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const theme = readFileSync(join(__dirname, '..', 'public', 'theme.css'), 'utf8');
+  const source = readFileSync(join(__dirname, '..', 'public', 'app.js'), 'utf8');
   assert.doesNotMatch(html, /id="unified-group-select"/);
   assert.doesNotMatch(html, /class="managed-group-select"/);
   assert.doesNotMatch(html, /data-group-workflow="test"/);
@@ -111,6 +112,8 @@ test('managed workflows stay bound to the clicked group without duplicate select
   assert.match(html, /data-lucide="calendar-x-2"/);
   assert.match(html, /data-lucide="square-pen"/);
   assert.match(theme, /\.group-dialog-actions\s*\{[\s\S]*?grid-template-columns:\s*1fr/);
+  assert.doesNotMatch(source, /class="danger-link delete-group"/);
+  assert.doesNotMatch(source, /querySelectorAll\('\.delete-group'\)/);
   assert.ok(
     html.indexOf('</main>') < html.indexOf('id="group-action-dialog"'),
     'viewport dialog must be outside the transformed main element',

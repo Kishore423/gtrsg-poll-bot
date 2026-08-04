@@ -1225,7 +1225,6 @@ async function loadManagedGroups() {
         <span>${servicePill(group.service || group.bot_id)} <strong>${escapeHtml(managedGroupOptionLabel(group))}</strong> (${escapeHtml(group.telegram_chat_id)})</span>
         <span>
           <button type="button" class="secondary verify-group" data-id="${group.id}"><i data-lucide="badge-check" aria-hidden="true"></i> Verify bot</button>
-          <button type="button" class="danger-link delete-group" data-id="${group.id}"><i data-lucide="trash-2" aria-hidden="true"></i> Delete</button>
       </span>
     </div>`).join('') : `<p class="hint">${currentUser?.role === 'admin' && !selectedUser
       ? 'Search and select a user above.'
@@ -1246,19 +1245,6 @@ async function loadManagedGroups() {
     setStatus(response.ok
       ? `Verification message sent to ${result.group_name}.`
       : `Error: ${result.error}`, response.ok && result.message_sent ? 'success' : 'error');
-  }));
-  managedGroupList.querySelectorAll('.delete-group').forEach((button) => button.addEventListener('click', async (event) => {
-    event.stopPropagation();
-    if (!window.confirm('Delete this managed group?')) return;
-    const response = await fetch(`/api/telegram-groups/${button.dataset.id}`, { method: 'DELETE' });
-    if (response.ok) {
-      if (selectedManagedGroupId === button.dataset.id) selectedManagedGroupId = '';
-      await loadManagedGroups();
-      setStatus('Group deleted.', 'success');
-    } else {
-      const result = await response.json();
-      setStatus(`Error: ${result.error}`, 'error');
-    }
   }));
 }
 
