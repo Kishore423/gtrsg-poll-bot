@@ -250,6 +250,7 @@ function createMemoryDb() {
       telegram_username = null,
       telegram_display_name = null,
       profile_photo_data = null,
+      login_bot_verified_at = null,
     }) {
       const user = {
         id: `app-user-${++appUserSeq}`,
@@ -257,6 +258,7 @@ function createMemoryDb() {
         telegram_username,
         telegram_display_name,
         profile_photo_data,
+        login_bot_verified_at,
         role,
         bot_id: bot_id ? String(bot_id) : null,
         enabled: true,
@@ -289,12 +291,16 @@ function createMemoryDb() {
       telegram_user_id,
       telegram_username = null,
       telegram_display_name = null,
+      login_bot_verified_at,
     }) {
       const user = appUsers.find((item) => item.id === String(id));
       if (!user) return null;
       user.telegram_user_id = telegram_user_id ? String(telegram_user_id) : null;
       user.telegram_username = telegram_username;
       user.telegram_display_name = telegram_display_name;
+      if (login_bot_verified_at !== undefined) {
+        user.login_bot_verified_at = login_bot_verified_at;
+      }
       return { ...user };
     },
 

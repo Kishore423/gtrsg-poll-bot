@@ -245,7 +245,9 @@ function createServer(db, telegram, options = {}) {
     if (!db.listAppUsers) return res.status(501).json({ error: 'Supabase production database is required' });
     const storedUsers = await db.listAppUsers();
     const users = await Promise.all(storedUsers.map(async (user) => {
-      if (!options.syncTelegramUserIdentity || !user.telegram_user_id) return user;
+      if (!options.syncTelegramUserIdentity
+          || !user.telegram_user_id
+          || !user.login_bot_verified_at) return user;
       try {
         return await options.syncTelegramUserIdentity(user) || user;
       } catch (error) {

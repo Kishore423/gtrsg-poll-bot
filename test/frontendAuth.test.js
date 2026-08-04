@@ -162,6 +162,8 @@ test('admin provisioning and sign-in require only a Telegram handle', () => {
   assert.match(adminScript, /previous bot and its groups will be disabled/);
   assert.match(adminScript, /Verified by Login_bot/);
   assert.match(adminScript, /Awaiting Login_bot handle verification/);
+  assert.match(adminScript, /user\.login_bot_verified_at/);
+  assert.doesNotMatch(adminScript, /user\.telegram_user_id\s*\n\s*\?/);
   assert.match(adminScript, /Bot identities refreshed/);
   assert.match(adminScript, /open Login_bot and press Start/);
 });

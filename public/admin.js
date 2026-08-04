@@ -48,7 +48,7 @@ async function loadUsers() {
     const bot = user.bot || {};
     return `<tr>
       <td>${telegramLabel(user)}<br><span class="muted">${
-        user.telegram_user_id
+        user.login_bot_verified_at
           ? `Verified by Login_bot &middot; Telegram ID ${escapeHtml(user.telegram_user_id)}`
           : 'Awaiting Login_bot handle verification'
       }</span></td>

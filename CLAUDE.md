@@ -46,6 +46,12 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   leaves `telegram_user_id` unbound, sends generic correction guidance through
   Login_bot, and remains **Awaiting Login_bot handle verification** in Admin.
   A successful match binds the immutable ID and shows **Verified by Login_bot**.
+- `app_users.login_bot_verified_at`, not `telegram_user_id`, is the authoritative
+  Login_bot enrollment state. Legacy migration IDs were observed through polling
+  bots and remain unverified. A matching private Login_bot `/start` sets the
+  timestamp; OTP delivery, session issuance, and the Admin verified label all
+  require it. The schema migration only backfills users with a previously
+  successful Login_bot OTP delivery.
 - Telegram can only refresh a private user's handle through Login_bot after that
   user has opened the bot. The Admin roster treats Telegram's `chat not found`
   response as an unavailable refresh, retains the cached handle, and prompts the

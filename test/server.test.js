@@ -75,6 +75,7 @@ test('admin roster refreshes a bound user handle from Telegram', async () => {
       telegram_user_id: '1001',
       telegram_username: 'old_handle',
       telegram_display_name: 'Operations User',
+      login_bot_verified_at: new Date().toISOString(),
     });
     const response = await fetch(`${baseUrl}/api/admin/users`, {
       headers: { Authorization: 'Bearer admin' },
@@ -102,6 +103,7 @@ test('admin roster treats a private Login_bot chat that has not started as unava
       telegram_user_id: '1001',
       telegram_username: 'cached_handle',
       telegram_display_name: 'Pending Login Bot User',
+      login_bot_verified_at: new Date().toISOString(),
     });
     const response = await fetch(`${baseUrl}/api/admin/users`, {
       headers: { Authorization: 'Bearer admin' },

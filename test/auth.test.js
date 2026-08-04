@@ -42,6 +42,7 @@ async function seeded({ nowMs = Date.now() } = {}) {
     telegram_user_id: '977476515',
     telegram_username: 'yidan',
     telegram_display_name: 'Yi Dan',
+    login_bot_verified_at: new Date(nowMs).toISOString(),
     role: 'user',
     bot_id: botId,
   });
@@ -49,6 +50,7 @@ async function seeded({ nowMs = Date.now() } = {}) {
     telegram_user_id: '2132609363',
     telegram_username: 'kishore',
     telegram_display_name: 'Kishore',
+    login_bot_verified_at: new Date(nowMs).toISOString(),
     role: 'admin',
   });
   let clock = nowMs;
@@ -107,6 +109,33 @@ test('numeric Telegram IDs can request OTPs without using mutable handles', asyn
   await auth.requestOtp('2132609363');
   assert.equal(telegram.messages[0].service, 'LOGIN');
   assert.equal(telegram.messages[0].chatId, '2132609363');
+});
+
+test('a migrated Telegram ID is not Login_bot verified until the user presses Start', async () => {
+  const { auth, db, telegram } = await seeded();
+  const userId = await db.createAppUser({
+    telegram_user_id: '333444555',
+    telegram_username: 'migrated_user',
+    telegram_display_name: 'Migrated User',
+  });
+
+  await auth.requestOtp('@migrated_user');
+  assert.equal(telegram.messages.length, 0);
+  const unverifiedToken = signSession(SESSION_SECRET, '333444555', Date.now(), 60);
+  assert.equal(await auth.verifyUser(requestWith(unverifiedToken)), null);
+
+  await auth.completeFromUpdate('LOGIN', {
+    message: {
+      text: '/start',
+      chat: { id: 333444555, type: 'private' },
+      from: { id: 333444555, username: 'migrated_user' },
+    },
+  });
+  const verified = (await db.listAppUsers()).find((user) => user.id === userId);
+  assert.ok(verified.login_bot_verified_at);
+
+  await auth.requestOtp('@migrated_user');
+  assert.equal(telegram.messages.at(-1).chatId, '333444555');
 });
 
 test('OTP requests register the dedicated login webhook once per runtime', async () => {

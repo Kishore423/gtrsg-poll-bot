@@ -7,6 +7,8 @@ const { createTelegramClient } = require('../src/telegram');
 const { encryptToken, generateWebhookSecret } = require('../src/crypto');
 
 const USERS = [
+  // These immutable IDs were observed by the polling bots. Seeding them maps
+  // historical ownership but does not verify Login_bot enrollment.
   {
     telegram_user_id: '1012500255',
     telegram_username: 'sonia_mala',

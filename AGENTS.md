@@ -70,6 +70,10 @@
 > Telegram can only refresh a private user's handle after that user opens
 > Login_bot. A `chat not found` refresh retains cached data and prompts the user
 > to press Start; genuine Telegram API failures remain errors.
+> `app_users.login_bot_verified_at`, not a prefilled `telegram_user_id`, proves
+> Login_bot enrollment. Poll-bot-observed migration IDs remain unverified until
+> a matching private Login_bot `/start`; OTP and sessions must fail closed until
+> then. Existing successful Login_bot OTP deliveries may be backfilled.
 
 Codex-facing adapter. `CLAUDE.md` is the canonical source of project knowledge —
 read it for the full architecture. **Two agents (Claude Code + Codex) work on
@@ -150,12 +154,17 @@ Vercel Cron** for hosting/scheduling.
   through
   the dedicated `LOGIN` bot configured by `TELEGRAM_LOGIN_BOT_TOKEN`. Polling-bot
   assignments are never used for authentication delivery.
+  A stored Telegram ID alone does not prove Login_bot enrollment:
+  `app_users.login_bot_verified_at` must be set by a matching private `/start`
+  (or a backfilled successful Login_bot OTP delivery) before OTP delivery or
+  session issuance is allowed.
   `/api/auth/telegram/otp/verify` consumes the five-minute browser-bound challenge
   and issues a signed 12-hour session. Codes allow five attempts and successful
   sends have a one-minute cooldown plus a five-per-hour cap. Unknown or
   not-yet-bound identities get a generic response but no OTP/session. The login
-  bot webhook ignores group/poll activity. `app_users` stores no email; Telegram ID is the
-  authorization key, while handle and display name are metadata. Home, Polls,
+  bot webhook ignores group/poll activity. `app_users` stores no email; the
+  Telegram ID plus explicit Login_bot verification state form the authorization
+  identity, while handle and display name are metadata. Home, Polls,
   and Admin show the admin-managed `telegram_display_name` in the navbar after
   authentication, falling back to the Telegram handle when needed. Clicking the
   identity opens a shared account menu with profile-picture upload and Sign out.

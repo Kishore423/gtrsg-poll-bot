@@ -146,7 +146,7 @@ function createTelegramAuth({
     const user = db.getAppUserByTelegramIdentifier
       ? await db.getAppUserByTelegramIdentifier(identifier)
       : await db.getAppUserByTelegramId(identifier);
-    let boundUser = user?.telegram_user_id ? user : null;
+    let boundUser = user?.telegram_user_id && user.login_bot_verified_at ? user : null;
     if (boundUser) {
       boundUser = await syncUserIdentity(boundUser).catch(() => boundUser);
     }
@@ -230,7 +230,7 @@ function createTelegramAuth({
     }
 
     const user = await db.getAppUserByTelegramId(attempt.telegram_user_id);
-    if (!user || user.enabled === false) {
+    if (!user || user.enabled === false || !user.login_bot_verified_at) {
       throw authError('This Telegram account is not approved');
     }
     const accessToken = signSession(
@@ -251,12 +251,12 @@ function createTelegramAuth({
     if (!start) return null;
     if (String(service).toUpperCase() !== String(authBotKey).toUpperCase()) return null;
     let user = await db.getAppUserByTelegramId(start.telegramUserId);
-    if (user && db.setAppUserTelegramIdentity
-        && start.telegramUsername !== (user.telegram_username || null)) {
+    if (user && db.setAppUserTelegramIdentity) {
       user = await db.setAppUserTelegramIdentity(user.id, {
         telegram_user_id: start.telegramUserId,
         telegram_username: start.telegramUsername,
         telegram_display_name: user.telegram_display_name,
+        login_bot_verified_at: new Date(now()).toISOString(),
       });
     }
     if (!user && start.telegramUsername && db.getAppUserByTelegramIdentifier) {
@@ -266,6 +266,7 @@ function createTelegramAuth({
           telegram_user_id: start.telegramUserId,
           telegram_username: start.telegramUsername,
           telegram_display_name: approved.telegram_display_name,
+          login_bot_verified_at: new Date(now()).toISOString(),
         });
       }
     }
@@ -286,12 +287,13 @@ function createTelegramAuth({
     const claims = verifySession(sessionSecret, bearerToken(req), now());
     if (!claims) return null;
     const appUser = await db.getAppUserByTelegramId(claims.sub);
-    if (!appUser || appUser.enabled === false) return null;
+    if (!appUser || appUser.enabled === false || !appUser.login_bot_verified_at) return null;
     return {
       id: appUser.id,
       telegram_user_id: String(appUser.telegram_user_id),
       telegram_username: appUser.telegram_username || null,
       telegram_display_name: appUser.telegram_display_name || null,
+      login_bot_verified_at: appUser.login_bot_verified_at,
       profile_photo_data: appUser.profile_photo_data || null,
       role: appUser.role,
       bot_id: appUser.bot_id || null,
