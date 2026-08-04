@@ -20,8 +20,8 @@
     const hasNewIcons = mutations.some((mutation) =>
       [...mutation.addedNodes].some((node) =>
         node.nodeType === 1 && (
-          node.matches?.('[data-lucide]') ||
-          node.querySelector?.('[data-lucide]')
+          node.matches?.('[data-lucide]:not(svg)') ||
+          node.querySelector?.('[data-lucide]:not(svg)')
         )
       )
     );

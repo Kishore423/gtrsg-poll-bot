@@ -35,7 +35,9 @@
 > workflows render as full-width command rows with Lucide icons, supporting
 > text, and consistent depth states. Home, Polls, and Admin share
 > `public/theme.css` / `public/theme.js`, including restrained perspective,
-> layered shadows, inset controls, and reduced-motion fallbacks.
+> layered shadows, inset controls, and reduced-motion fallbacks. Dynamic icon
+> hydration targets only non-SVG `[data-lucide]` placeholders because generated
+> Lucide SVGs retain that attribute and must not retrigger hydration.
 > Admins first search the Admin roster by display name; selecting one user scopes
 > group rows and managed schedules to that user's single `bot_id`. **Verify bot**
 > reports success only after Telegram accepts a test message sent by that bot to

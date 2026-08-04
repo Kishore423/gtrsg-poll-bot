@@ -123,8 +123,59 @@ test('shared dimensional theme and icon runtime load on every application page',
   }
 
   const theme = readFileSync(join(__dirname, '..', 'public', 'theme.css'), 'utf8');
+  const runtime = readFileSync(join(__dirname, '..', 'public', 'theme.js'), 'utf8');
   assert.match(theme, /perspective:/);
   assert.match(theme, /prefers-reduced-motion:\s*reduce/);
+  assert.match(runtime, /\[data-lucide\]:not\(svg\)/);
+  assert.doesNotMatch(runtime, /node\.matches\?\.\('\[data-lucide\]'\)/);
+});
+
+test('dynamic icon hydration ignores generated Lucide SVGs', () => {
+  let observerCallback;
+  let renderCount = 0;
+  const context = {
+    document: {
+      body: { classList: { add() {} } },
+    },
+    MutationObserver: class {
+      constructor(callback) {
+        observerCallback = callback;
+      }
+
+      observe() {}
+    },
+    window: {
+      lucide: {
+        createIcons() {
+          renderCount += 1;
+        },
+      },
+    },
+  };
+
+  vm.runInNewContext(
+    readFileSync(join(__dirname, '..', 'public', 'theme.js'), 'utf8'),
+    context,
+  );
+  assert.equal(renderCount, 1);
+
+  observerCallback([{
+    addedNodes: [{
+      nodeType: 1,
+      matches: () => false,
+      querySelector: () => null,
+    }],
+  }]);
+  assert.equal(renderCount, 1);
+
+  observerCallback([{
+    addedNodes: [{
+      nodeType: 1,
+      matches: () => true,
+      querySelector: () => null,
+    }],
+  }]);
+  assert.equal(renderCount, 2);
 });
 
 test('weekly and one-off forms expose editable confirmation timing', () => {
