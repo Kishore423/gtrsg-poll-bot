@@ -193,6 +193,26 @@ test('admin APIs create a user bot mapping, register webhook, and sync bot renam
       { botId: body.bot_id, name: 'Edited User Bot' },
       { botId: body.bot_id, name: 'Renamed Bot' },
     ]);
+
+    const unassignedRes = await fetch(`${baseUrl}/api/admin/users`, json('POST', {
+      telegram_username: 'unassigned_user',
+      telegram_display_name: 'Unassigned User',
+      role: 'user',
+    }, headers));
+    assert.equal(unassignedRes.status, 201);
+    const unassigned = await unassignedRes.json();
+    assert.equal(unassigned.bot_id, null);
+    assert.equal(webhooks.length, 1);
+
+    const assignedRes = await fetch(`${baseUrl}/api/admin/users/${unassigned.id}`, json('PATCH', {
+      bot_token: 'assigned-later-token',
+    }, headers));
+    assert.equal(assignedRes.status, 200);
+    const assigned = await assignedRes.json();
+    assert.ok(assigned.bot_id);
+    assert.equal(assigned.bot.telegram_username, 'new_user_bot');
+    assert.equal(webhooks.length, 2);
+    assert.equal(webhooks.at(-1).botId, assigned.bot_id);
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
     if (previousKey === undefined) delete process.env.BOT_TOKEN_ENC_KEY;

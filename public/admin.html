@@ -171,7 +171,7 @@
         <label>Telegram handle<input name="telegram_username" placeholder="@username" required /></label>
         <label>Display name<input name="telegram_display_name" /></label>
         <label>Role<select name="role"><option value="user">User</option><option value="admin">Admin</option></select></label>
-        <label>BotFather token<input name="bot_token" autocomplete="off" placeholder="Required for users" /></label>
+        <label>BotFather token (optional)<input name="bot_token" autocomplete="off" placeholder="Leave blank to assign later" /></label>
         <button type="submit" class="primary"><i data-lucide="user-plus" aria-hidden="true"></i> Add user</button>
       </form>
     </section>
@@ -201,6 +201,7 @@
         <label class="full">Display name<input name="telegram_display_name" maxlength="80" /></label>
         <label>Role<select name="role"><option value="user">User</option><option value="admin">Admin</option></select></label>
         <label class="checkbox-field"><input name="enabled" type="checkbox" /> Account enabled</label>
+        <label class="full">Assign BotFather token<input name="bot_token" autocomplete="off" placeholder="Available while no bot is assigned" /></label>
         <label class="full">Bot display name<input name="bot_name" maxlength="64" /></label>
         <p id="edit-user-bot-handle" class="muted full"></p>
         <p id="edit-user-status" class="status full" aria-live="polite"></p>

@@ -64,6 +64,8 @@ async function loadUsers() {
       editUserForm.elements.telegram_display_name.value = user.telegram_display_name || '';
       editUserForm.elements.role.value = user.role || 'user';
       editUserForm.elements.enabled.checked = user.enabled !== false;
+      editUserForm.elements.bot_token.value = '';
+      editUserForm.elements.bot_token.disabled = Boolean(bot.id);
       editUserForm.elements.bot_name.value = bot.bot_name || '';
       editUserForm.elements.bot_name.disabled = !bot.id;
       editUserBotHandle.textContent = bot.telegram_username
@@ -127,7 +129,12 @@ addUserForm.addEventListener('submit', async (event) => {
     return;
   }
   addUserForm.reset();
-  setStatus('Telegram user added. Ask them to open Login_bot and press Start to activate sign-in.', 'success');
+  setStatus(
+    result.bot_id
+      ? 'Telegram user and bot added. Ask them to open Login_bot and press Start to activate sign-in.'
+      : 'Telegram user added without a bot. You can assign one later from Edit. Ask them to open Login_bot and press Start to activate sign-in.',
+    'success'
+  );
   await loadUsers();
 });
 

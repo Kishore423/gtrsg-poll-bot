@@ -144,6 +144,9 @@ test('admin provisioning and sign-in require only a Telegram handle', () => {
   }
   assert.doesNotMatch(admin, /name="telegram_user_id"/);
   assert.equal((admin.match(/name="telegram_username"/g) || []).length, 2);
+  assert.equal((admin.match(/name="bot_token"/g) || []).length, 2);
+  assert.match(admin, /BotFather token \(optional\)/);
+  assert.match(admin, /Leave blank to assign later/);
 });
 
 test('dynamic icon hydration ignores generated Lucide SVGs', () => {

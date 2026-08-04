@@ -264,7 +264,6 @@ function createServer(db, telegram, options = {}) {
       if (existing) return res.status(409).json({ error: 'This Telegram account is already provisioned' });
     }
     const botToken = String(req.body?.bot_token || '').trim();
-    if (role === 'user' && !botToken) return res.status(400).json({ error: 'A user needs a Telegram bot token' });
     const botId = botToken ? await createBotFromToken(botToken) : null;
     const userId = await db.createAppUser({
       role,
@@ -311,7 +310,11 @@ function createServer(db, telegram, options = {}) {
       || (telegramUsername && String(user.telegram_username || '').toLowerCase() === telegramUsername.toLowerCase())
     ));
     if (duplicate) return res.status(409).json({ error: 'Telegram ID or handle is already assigned' });
-    const row = await db.updateAppUser(req.params.id, {
+    const botToken = String(req.body?.bot_token || '').trim();
+    if (current.bot_id && botToken) {
+      return res.status(400).json({ error: 'This user already has an assigned bot' });
+    }
+    let row = await db.updateAppUser(req.params.id, {
       telegram_user_id: telegramUserId,
       telegram_username: telegramUsername,
       telegram_display_name: telegramDisplayName,
@@ -319,18 +322,27 @@ function createServer(db, telegram, options = {}) {
       enabled,
     });
     if (!row) return res.status(404).json({ error: 'User not found' });
-    let bot = current.bot_id && db.getBot ? publicBot(await db.getBot(current.bot_id)) : null;
+    if (!current.bot_id && botToken) {
+      if (!db.setAppUserBot) {
+        return res.status(501).json({ error: 'Supabase production database is required' });
+      }
+      const assignedBotId = await createBotFromToken(botToken);
+      const assignment = await db.setAppUserBot(req.params.id, assignedBotId);
+      row = { ...row, bot_id: assignment.bot_id };
+    }
+    const effectiveBotId = row.bot_id || current.bot_id;
+    let bot = effectiveBotId && db.getBot ? publicBot(await db.getBot(effectiveBotId)) : null;
     if (req.body?.bot_name !== undefined) {
       const botName = String(req.body.bot_name || '').trim();
-      if (!current.bot_id) return res.status(400).json({ error: 'This user does not have a bot' });
+      if (!effectiveBotId) return res.status(400).json({ error: 'This user does not have a bot' });
       if (!botName || botName.length > 64) {
         return res.status(400).json({ error: 'Bot name must be 1-64 characters' });
       }
-      const remote = await telegram.getMyName(current.bot_id).catch(() => null);
-      if (remote?.name !== botName) await telegram.setMyName(current.bot_id, botName);
-      const confirmed = await telegram.getMyName(current.bot_id).catch(() => ({ name: botName }));
-      const me = await telegram.getMe(current.bot_id).catch(() => ({}));
-      bot = publicBot(await db.setBotTelegramIdentity(current.bot_id, {
+      const remote = await telegram.getMyName(effectiveBotId).catch(() => null);
+      if (remote?.name !== botName) await telegram.setMyName(effectiveBotId, botName);
+      const confirmed = await telegram.getMyName(effectiveBotId).catch(() => ({ name: botName }));
+      const me = await telegram.getMe(effectiveBotId).catch(() => ({}));
+      bot = publicBot(await db.setBotTelegramIdentity(effectiveBotId, {
         bot_name: confirmed?.name || botName,
         telegram_username: me.username || bot?.telegram_username || null,
         telegram_bot_id: me.id || bot?.telegram_bot_id || null,

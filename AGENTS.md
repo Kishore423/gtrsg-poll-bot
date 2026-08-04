@@ -23,7 +23,8 @@
 > webhook registration. Legacy WHCL/PSA/PRIMARY routes remain during migration.
 >
 > Task 6 added `/admin` plus `/api/admin/*` for allow-list users and bot
-> management. Admins paste BotFather tokens; tokens are encrypted with
+> management. BotFather tokens are optional during user creation; an unassigned
+> user remains valid and an admin can assign a token later from Edit. Tokens are encrypted with
 > `BOT_TOKEN_ENC_KEY`; bot renames call Telegram `setMyName`.
 >
 > Task 7 changed the main dashboard Managed groups section: groups are

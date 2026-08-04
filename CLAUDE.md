@@ -14,7 +14,8 @@ so the other agent stays in sync.**
 
 ### Goal (one line)
 
-One Telegram bot **per user**: admin maps a BotFather token to a Telegram identity;
+At most one Telegram bot **per user**: admin can map a BotFather token to a
+Telegram identity during provisioning or leave it blank and assign the bot later;
 that user only sees the groups **their own bot** is in. Sign-in uses a short-lived
 Telegram bot OTP and a signed application session; roles are **admin | user**.
 
@@ -73,7 +74,8 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   `/api/telegram/<bot id>`, and syncs `getMe()` / `getMyName()` into the bot
   cache.
 - Task 6 admin UI/API: `/admin` serves `public/admin.html` / `public/admin.js`.
-  Admins can create allow-list users, paste a BotFather token for user bots,
+  Admins can create allow-list users with or without a bot, paste a BotFather
+  token during creation or later from Edit,
   enable/disable or delete users, list bots, and rename bots through Telegram
   `setMyName`. `/api/admin/*` is protected by `requireAdmin` when auth is on.
 - Task 7 dashboard flow: managed groups are auto-detected by webhook updates and
