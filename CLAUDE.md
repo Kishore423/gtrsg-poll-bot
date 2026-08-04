@@ -131,7 +131,10 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   Viewport dialog backdrops are direct children of `body`, after `main`; nesting
   them inside the animated `main` constrains fixed positioning to the content box.
   Admins first search the Admin roster by display name; selecting one user scopes
-  group rows and managed schedules to that user's single `bot_id`. Verification
+  group rows and managed schedules to that user's single `bot_id`. Home reloads
+  that non-cached roster on bootstrap, browser restore, and window focus so bot
+  assignments changed in Admin propagate to an already-open Home page. The
+  selected-user summary and empty state name the assigned bot and handle. Verification
   succeeds only after Telegram accepts a test message sent by that bot to the
   exact selected group. Bot removal membership updates disable the matching
   `(Telegram chat, bot)` row, so managed lists contain current memberships only;

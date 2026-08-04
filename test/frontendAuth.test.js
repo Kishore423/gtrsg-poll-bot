@@ -88,6 +88,12 @@ test('admin Home scopes managed groups through a display-name user search', () =
   assert.match(html, /id="admin-managed-user-options"/);
   assert.match(source, /telegram_display_name/);
   assert.match(source, /String\(group\.bot_id\) === String\(selectedUser\.bot_id\)/);
+  assert.match(source, /function adminManagedUserBotLabel\(user\)/);
+  assert.match(source, /using \$\{adminManagedUserBotLabel\(selectedUser\)\}/);
+  assert.match(source, /fetch\('\/api\/admin\/users', \{ cache: 'no-store' \}\)/);
+  assert.match(source, /window\.addEventListener\('pageshow'/);
+  assert.match(source, /window\.addEventListener\('focus'/);
+  assert.match(source, /refreshAdminManagedContext/);
 });
 
 test('managed group labels use only the stored Telegram group name', () => {

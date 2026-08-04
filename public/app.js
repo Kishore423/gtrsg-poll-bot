@@ -54,6 +54,7 @@ let pollExclusions = [];
 let selectedManagedGroupId = '';
 let adminManagedUsers = [];
 let selectedAdminManagedUserId = '';
+let adminManagedContextRefreshPromise = null;
 
 const managedWorkflowSections = [managedScheduleSection, skipDaysSection, advancePollSection].filter(Boolean);
 
@@ -242,19 +243,53 @@ function adminUserSearchLabel(user) {
   return user.telegram_username ? `${displayName} - @${user.telegram_username}` : displayName;
 }
 
+function adminManagedUserBotLabel(user) {
+  const bot = user?.bot;
+  if (!bot?.id) return 'no assigned bot';
+  const name = bot.bot_name || 'Telegram bot';
+  return bot.telegram_username ? `${name} (@${bot.telegram_username})` : name;
+}
+
 function selectedAdminManagedUser() {
   return adminManagedUsers.find((user) => String(user.id) === selectedAdminManagedUserId) || null;
 }
 
 async function loadAdminManagedUsers() {
   if (currentUser?.role !== 'admin') return;
-  const response = await fetch('/api/admin/users');
+  const response = await fetch('/api/admin/users', { cache: 'no-store' });
   const result = await response.json().catch(() => []);
   if (!response.ok) throw new Error(result.error || 'Unable to load users for managed groups');
   adminManagedUsers = result;
   adminManagedUserOptions.innerHTML = adminManagedUsers.map((user) =>
     `<option value="${escapeHtml(adminUserSearchLabel(user))}"></option>`).join('');
+  if (!selectedAdminManagedUserId && adminManagedUserSearch?.value.trim()) {
+    const restoredLabel = adminManagedUserSearch.value.trim().toLowerCase();
+    const restoredUser = adminManagedUsers.find((user) =>
+      adminUserSearchLabel(user).toLowerCase() === restoredLabel);
+    if (restoredUser) selectedAdminManagedUserId = String(restoredUser.id);
+  }
+  const selectedUser = selectedAdminManagedUser();
+  if (selectedUser && adminManagedUserSearch) {
+    adminManagedUserSearch.value = adminUserSearchLabel(selectedUser);
+  }
   adminManagedUserFilter.hidden = false;
+}
+
+async function refreshAdminManagedContext() {
+  if (currentUser?.role !== 'admin') return;
+  if (adminManagedContextRefreshPromise) return adminManagedContextRefreshPromise;
+  adminManagedContextRefreshPromise = (async () => {
+    await loadAdminManagedUsers();
+    if (selectedAdminManagedUserId) {
+      await loadManagedGroups();
+      await loadManagedSchedules();
+    }
+  })();
+  try {
+    await adminManagedContextRefreshPromise;
+  } finally {
+    adminManagedContextRefreshPromise = null;
+  }
 }
 
 adminManagedUserSearch?.addEventListener('input', async () => {
@@ -1211,7 +1246,7 @@ async function loadManagedGroups() {
     } else if (!selectedUser.bot_id) {
       adminManagedUserSummary.textContent = `${selectedUser.telegram_display_name || selectedUser.telegram_username} does not have a bot assigned.`;
     } else {
-      adminManagedUserSummary.textContent = `${managedGroups.length} group${managedGroups.length === 1 ? '' : 's'} detected for ${selectedUser.telegram_display_name || selectedUser.telegram_username}.`;
+      adminManagedUserSummary.textContent = `${managedGroups.length} group${managedGroups.length === 1 ? '' : 's'} detected for ${selectedUser.telegram_display_name || selectedUser.telegram_username} using ${adminManagedUserBotLabel(selectedUser)}.`;
     }
   }
   if (!managedGroups.some((group) => group.id === selectedManagedGroupId)) {
@@ -1228,7 +1263,11 @@ async function loadManagedGroups() {
       </span>
     </div>`).join('') : `<p class="hint">${currentUser?.role === 'admin' && !selectedUser
       ? 'Search and select a user above.'
-      : 'No groups have been detected for this user bot. Add the bot to a Telegram group, then send a message in that group.'}</p>`;
+      : currentUser?.role === 'admin' && !selectedUser?.bot_id
+        ? `${escapeHtml(selectedUser.telegram_display_name || selectedUser.telegram_username)} does not have a bot assigned. Assign one in Admin.`
+        : currentUser?.role === 'admin'
+        ? `No groups have been detected for ${escapeHtml(adminManagedUserBotLabel(selectedUser))}. Add this bot to a Telegram group, then send a message in that group.`
+        : 'No groups have been detected for your assigned bot. Add the bot to a Telegram group, then send a message in that group.'}</p>`;
   managedGroupList.querySelectorAll('.managed-group-row').forEach((row) => {
     const open = () => openGroupActionDialog(row.dataset.id);
     row.addEventListener('click', open);
@@ -1739,6 +1778,14 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error) => setStatus(`Error: ${error.message}`, 'error'));
+window.addEventListener('pageshow', (event) => {
+  if (!event.persisted) return;
+  refreshAdminManagedContext().catch((error) => setStatus(`Error: ${error.message}`, 'error'));
+});
+window.addEventListener('focus', () => {
+  if (!authOverlay.hidden) return;
+  refreshAdminManagedContext().catch((error) => setStatus(`Error: ${error.message}`, 'error'));
+});
 // Telegram votes arrive by webhook in the background; refresh results periodically.
 setInterval(() => {
   if (authOverlay.hidden && legacyWorkflowEnabled) loadPolls();
