@@ -232,6 +232,36 @@ test('Login_bot Start binds an approved handle to its immutable Telegram ID', as
   assert.match(telegram.messages.at(-1).html, /123456/);
 });
 
+test('Login_bot refreshes a bound user handle from Telegram while preserving the Admin display name', async () => {
+  const { auth, db } = await seeded();
+  const result = await auth.completeFromUpdate('LOGIN', {
+    message: {
+      text: '/start',
+      chat: { id: 977476515, type: 'private' },
+      from: { id: 977476515, username: 'YiDan_New' },
+    },
+  });
+
+  assert.equal(result.handled, 'telegram_login_setup');
+  const user = await db.getAppUserByTelegramId('977476515');
+  assert.equal(user.telegram_username, 'yidan_new');
+  assert.equal(user.telegram_display_name, 'Yi Dan');
+});
+
+test('OTP requests refresh a bound user handle through the Login_bot chat', async () => {
+  const { auth, db, telegram } = await seeded();
+  telegram.getChat = async (service, chatId) => {
+    assert.equal(service, 'LOGIN');
+    assert.equal(String(chatId), '977476515');
+    return { id: 977476515, username: 'Latest_Handle', type: 'private' };
+  };
+
+  await auth.requestOtp('@yidan');
+  const user = await db.getAppUserByTelegramId('977476515');
+  assert.equal(user.telegram_username, 'latest_handle');
+  assert.equal(user.telegram_display_name, 'Yi Dan');
+});
+
 test('Login_bot Start cannot claim a pending user with a different handle', async () => {
   const { auth, db, telegram } = await seeded();
   const userId = await db.createAppUser({

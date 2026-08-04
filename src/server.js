@@ -223,7 +223,15 @@ function createServer(db, telegram, options = {}) {
 
   app.get('/api/admin/users', wrap(async (req, res) => {
     if (!db.listAppUsers) return res.status(501).json({ error: 'Supabase production database is required' });
-    const users = await db.listAppUsers();
+    const storedUsers = await db.listAppUsers();
+    const users = await Promise.all(storedUsers.map(async (user) => {
+      if (!options.syncTelegramUserIdentity || !user.telegram_user_id) return user;
+      try {
+        return await options.syncTelegramUserIdentity(user) || user;
+      } catch (error) {
+        return { ...user, sync_error: error.message };
+      }
+    }));
     const bots = db.listBots ? await db.listBots() : [];
     const syncedBots = await Promise.all(bots.map(async (bot) => {
       try {
@@ -301,27 +309,26 @@ function createServer(db, telegram, options = {}) {
       });
     }
     const telegramUserId = current.telegram_user_id ? String(current.telegram_user_id) : null;
-    const telegramUsername = String(req.body?.telegram_username ?? current.telegram_username ?? '')
-      .trim().replace(/^@/, '') || null;
+    const telegramUsername = current.telegram_username || null;
+    if (req.body?.telegram_username !== undefined) {
+      const submittedUsername = String(req.body.telegram_username || '').trim().replace(/^@/, '') || null;
+      if (submittedUsername !== telegramUsername) {
+        return res.status(400).json({
+          error: 'The user Telegram handle is managed in Telegram and cannot be changed here',
+        });
+      }
+    }
     const telegramDisplayName = String(
       req.body?.telegram_display_name ?? current.telegram_display_name ?? ''
     ).trim() || null;
     const role = String(req.body?.role ?? current.role);
     const enabled = req.body?.enabled === undefined ? current.enabled !== false : Boolean(req.body.enabled);
-    if (!telegramUsername || !/^[A-Za-z0-9_]{5,32}$/.test(telegramUsername)) {
-      return res.status(400).json({ error: 'A valid Telegram handle is required' });
-    }
     if (telegramDisplayName && telegramDisplayName.length > 80) {
       return res.status(400).json({ error: 'Display name must be 80 characters or fewer' });
     }
     if (!['admin', 'user'].includes(role)) {
       return res.status(400).json({ error: 'Role must be admin or user' });
     }
-    const duplicate = users.find((user) => String(user.id) !== String(current.id) && (
-      (telegramUserId && String(user.telegram_user_id) === telegramUserId)
-      || (telegramUsername && String(user.telegram_username || '').toLowerCase() === telegramUsername.toLowerCase())
-    ));
-    if (duplicate) return res.status(409).json({ error: 'Telegram ID or handle is already assigned' });
     const botToken = String(req.body?.bot_token || '').trim();
     if (current.bot_id && botToken) {
       return res.status(400).json({ error: 'This user already has an assigned bot' });

@@ -35,6 +35,11 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   `bots.telegram_username` is the assigned bot handle. Repository and API
   results keep these fields separate so the bot handle never replaces the user
   handle in the Admin edit form.
+- User handles are Telegram-owned and read-only after provisioning. Login_bot
+  refreshes a bound user's handle by immutable Telegram ID on `/start`, OTP
+  requests, and Admin roster refreshes. The Admin form may manage the person's
+  display label, role, enabled state, and dedicated bot mapping, but cannot
+  overwrite either the user handle or the bot identity.
 - Seed roster: `Malla_Sonia@gtr.com.sg` (user, @Pax_services_bot),
   `Yidan_Wang@sats.com.sg` (user, @Flexi_wheelchair_bot),
   `Kirubakaran_Kishore@sats.com.sg` (**admin**, no bot).
@@ -444,9 +449,10 @@ live only in Vercel env + the local (gitignored) `.env`.
   the shared account menu for profile-picture upload and Sign out. Profile
   pictures are resized to 256x256 WebP in the browser, capped at 200 KB by the
   API, and stored in `app_users.profile_photo_data`; users can update only their
-  own picture. Admin user rows expose an Edit dialog for handle,
-  display name, role, enabled status, and the assigned bot's Telegram display
-  name. Clicking an existing avatar opens a full-screen profile viewer with a
+  own picture. Admin user rows expose an Edit dialog with a read-only Telegram
+  handle plus editable display name, role, enabled status, and dedicated bot
+  assignment. The assigned bot's Telegram display name and handle are also
+  read-only. Clicking an existing avatar opens a full-screen profile viewer with a
   translucent black backdrop, an X close control, and a self-only delete action.
   Bot tokens and immutable bot handles are intentionally never displayed.
 - `webhook_events` had traffic (20 rows) → both bots' production webhooks are

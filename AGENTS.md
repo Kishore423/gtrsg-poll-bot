@@ -157,11 +157,14 @@ Vercel Cron** for hosting/scheduling.
   identity opens a shared account menu with profile-picture upload and Sign out.
   Uploads are resized to 256x256 WebP client-side, capped at 200 KB server-side,
   and saved to the caller's own `app_users.profile_photo_data`. Admin user rows
-  have an Edit dialog for handle, display name, role, enabled
-  status, and the assigned bot's Telegram display name; bot tokens and immutable
-  bot handles are never returned for editing. `app_users.telegram_username` is
-  the person's login handle and `bots.telegram_username` is the assigned bot
-  handle; repository and API results keep them separate. Clicking an existing
+  have an Edit dialog with a read-only Telegram handle plus editable display
+  name, role, enabled status, and dedicated bot assignment. The assigned bot's
+  Telegram display name and handle are also read-only and derived from its
+  encrypted BotFather token. `app_users.telegram_username` is the person's
+  login handle and `bots.telegram_username` is the assigned bot handle;
+  repository and API results keep them separate. Login_bot refreshes a bound
+  user's handle by immutable Telegram ID on `/start`, OTP requests, and Admin
+  roster refreshes. Clicking an existing
   avatar opens a full-screen viewer over a translucent black backdrop with an X
   close control and a self-only delete action. The shared
   login UI exposes an editable six-digit field immediately after **Send code**

@@ -106,6 +106,10 @@ function createTelegramClient({ tokens = {}, resolveToken = null, fetchImpl = fe
     return call(botKey, 'getMe');
   }
 
+  async function getChat(botKey, chatId) {
+    return call(botKey, 'getChat', { chat_id: chatId });
+  }
+
   async function getMyName(botKey) {
     return call(botKey, 'getMyName');
   }
@@ -114,7 +118,18 @@ function createTelegramClient({ tokens = {}, resolveToken = null, fetchImpl = fe
     return call(botKey, 'setMyName', { name });
   }
 
-  return { sendPoll, sendMessage, editMessage, stopPoll, setWebhook, getMe, getMyName, setMyName, call };
+  return {
+    sendPoll,
+    sendMessage,
+    editMessage,
+    stopPoll,
+    setWebhook,
+    getMe,
+    getChat,
+    getMyName,
+    setMyName,
+    call,
+  };
 }
 
 module.exports = { createTelegramClient };

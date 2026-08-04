@@ -121,6 +121,20 @@ function createTelegramAuth({
     await loginWebhookPromise;
   }
 
+  async function syncUserIdentity(user) {
+    if (!user?.telegram_user_id || !telegram?.getChat || !db.setAppUserTelegramIdentity) {
+      return user;
+    }
+    const chat = await telegram.getChat(authBotKey, user.telegram_user_id);
+    const telegramUsername = String(chat?.username || '').trim().replace(/^@/, '').toLowerCase() || null;
+    if (telegramUsername === (user.telegram_username || null)) return user;
+    return db.setAppUserTelegramIdentity(user.id, {
+      telegram_user_id: user.telegram_user_id,
+      telegram_username: telegramUsername,
+      telegram_display_name: user.telegram_display_name,
+    });
+  }
+
   async function requestOtp(rawIdentifier) {
     if (!sessionSecret || !telegram) throw new Error('Telegram login is not configured');
     const identifier = normalizeTelegramIdentifier(rawIdentifier);
@@ -132,7 +146,10 @@ function createTelegramAuth({
     const user = db.getAppUserByTelegramIdentifier
       ? await db.getAppUserByTelegramIdentifier(identifier)
       : await db.getAppUserByTelegramId(identifier);
-    const boundUser = user?.telegram_user_id ? user : null;
+    let boundUser = user?.telegram_user_id ? user : null;
+    if (boundUser) {
+      boundUser = await syncUserIdentity(boundUser).catch(() => boundUser);
+    }
     const deliveryBotKey = authBotKey;
     const bot = await telegram.getMe(deliveryBotKey);
     if (!bot?.username) throw new Error('The Telegram login bot needs a username');
@@ -234,6 +251,14 @@ function createTelegramAuth({
     if (!start) return null;
     if (String(service).toUpperCase() !== String(authBotKey).toUpperCase()) return null;
     let user = await db.getAppUserByTelegramId(start.telegramUserId);
+    if (user && db.setAppUserTelegramIdentity
+        && start.telegramUsername !== (user.telegram_username || null)) {
+      user = await db.setAppUserTelegramIdentity(user.id, {
+        telegram_user_id: start.telegramUserId,
+        telegram_username: start.telegramUsername,
+        telegram_display_name: user.telegram_display_name,
+      });
+    }
     if (!user && start.telegramUsername && db.getAppUserByTelegramIdentifier) {
       const approved = await db.getAppUserByTelegramIdentifier(start.telegramUsername);
       if (approved && !approved.telegram_user_id && db.setAppUserTelegramIdentity) {
@@ -267,7 +292,7 @@ function createTelegramAuth({
     };
   }
 
-  return { requestOtp, verifyOtp, completeFromUpdate, verifyUser };
+  return { requestOtp, verifyOtp, completeFromUpdate, verifyUser, syncUserIdentity };
 }
 
 module.exports = {

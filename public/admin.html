@@ -169,7 +169,7 @@
 
     <section class="card">
       <h2>Add Telegram user</h2>
-      <p class="hint">Enter the approved handle. The Telegram user ID is captured automatically when the user opens Login_bot and presses Start.</p>
+      <p class="hint">Enter the handle to approve the account. Login_bot captures the immutable Telegram ID and current handle when the user presses Start.</p>
       <form id="add-user-form">
         <label>Telegram handle<input name="telegram_username" placeholder="@username" required /></label>
         <label>Display name<input name="telegram_display_name" /></label>
@@ -200,19 +200,19 @@
       <div class="dialog-header">
         <div>
           <h2>Edit user</h2>
-          <p>Update the approved Telegram identity and its assigned bot name.</p>
+          <p>Manage access and map this Telegram account to its dedicated bot.</p>
         </div>
       </div>
       <form id="edit-user-form" class="edit-user-form">
         <input name="id" type="hidden" />
-        <label>Telegram handle<input name="telegram_username" placeholder="@username" required /></label>
+        <label>Telegram handle<input id="edit-user-telegram-handle" readonly /></label>
         <label class="full">Display name<input name="telegram_display_name" maxlength="80" /></label>
         <label>Role<select name="role"><option value="user">User</option><option value="admin">Admin</option></select></label>
         <label class="checkbox-field"><input name="enabled" type="checkbox" /> Account enabled</label>
         <label class="full">Assign BotFather token<input name="bot_token" autocomplete="off" placeholder="Available while no bot is assigned" /></label>
         <label>Bot display name<input id="edit-user-bot-name" readonly /></label>
         <label>Bot handle<input id="edit-user-bot-handle" readonly /></label>
-        <p class="muted full">Bot identity is managed in Telegram. Change it through BotFather, then use Refresh from Telegram.</p>
+        <p class="muted full">User and bot handles are managed in Telegram. Bot names and handles come from the assigned BotFather token. Use Refresh from Telegram after making changes there.</p>
         <p id="edit-user-status" class="status full" aria-live="polite"></p>
         <div class="dialog-actions">
           <button id="cancel-edit-user" type="button" class="secondary">Cancel</button>

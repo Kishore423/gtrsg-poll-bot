@@ -7,6 +7,7 @@ const usersBody = document.getElementById('users-body');
 const addUserForm = document.getElementById('add-user-form');
 const editUserDialog = document.getElementById('edit-user-dialog');
 const editUserForm = document.getElementById('edit-user-form');
+const editUserTelegramHandle = document.getElementById('edit-user-telegram-handle');
 const editUserBotName = document.getElementById('edit-user-bot-name');
 const editUserBotHandle = document.getElementById('edit-user-bot-handle');
 const editUserStatus = document.getElementById('edit-user-status');
@@ -61,7 +62,7 @@ async function loadUsers() {
       if (!user) return;
       const bot = user.bot || {};
       editUserForm.elements.id.value = user.id;
-      editUserForm.elements.telegram_username.value = user.telegram_username || '';
+      editUserTelegramHandle.value = user.telegram_username ? `@${user.telegram_username}` : '-';
       editUserForm.elements.telegram_display_name.value = user.telegram_display_name || '';
       editUserForm.elements.role.value = user.role || 'user';
       editUserForm.elements.enabled.checked = user.enabled !== false;
@@ -85,16 +86,19 @@ async function loadUsers() {
   });
   return {
     ok: true,
-    syncErrors: result.filter((user) => user.bot?.sync_error).length,
+    syncErrors: result.filter((user) => user.sync_error || user.bot?.sync_error).length,
   };
 }
 
 editUserForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const formData = new FormData(editUserForm);
-  const id = formData.get('id');
-  const body = Object.fromEntries(formData.entries());
-  body.enabled = editUserForm.elements.enabled.checked;
+  const id = editUserForm.elements.id.value;
+  const body = {
+    telegram_display_name: editUserForm.elements.telegram_display_name.value,
+    role: editUserForm.elements.role.value,
+    enabled: editUserForm.elements.enabled.checked,
+    bot_token: editUserForm.elements.bot_token.value,
+  };
   editUserStatus.textContent = 'Saving user details...';
   editUserStatus.className = 'status';
   const response = await fetch(`/api/admin/users/${id}`, {
@@ -115,14 +119,14 @@ editUserForm.addEventListener('submit', async (event) => {
 
 document.getElementById('cancel-edit-user').addEventListener('click', () => editUserDialog.close());
 document.getElementById('refresh-bot-identities').addEventListener('click', async () => {
-  setStatus('Refreshing bot names and handles from Telegram...');
+  setStatus('Refreshing user and bot identities from Telegram...');
   const outcome = await loadUsers();
   if (!outcome?.ok) return;
   if (outcome.syncErrors) {
-    setStatus(`Unable to refresh ${outcome.syncErrors} bot identity. Cached values are shown.`, 'error');
+    setStatus(`Unable to refresh ${outcome.syncErrors} Telegram identity. Cached values are shown.`, 'error');
     return;
   }
-  setStatus('Bot names and handles refreshed from Telegram.', 'success');
+  setStatus('User handles, bot names, and bot handles refreshed from Telegram.', 'success');
 });
 
 addUserForm.addEventListener('submit', async (event) => {

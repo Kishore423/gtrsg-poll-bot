@@ -56,6 +56,7 @@ function buildAppFromEnv() {
     verifyUser: auth.verifyUser,
     requestTelegramOtp: auth.requestOtp,
     verifyTelegramOtp: auth.verifyOtp,
+    syncTelegramUserIdentity: auth.syncUserIdentity,
     completeTelegramLogin: auth.completeFromUpdate,
     requireAdminAuth: !unconfiguredPreview && process.env.REQUIRE_ADMIN_AUTH !== 'false' && process.env.DB_DRIVER !== 'memory',
     enableLegacyWorkflow: unconfiguredPreview || process.env.ENABLE_LEGACY_WORKFLOW === 'true' || process.env.DB_DRIVER === 'memory',

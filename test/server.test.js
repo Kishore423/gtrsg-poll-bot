@@ -69,6 +69,33 @@ test('admin-only routes reject a provisioned non-admin', async () => {
       : null });
 });
 
+test('admin roster refreshes a bound user handle from Telegram', async () => {
+  await withServer(async ({ db, baseUrl }) => {
+    await db.createAppUser({
+      telegram_user_id: '1001',
+      telegram_username: 'old_handle',
+      telegram_display_name: 'Operations User',
+    });
+    const response = await fetch(`${baseUrl}/api/admin/users`, {
+      headers: { Authorization: 'Bearer admin' },
+    });
+    assert.equal(response.status, 200);
+    const [user] = await response.json();
+    assert.equal(user.telegram_username, 'current_handle');
+    assert.equal(user.telegram_display_name, 'Operations User');
+  }, {
+    requireAdminAuth: true,
+    verifyUser: async (req) =>
+      req.headers.authorization === 'Bearer admin'
+        ? { id: 'admin-1', telegram_user_id: '1002', role: 'admin', bot_id: null }
+        : null,
+    syncTelegramUserIdentity: async (user) => ({
+      ...user,
+      telegram_username: 'current_handle',
+    }),
+  });
+});
+
 test('Telegram OTP endpoints request a code and verify a login session', async () => {
   await withServer(async ({ baseUrl }) => {
     const started = await fetch(`${baseUrl}/api/auth/telegram/otp/request`, json('POST', {
@@ -180,7 +207,6 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
     assert.equal(Object.hasOwn(users[0], 'profile_photo_data'), false);
 
     const editedRes = await fetch(`${baseUrl}/api/admin/users/${body.id}`, json('PATCH', {
-      telegram_username: 'edited_user',
       telegram_display_name: 'Edited User',
       role: 'admin',
       enabled: false,
@@ -188,11 +214,16 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
     assert.equal(editedRes.status, 200);
     const edited = await editedRes.json();
     assert.equal(edited.telegram_user_id, null);
-    assert.equal(edited.telegram_username, 'edited_user');
+    assert.equal(edited.telegram_username, 'new_user');
     assert.equal(edited.telegram_display_name, 'Edited User');
     assert.equal(edited.role, 'admin');
     assert.equal(edited.enabled, false);
     assert.equal(edited.bot.bot_name, 'Telegram Managed Name');
+
+    const userHandleRes = await fetch(`${baseUrl}/api/admin/users/${body.id}`, json('PATCH', {
+      telegram_username: 'edited_user',
+    }, headers));
+    assert.equal(userHandleRes.status, 400);
 
     const userRenameRes = await fetch(`${baseUrl}/api/admin/users/${body.id}`, json('PATCH', {
       bot_name: 'Website Rename',
@@ -209,7 +240,7 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
     remoteHandles.set(body.bot_id, 'changed_in_telegram');
     const refreshed = await fetch(`${baseUrl}/api/admin/users`, { headers });
     const refreshedUsers = await refreshed.json();
-    assert.equal(refreshedUsers[0].telegram_username, 'edited_user');
+    assert.equal(refreshedUsers[0].telegram_username, 'new_user');
     assert.equal(refreshedUsers[0].bot.bot_name, 'Changed In Telegram');
     assert.equal(refreshedUsers[0].bot.telegram_username, 'changed_in_telegram');
 
