@@ -269,7 +269,13 @@ function createTelegramAuth({
         });
       }
     }
-    if (!user) return null;
+    if (!user) {
+      await telegram.sendMessage(service, start.chatId,
+        '<b>Telegram account could not be verified.</b>\n' +
+        'Your current Telegram handle does not match an approved pending account. ' +
+        'Ask the administrator to check the handle entered in Gops poll, then press Start again.');
+      return { handled: 'telegram_login_handle_mismatch' };
+    }
     await telegram.sendMessage(service, start.chatId,
       '<b>Telegram sign-in is ready.</b>\nReturn to the Gops poll website and request a code.');
     return { handled: 'telegram_login_setup' };

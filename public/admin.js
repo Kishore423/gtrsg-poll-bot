@@ -44,8 +44,8 @@ async function loadUsers() {
     return `<tr>
       <td>${telegramLabel(user)}<br><span class="muted">${
         user.telegram_user_id
-          ? `Telegram ID ${escapeHtml(user.telegram_user_id)}`
-          : 'Awaiting Login_bot Start'
+          ? `Verified by Login_bot &middot; Telegram ID ${escapeHtml(user.telegram_user_id)}`
+          : 'Awaiting Login_bot handle verification'
       }</span></td>
       <td>${escapeHtml(user.role === 'admin' ? 'Admin' : 'User')}</td>
       <td>${bot.id ? escapeHtml(bot.bot_name || '-') : '<span class="muted">No bot</span>'}</td>

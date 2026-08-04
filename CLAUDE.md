@@ -41,6 +41,11 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   display label, role, enabled state, and dedicated bot mapping, but cannot
   overwrite either the user handle or the bot identity. Telegram-provided handle
   casing is preserved; lookups and uniqueness remain case-insensitive.
+- Pending users and admins are enrolled only when the handle from Login_bot's
+  private `/start` update matches the handle entered by the admin. A mismatch
+  leaves `telegram_user_id` unbound, sends generic correction guidance through
+  Login_bot, and remains **Awaiting Login_bot handle verification** in Admin.
+  A successful match binds the immutable ID and shows **Verified by Login_bot**.
 - Admins may replace a user's assigned bot by entering a different BotFather
   token in Edit. The new bot is validated and registered before the single
   `app_users.bot_id` mapping changes. The previous bot and its managed groups

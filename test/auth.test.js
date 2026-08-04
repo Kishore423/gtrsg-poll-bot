@@ -275,13 +275,15 @@ test('Login_bot Start cannot claim a pending user with a different handle', asyn
       from: { id: 777888999, username: 'different_user' },
     },
   });
-  assert.equal(result, null);
-  assert.equal(telegram.messages.length, 0);
+  assert.equal(result.handled, 'telegram_login_handle_mismatch');
+  assert.equal(telegram.messages.length, 1);
+  assert.match(telegram.messages[0].html, /could not be verified/);
+  assert.match(telegram.messages[0].html, /does not match an approved pending account/);
   const unchanged = (await db.listAppUsers()).find((user) => user.id === userId);
   assert.equal(unchanged.telegram_user_id, null);
 });
 
-test('plain private /start ignores unknown users and the wrong delivery bot', async () => {
+test('plain private /start gives generic mismatch feedback to unknown users and ignores the wrong bot', async () => {
   const { auth, telegram } = await seeded();
   const unknown = await auth.completeFromUpdate('LOGIN', {
     message: {
@@ -297,9 +299,10 @@ test('plain private /start ignores unknown users and the wrong delivery bot', as
       from: { id: 977476515 },
     },
   });
-  assert.equal(unknown, null);
+  assert.equal(unknown.handled, 'telegram_login_handle_mismatch');
   assert.equal(wrongBot, null);
-  assert.equal(telegram.messages.length, 0);
+  assert.equal(telegram.messages.length, 1);
+  assert.match(telegram.messages[0].html, /could not be verified/);
 });
 
 test('Telegram identifiers are normalized and invalid values are rejected', () => {
