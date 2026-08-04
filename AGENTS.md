@@ -164,7 +164,8 @@ Vercel Cron** for hosting/scheduling.
   login handle and `bots.telegram_username` is the assigned bot handle;
   repository and API results keep them separate. Login_bot refreshes a bound
   user's handle by immutable Telegram ID on `/start`, OTP requests, and Admin
-  roster refreshes. An admin may replace the assigned bot with a different
+  roster refreshes while preserving Telegram-provided handle casing; lookups
+  remain case-insensitive. An admin may replace the assigned bot with a different
   BotFather token; replacement validates and registers the new bot first, then
   atomically switches the single `app_users.bot_id` mapping while disabling the
   previous bot and its groups. The old webhook is removed and historical

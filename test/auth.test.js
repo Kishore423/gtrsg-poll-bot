@@ -225,7 +225,7 @@ test('Login_bot Start binds an approved handle to its immutable Telegram ID', as
   assert.equal(result.handled, 'telegram_login_setup');
   const bound = (await db.listAppUsers()).find((user) => user.id === userId);
   assert.equal(bound.telegram_user_id, '444555666');
-  assert.equal(bound.telegram_username, 'pending_user');
+  assert.equal(bound.telegram_username, 'Pending_User');
 
   await auth.requestOtp('@pending_user');
   assert.equal(telegram.messages.at(-1).chatId, '444555666');
@@ -244,7 +244,7 @@ test('Login_bot refreshes a bound user handle from Telegram while preserving the
 
   assert.equal(result.handled, 'telegram_login_setup');
   const user = await db.getAppUserByTelegramId('977476515');
-  assert.equal(user.telegram_username, 'yidan_new');
+  assert.equal(user.telegram_username, 'YiDan_New');
   assert.equal(user.telegram_display_name, 'Yi Dan');
 });
 
@@ -258,7 +258,7 @@ test('OTP requests refresh a bound user handle through the Login_bot chat', asyn
 
   await auth.requestOtp('@yidan');
   const user = await db.getAppUserByTelegramId('977476515');
-  assert.equal(user.telegram_username, 'latest_handle');
+  assert.equal(user.telegram_username, 'Latest_Handle');
   assert.equal(user.telegram_display_name, 'Yi Dan');
 });
 

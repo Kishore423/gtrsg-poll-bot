@@ -82,7 +82,7 @@ function parsePrivateStart(update) {
   return {
     chatId: message.chat.id,
     telegramUserId: String(message.from.id),
-    telegramUsername: String(message.from.username || '').trim().replace(/^@/, '').toLowerCase() || null,
+    telegramUsername: String(message.from.username || '').trim().replace(/^@/, '') || null,
   };
 }
 
@@ -126,7 +126,7 @@ function createTelegramAuth({
       return user;
     }
     const chat = await telegram.getChat(authBotKey, user.telegram_user_id);
-    const telegramUsername = String(chat?.username || '').trim().replace(/^@/, '').toLowerCase() || null;
+    const telegramUsername = String(chat?.username || '').trim().replace(/^@/, '') || null;
     if (telegramUsername === (user.telegram_username || null)) return user;
     return db.setAppUserTelegramIdentity(user.id, {
       telegram_user_id: user.telegram_user_id,

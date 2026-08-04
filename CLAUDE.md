@@ -39,7 +39,8 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   refreshes a bound user's handle by immutable Telegram ID on `/start`, OTP
   requests, and Admin roster refreshes. The Admin form may manage the person's
   display label, role, enabled state, and dedicated bot mapping, but cannot
-  overwrite either the user handle or the bot identity.
+  overwrite either the user handle or the bot identity. Telegram-provided handle
+  casing is preserved; lookups and uniqueness remain case-insensitive.
 - Admins may replace a user's assigned bot by entering a different BotFather
   token in Edit. The new bot is validated and registered before the single
   `app_users.bot_id` mapping changes. The previous bot and its managed groups
