@@ -177,8 +177,10 @@ Vercel Cron** for hosting/scheduling.
   login handle and `bots.telegram_username` is the assigned bot handle;
   repository and API results keep them separate. Login_bot refreshes a bound
   user's handle by immutable Telegram ID on `/start`, OTP requests, and Admin
-  roster refreshes while preserving Telegram-provided handle casing; lookups
-  remain case-insensitive. Pending users/admins bind only when the handle in
+  roster refreshes while preserving Telegram-provided handle casing. The
+  **Refresh from Telegram** button uses the non-cacheable
+  `POST /api/admin/telegram-identities/refresh`; normal roster GETs use cached
+  database values. Lookups remain case-insensitive. Pending users/admins bind only when the handle in
   Login_bot's private `/start` update matches the admin-entered handle. Mismatches
   remain unbound, receive generic correction guidance, and show **Awaiting
   Login_bot handle verification**; matches show **Verified by Login_bot**. An

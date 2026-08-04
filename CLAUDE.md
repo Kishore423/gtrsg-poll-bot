@@ -27,8 +27,9 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
 - Bot tokens: admin pastes BotFather token → **encrypted** in DB (never sent to browser).
 - Admins see **all** groups/bots; an admin may have **no bot** (`bot_id` nullable).
 - Bot name and handle are Telegram-owned and read-only in the website. The Admin
-  roster refreshes assigned bots through `getMyName` and `getMe`, including an
-  explicit **Refresh from Telegram** action. `bots.bot_name` and
+  roster refreshes assigned bots through `getMyName` and `getMe` using the
+  explicit, non-cacheable `POST /api/admin/telegram-identities/refresh` action.
+  Normal `GET /api/admin/users` roster loads use stored values. `bots.bot_name` and
   `bots.telegram_username` are caches only. Website rename APIs fail closed;
   admins make identity changes in Telegram/BotFather and then refresh.
 - `app_users.telegram_username` is the person's login handle, while
@@ -37,7 +38,7 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   handle in the Admin edit form.
 - User handles are Telegram-owned and read-only after provisioning. Login_bot
   refreshes a bound user's handle by immutable Telegram ID on `/start`, OTP
-  requests, and Admin roster refreshes. The Admin form may manage the person's
+  requests, and the explicit Admin refresh action. The Admin form may manage the person's
   display label, role, enabled state, and dedicated bot mapping, but cannot
   overwrite either the user handle or the bot identity. Telegram-provided handle
   casing is preserved; lookups and uniqueness remain case-insensitive.

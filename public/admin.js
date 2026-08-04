@@ -31,8 +31,14 @@ function telegramLabel(user) {
   return `<strong>${escapeHtml(name)}</strong>${handle ? `<br><span class="muted">${escapeHtml(handle)}</span>` : ''}`;
 }
 
-async function loadUsers() {
-  const response = await fetch('/api/admin/users');
+async function loadUsers({ refresh = false } = {}) {
+  const response = await fetch(
+    refresh ? '/api/admin/telegram-identities/refresh' : '/api/admin/users',
+    {
+      method: refresh ? 'POST' : 'GET',
+      cache: 'no-store',
+    }
+  );
   const result = await response.json().catch(() => []);
   if (!response.ok) {
     setStatus(result.error || 'Unable to load users', 'error');
@@ -153,7 +159,7 @@ editUserForm.addEventListener('submit', async (event) => {
 document.getElementById('cancel-edit-user').addEventListener('click', () => editUserDialog.close());
 document.getElementById('refresh-bot-identities').addEventListener('click', async () => {
   setStatus('Refreshing user and bot identities from Telegram...');
-  const outcome = await loadUsers();
+  const outcome = await loadUsers({ refresh: true });
   if (!outcome?.ok) return;
   if (outcome.userSyncErrors || outcome.botSyncErrors) {
     const failures = [];

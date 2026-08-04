@@ -254,10 +254,9 @@ function createServer(db, telegram, options = {}) {
     return botId;
   }
 
-  app.get('/api/admin/users', wrap(async (req, res) => {
-    if (!db.listAppUsers) return res.status(501).json({ error: 'Supabase production database is required' });
+  async function adminUserRoster({ syncIdentities = false } = {}) {
     const storedUsers = await db.listAppUsers();
-    const users = await Promise.all(storedUsers.map(async (user) => {
+    const users = syncIdentities ? await Promise.all(storedUsers.map(async (user) => {
       if (!options.syncTelegramUserIdentity
           || !user.telegram_user_id
           || !user.login_bot_verified_at) return user;
@@ -269,23 +268,35 @@ function createServer(db, telegram, options = {}) {
         }
         return { ...user, sync_error: error.message };
       }
-    }));
+    })) : storedUsers;
     const bots = db.listBots ? await db.listBots() : [];
-    const syncedBots = await Promise.all(bots.map(async (bot) => {
+    const syncedBots = syncIdentities ? await Promise.all(bots.map(async (bot) => {
       try {
         return await syncBotIdentity(bot.id) || publicBot(bot);
       } catch (error) {
         return { ...publicBot(bot), sync_error: error.message };
       }
-    }));
+    })) : bots.map(publicBot);
     const botMap = new Map(syncedBots.map((bot) => [String(bot.id), bot]));
-    res.json(users.map((user) => {
+    return users.map((user) => {
       const { profile_photo_data: omittedProfilePhoto, ...publicUser } = user;
       return {
         ...publicUser,
         bot: user.bot_id ? botMap.get(String(user.bot_id)) || null : null,
       };
-    }));
+    });
+  }
+
+  app.get('/api/admin/users', wrap(async (req, res) => {
+    if (!db.listAppUsers) return res.status(501).json({ error: 'Supabase production database is required' });
+    res.set('Cache-Control', 'no-store');
+    res.json(await adminUserRoster());
+  }));
+
+  app.post('/api/admin/telegram-identities/refresh', wrap(async (req, res) => {
+    if (!db.listAppUsers) return res.status(501).json({ error: 'Supabase production database is required' });
+    res.set('Cache-Control', 'no-store');
+    res.json(await adminUserRoster({ syncIdentities: true }));
   }));
 
   app.get('/api/admin/bots', wrap(async (req, res) => {

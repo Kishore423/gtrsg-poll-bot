@@ -166,6 +166,9 @@ test('admin provisioning and sign-in require only a Telegram handle', () => {
   assert.doesNotMatch(adminScript, /user\.telegram_user_id\s*\n\s*\?/);
   assert.match(adminScript, /Bot identities refreshed/);
   assert.match(adminScript, /open Login_bot and press Start/);
+  assert.match(adminScript, /\/api\/admin\/telegram-identities\/refresh/);
+  assert.match(adminScript, /method:\s*refresh\s*\?\s*'POST'\s*:\s*'GET'/);
+  assert.match(adminScript, /cache:\s*'no-store'/);
 });
 
 test('Postgres app user roster does not overwrite user handles with bot handles', () => {
