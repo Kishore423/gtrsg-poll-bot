@@ -156,6 +156,16 @@ test('admin provisioning and sign-in require only a Telegram handle', () => {
   assert.match(admin, /Leave blank to assign later/);
 });
 
+test('Postgres app user roster does not overwrite user handles with bot handles', () => {
+  const source = readFileSync(join(__dirname, '..', 'src', 'db', 'postgres.js'), 'utf8');
+  const listAppUsers = source.match(/async listAppUsers\(\) \{([\s\S]*?)\n    \},/);
+
+  assert.ok(listAppUsers, 'listAppUsers implementation should exist');
+  assert.match(listAppUsers[1], /u\.telegram_username/);
+  assert.doesNotMatch(listAppUsers[1], /b\.telegram_username/);
+  assert.doesNotMatch(listAppUsers[1], /join bots/i);
+});
+
 test('dynamic icon hydration ignores generated Lucide SVGs', () => {
   let observerCallback;
   let renderCount = 0;

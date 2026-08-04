@@ -31,6 +31,10 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   explicit **Refresh from Telegram** action. `bots.bot_name` and
   `bots.telegram_username` are caches only. Website rename APIs fail closed;
   admins make identity changes in Telegram/BotFather and then refresh.
+- `app_users.telegram_username` is the person's login handle, while
+  `bots.telegram_username` is the assigned bot handle. Repository and API
+  results keep these fields separate so the bot handle never replaces the user
+  handle in the Admin edit form.
 - Seed roster: `Malla_Sonia@gtr.com.sg` (user, @Pax_services_bot),
   `Yidan_Wang@sats.com.sg` (user, @Flexi_wheelchair_bot),
   `Kirubakaran_Kishore@sats.com.sg` (**admin**, no bot).

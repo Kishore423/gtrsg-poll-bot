@@ -379,9 +379,8 @@ function createPostgresDb(sql = createSql()) {
       return sql`
         select u.id, u.telegram_user_id::text, u.telegram_username,
                u.telegram_display_name, u.profile_photo_data, u.role, u.enabled,
-               u.bot_id, u.created_at,
-               b.bot_name, b.telegram_username, b.name_synced_at
-        from app_users u left join bots b on b.id = u.bot_id
+               u.bot_id, u.created_at
+        from app_users u
         order by u.role desc, coalesce(u.telegram_display_name, u.telegram_username)`;
     },
 

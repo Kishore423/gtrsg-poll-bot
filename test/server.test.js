@@ -173,6 +173,7 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
     const listed = await fetch(`${baseUrl}/api/admin/users`, { headers });
     assert.equal(listed.status, 200);
     const users = await listed.json();
+    assert.equal(users[0].telegram_username, 'new_user');
     assert.equal(users[0].bot.bot_name, 'Telegram Managed Name');
     assert.equal(users[0].bot.telegram_username, 'telegram_managed_bot');
     assert.equal(Object.hasOwn(users[0], 'email'), false);
@@ -208,6 +209,7 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
     remoteHandles.set(body.bot_id, 'changed_in_telegram');
     const refreshed = await fetch(`${baseUrl}/api/admin/users`, { headers });
     const refreshedUsers = await refreshed.json();
+    assert.equal(refreshedUsers[0].telegram_username, 'edited_user');
     assert.equal(refreshedUsers[0].bot.bot_name, 'Changed In Telegram');
     assert.equal(refreshedUsers[0].bot.telegram_username, 'changed_in_telegram');
 

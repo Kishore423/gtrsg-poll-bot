@@ -159,9 +159,11 @@ Vercel Cron** for hosting/scheduling.
   and saved to the caller's own `app_users.profile_photo_data`. Admin user rows
   have an Edit dialog for handle, display name, role, enabled
   status, and the assigned bot's Telegram display name; bot tokens and immutable
-  bot handles are never returned for editing. Clicking an existing avatar opens
-  a full-screen viewer over a translucent black backdrop with an X close control
-  and a self-only delete action. The shared
+  bot handles are never returned for editing. `app_users.telegram_username` is
+  the person's login handle and `bots.telegram_username` is the assigned bot
+  handle; repository and API results keep them separate. Clicking an existing
+  avatar opens a full-screen viewer over a translucent black backdrop with an X
+  close control and a self-only delete action. The shared
   login UI exposes an editable six-digit field immediately after **Send code**
   and enables verification when the challenge response arrives.
 - Webhook updates are de-duplicated (`beginWebhookEvent`/`finishWebhookEvent`);
