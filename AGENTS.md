@@ -133,23 +133,26 @@ Vercel Cron** for hosting/scheduling.
   (default true in prod)
   protects `/api/*` except `/api/auth/*`, `/api/telegram/*`, `/api/cron/*`
   (those use the webhook secret / cron bearer instead).
-  `/api/auth/telegram/otp/request` accepts an approved handle or numeric ID and
-  sends a six-digit code to the immutable `app_users.telegram_user_id` through
+  Admins provision an approved Telegram handle without entering a numeric ID.
+  A private `/start` to the login bot binds an unbound approved handle to the
+  immutable ID supplied by Telegram; the handle must match exactly and an
+  already-bound row is never reassigned. `/api/auth/telegram/otp/request` accepts
+  the approved handle and sends a six-digit code to `app_users.telegram_user_id`
+  through
   the dedicated `LOGIN` bot configured by `TELEGRAM_LOGIN_BOT_TOKEN`. Polling-bot
   assignments are never used for authentication delivery.
   `/api/auth/telegram/otp/verify` consumes the five-minute browser-bound challenge
   and issues a signed 12-hour session. Codes allow five attempts and successful
-  sends have a one-minute cooldown plus a five-per-hour cap. Unknown identities
-  get a generic response but no OTP/session. A private `/start` to the login bot
-  only enrolls that conversation for future delivery, and its webhook ignores
-  group/poll activity. `app_users` stores no email; Telegram ID is the
+  sends have a one-minute cooldown plus a five-per-hour cap. Unknown or
+  not-yet-bound identities get a generic response but no OTP/session. The login
+  bot webhook ignores group/poll activity. `app_users` stores no email; Telegram ID is the
   authorization key, while handle and display name are metadata. Home, Polls,
   and Admin show the admin-managed `telegram_display_name` in the navbar after
   authentication, falling back to the Telegram handle when needed. Clicking the
   identity opens a shared account menu with profile-picture upload and Sign out.
   Uploads are resized to 256x256 WebP client-side, capped at 200 KB server-side,
   and saved to the caller's own `app_users.profile_photo_data`. Admin user rows
-  have an Edit dialog for Telegram ID, handle, display name, role, enabled
+  have an Edit dialog for handle, display name, role, enabled
   status, and the assigned bot's Telegram display name; bot tokens and immutable
   bot handles are never returned for editing. Clicking an existing avatar opens
   a full-screen viewer over a translucent black backdrop with an X close control

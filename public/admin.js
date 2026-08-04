@@ -38,7 +38,11 @@ async function loadUsers() {
   usersBody.innerHTML = result.map((user) => {
     const bot = user.bot || {};
     return `<tr>
-      <td>${telegramLabel(user)}<br><span class="muted">ID ${escapeHtml(user.telegram_user_id || '-')}</span></td>
+      <td>${telegramLabel(user)}<br><span class="muted">${
+        user.telegram_user_id
+          ? `Telegram ID ${escapeHtml(user.telegram_user_id)}`
+          : 'Awaiting Login_bot Start'
+      }</span></td>
       <td>${escapeHtml(user.role === 'admin' ? 'Admin' : 'User')}</td>
       <td>${bot.id ? escapeHtml(bot.bot_name || '-') : '<span class="muted">No bot</span>'}</td>
       <td>${bot.telegram_username ? `@${escapeHtml(bot.telegram_username)}` : '<span class="muted">-</span>'}</td>
@@ -56,7 +60,6 @@ async function loadUsers() {
       if (!user) return;
       const bot = user.bot || {};
       editUserForm.elements.id.value = user.id;
-      editUserForm.elements.telegram_user_id.value = user.telegram_user_id || '';
       editUserForm.elements.telegram_username.value = user.telegram_username || '';
       editUserForm.elements.telegram_display_name.value = user.telegram_display_name || '';
       editUserForm.elements.role.value = user.role || 'user';
@@ -124,7 +127,7 @@ addUserForm.addEventListener('submit', async (event) => {
     return;
   }
   addUserForm.reset();
-  setStatus('Telegram user added and bot webhook registered.', 'success');
+  setStatus('Telegram user added. Ask them to open Login_bot and press Start to activate sign-in.', 'success');
   await loadUsers();
 });
 

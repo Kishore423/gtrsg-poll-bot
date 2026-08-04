@@ -134,6 +134,18 @@ test('shared dimensional theme and icon runtime load on every application page',
   assert.doesNotMatch(runtime, /node\.matches\?\.\('\[data-lucide\]'\)/);
 });
 
+test('admin provisioning and sign-in require only a Telegram handle', () => {
+  const admin = readFileSync(join(__dirname, '..', 'public', 'admin.html'), 'utf8');
+  for (const page of ['index.html', 'polls.html', 'admin.html']) {
+    const html = readFileSync(join(__dirname, '..', 'public', page), 'utf8');
+    assert.match(html, /Telegram handle/);
+    assert.doesNotMatch(html, /Telegram ID or handle/);
+    assert.doesNotMatch(html, /@username or numeric ID/);
+  }
+  assert.doesNotMatch(admin, /name="telegram_user_id"/);
+  assert.equal((admin.match(/name="telegram_username"/g) || []).length, 2);
+});
+
 test('dynamic icon hydration ignores generated Lucide SVGs', () => {
   let observerCallback;
   let renderCount = 0;

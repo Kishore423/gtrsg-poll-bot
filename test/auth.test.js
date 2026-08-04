@@ -204,6 +204,53 @@ test('plain private /start enrolls an approved user with the dedicated login bot
   assert.match(telegram.messages[0].html, /sign-in is ready/);
 });
 
+test('Login_bot Start binds an approved handle to its immutable Telegram ID', async () => {
+  const { auth, db, telegram } = await seeded();
+  const userId = await db.createAppUser({
+    telegram_username: 'pending_user',
+    telegram_display_name: 'Pending User',
+    role: 'user',
+  });
+
+  await auth.requestOtp('@pending_user');
+  assert.equal(telegram.messages.length, 0);
+
+  const result = await auth.completeFromUpdate('LOGIN', {
+    message: {
+      text: '/start login_setup',
+      chat: { id: 444555666, type: 'private' },
+      from: { id: 444555666, username: 'Pending_User' },
+    },
+  });
+  assert.equal(result.handled, 'telegram_login_setup');
+  const bound = (await db.listAppUsers()).find((user) => user.id === userId);
+  assert.equal(bound.telegram_user_id, '444555666');
+  assert.equal(bound.telegram_username, 'pending_user');
+
+  await auth.requestOtp('@pending_user');
+  assert.equal(telegram.messages.at(-1).chatId, '444555666');
+  assert.match(telegram.messages.at(-1).html, /123456/);
+});
+
+test('Login_bot Start cannot claim a pending user with a different handle', async () => {
+  const { auth, db, telegram } = await seeded();
+  const userId = await db.createAppUser({
+    telegram_username: 'approved_user',
+    telegram_display_name: 'Approved User',
+  });
+  const result = await auth.completeFromUpdate('LOGIN', {
+    message: {
+      text: '/start',
+      chat: { id: 777888999, type: 'private' },
+      from: { id: 777888999, username: 'different_user' },
+    },
+  });
+  assert.equal(result, null);
+  assert.equal(telegram.messages.length, 0);
+  const unchanged = (await db.listAppUsers()).find((user) => user.id === userId);
+  assert.equal(unchanged.telegram_user_id, null);
+});
+
 test('plain private /start ignores unknown users and the wrong delivery bot', async () => {
   const { auth, telegram } = await seeded();
   const unknown = await auth.completeFromUpdate('LOGIN', {

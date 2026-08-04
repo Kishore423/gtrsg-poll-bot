@@ -82,6 +82,7 @@ function parsePrivateStart(update) {
   return {
     chatId: message.chat.id,
     telegramUserId: String(message.from.id),
+    telegramUsername: String(message.from.username || '').trim().replace(/^@/, '').toLowerCase() || null,
   };
 }
 
@@ -124,19 +125,20 @@ function createTelegramAuth({
     if (!sessionSecret || !telegram) throw new Error('Telegram login is not configured');
     const identifier = normalizeTelegramIdentifier(rawIdentifier);
     if (!identifier) {
-      throw authError('Enter a valid Telegram ID or handle', 400);
+      throw authError('Enter a valid Telegram handle', 400);
     }
 
     await ensureLoginWebhook();
     const user = db.getAppUserByTelegramIdentifier
       ? await db.getAppUserByTelegramIdentifier(identifier)
       : await db.getAppUserByTelegramId(identifier);
+    const boundUser = user?.telegram_user_id ? user : null;
     const deliveryBotKey = authBotKey;
     const bot = await telegram.getMe(deliveryBotKey);
     if (!bot?.username) throw new Error('The Telegram login bot needs a username');
 
-    if (user && db.getLatestSentTelegramLoginChallenge) {
-      const latest = await db.getLatestSentTelegramLoginChallenge(user.telegram_user_id);
+    if (boundUser && db.getLatestSentTelegramLoginChallenge) {
+      const latest = await db.getLatestSentTelegramLoginChallenge(boundUser.telegram_user_id);
       const waitMs = latest ? otpResendCooldownMs - (now() - new Date(latest.sent_at).getTime()) : 0;
       if (waitMs > 0) {
         throw authError('Please wait before requesting another code', 429, {
@@ -147,7 +149,7 @@ function createTelegramAuth({
       if (db.countSentTelegramLoginChallengesSince) {
         const windowStart = new Date(now() - otpSendWindowMs).toISOString();
         const sentCount = await db.countSentTelegramLoginChallengesSince(
-          user.telegram_user_id,
+          boundUser.telegram_user_id,
           windowStart
         );
         if (sentCount >= otpMaxSendsPerWindow) {
@@ -164,17 +166,17 @@ function createTelegramAuth({
     const otp = generateOtp();
     const createdAt = new Date(now()).toISOString();
     const expiresAt = new Date(now() + otpTtlMs).toISOString();
-    if (user) {
+    if (boundUser) {
       await db.createTelegramLoginChallenge({
         id,
         verifier_hash: sha256(verifier),
-        telegram_user_id: user.telegram_user_id,
+        telegram_user_id: boundUser.telegram_user_id,
         otp_hash: hmac(sessionSecret, `${id}:${otp}`),
         expires_at: expiresAt,
         created_at: createdAt,
       });
       try {
-        await telegram.sendMessage(deliveryBotKey, user.telegram_user_id,
+        await telegram.sendMessage(deliveryBotKey, boundUser.telegram_user_id,
           `<b>Your Gops poll sign-in code</b>\n\n<code>${otp}</code>\n\n` +
           'This code expires in 5 minutes. Do not share it with anyone.');
         if (db.markTelegramLoginChallengeSent) {
@@ -230,9 +232,19 @@ function createTelegramAuth({
   async function completeFromUpdate(service, update) {
     const start = parsePrivateStart(update);
     if (!start) return null;
-    const user = await db.getAppUserByTelegramId(start.telegramUserId);
-    if (!user) return null;
     if (String(service).toUpperCase() !== String(authBotKey).toUpperCase()) return null;
+    let user = await db.getAppUserByTelegramId(start.telegramUserId);
+    if (!user && start.telegramUsername && db.getAppUserByTelegramIdentifier) {
+      const approved = await db.getAppUserByTelegramIdentifier(start.telegramUsername);
+      if (approved && !approved.telegram_user_id && db.setAppUserTelegramIdentity) {
+        user = await db.setAppUserTelegramIdentity(approved.id, {
+          telegram_user_id: start.telegramUserId,
+          telegram_username: start.telegramUsername,
+          telegram_display_name: approved.telegram_display_name,
+        });
+      }
+    }
+    if (!user) return null;
     await telegram.sendMessage(service, start.chatId,
       '<b>Telegram sign-in is ready.</b>\nReturn to the Gops poll website and request a code.');
     return { handled: 'telegram_login_setup' };

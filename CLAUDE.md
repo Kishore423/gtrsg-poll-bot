@@ -114,18 +114,21 @@ WHCL/PSA bots keep running until `scripts/migrate-to-multi-tenant.js` backfills
 `bot_ref`. Do not "tidy" this by dropping `bot_id` before that backfill runs.
 
 **Task 3 (done) — what changed, so nothing gets "fixed" back:**
-- `src/telegramAuth.js` accepts an approved Telegram handle or numeric ID, then
-  sends a six-digit OTP to the immutable `telegram_user_id` through the dedicated
+- `src/telegramAuth.js` accepts an approved Telegram handle, then sends a
+  six-digit OTP to the immutable `telegram_user_id` through the dedicated
   `LOGIN` bot configured by `TELEGRAM_LOGIN_BOT_TOKEN`. Polling-bot assignments
   are never used for authentication delivery.
 - OTP challenges expire after five minutes, are bound to the requesting browser,
   allow five attempts, are consumed atomically, and produce a 12-hour HMAC-signed
   session. Successful sends have a one-minute cooldown and a five-per-hour cap.
-- Unknown Telegram identities receive the same generic browser response but no
-  database challenge, OTP, or session. Admins add approved identities manually.
-- A private `/start` message to the dedicated login bot only opens the
-  conversation so it can deliver future OTPs; it does not authenticate the
-  browser. The `LOGIN` webhook ignores group and poll activity.
+- Unknown or not-yet-bound Telegram identities receive the same generic browser
+  response but no database challenge, OTP, or session. Admins provision the
+  approved handle without entering a numeric Telegram ID.
+- A private `/start` message to the dedicated login bot binds an unbound approved
+  handle to the immutable ID supplied by Telegram. The handle must match exactly,
+  and an already-bound row is never reassigned. This opens the conversation for
+  future OTP delivery but does not authenticate the browser. The `LOGIN` webhook
+  ignores group and poll activity.
 - `app_users.telegram_user_id` is unique and is the authorization join key.
   The email column was removed on 2026-07-24; handles and display names are
   refreshable metadata only.
@@ -433,7 +436,7 @@ live only in Vercel env + the local (gitignored) `.env`.
   the shared account menu for profile-picture upload and Sign out. Profile
   pictures are resized to 256x256 WebP in the browser, capped at 200 KB by the
   API, and stored in `app_users.profile_photo_data`; users can update only their
-  own picture. Admin user rows expose an Edit dialog for Telegram ID, handle,
+  own picture. Admin user rows expose an Edit dialog for handle,
   display name, role, enabled status, and the assigned bot's Telegram display
   name. Clicking an existing avatar opens a full-screen profile viewer with a
   translucent black backdrop, an X close control, and a self-only delete action.

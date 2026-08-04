@@ -145,7 +145,6 @@ test('admin APIs create a user bot mapping, register webhook, and sync bot renam
   try {
     const headers = { Authorization: 'Bearer admin' };
     const created = await fetch(`${baseUrl}/api/admin/users`, json('POST', {
-      telegram_user_id: '123456789',
       telegram_username: 'new_user',
       telegram_display_name: 'New User',
       email: 'ignored@example.com',
@@ -154,7 +153,8 @@ test('admin APIs create a user bot mapping, register webhook, and sync bot renam
     }, headers));
     assert.equal(created.status, 201);
     const body = await created.json();
-    assert.equal(body.telegram_user_id, '123456789');
+    assert.equal(body.telegram_user_id, null);
+    assert.equal(body.telegram_username, 'new_user');
     assert.equal(body.role, 'user');
     assert.equal(Object.hasOwn(body, 'email'), false);
     assert.ok(body.bot_id);
@@ -170,7 +170,6 @@ test('admin APIs create a user bot mapping, register webhook, and sync bot renam
     assert.equal(Object.hasOwn(users[0], 'profile_photo_data'), false);
 
     const editedRes = await fetch(`${baseUrl}/api/admin/users/${body.id}`, json('PATCH', {
-      telegram_user_id: '123456780',
       telegram_username: 'edited_user',
       telegram_display_name: 'Edited User',
       role: 'admin',
@@ -179,7 +178,7 @@ test('admin APIs create a user bot mapping, register webhook, and sync bot renam
     }, headers));
     assert.equal(editedRes.status, 200);
     const edited = await editedRes.json();
-    assert.equal(edited.telegram_user_id, '123456780');
+    assert.equal(edited.telegram_user_id, null);
     assert.equal(edited.telegram_username, 'edited_user');
     assert.equal(edited.telegram_display_name, 'Edited User');
     assert.equal(edited.role, 'admin');

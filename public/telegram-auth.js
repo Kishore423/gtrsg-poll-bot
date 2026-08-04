@@ -307,7 +307,7 @@
     const { identifier, send } = elements();
     const value = identifier?.value.trim();
     if (!value) {
-      setMessage('Enter your Telegram ID or handle.');
+      setMessage('Enter your Telegram handle.');
       identifier?.focus();
       return;
     }

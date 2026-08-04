@@ -114,10 +114,10 @@
   <div id="auth-overlay" class="auth-overlay" hidden>
     <div class="auth-dialog" role="dialog" aria-modal="true">
       <h2>Sign in</h2>
-      <p class="telegram-auth-copy">Enter your approved Telegram ID or handle. A six-digit code will be sent to your Telegram phone app.</p>
+      <p class="telegram-auth-copy">Enter your approved Telegram handle. A six-digit code will be sent to your Telegram phone app.</p>
       <form id="telegram-otp-form">
-        <label for="telegram-identifier">Telegram ID or handle
-          <input id="telegram-identifier" name="identifier" autocomplete="username" placeholder="@username or numeric ID" required />
+        <label for="telegram-identifier">Telegram handle
+          <input id="telegram-identifier" name="identifier" autocomplete="username" placeholder="@username" required />
         </label>
         <div id="telegram-code-step" class="telegram-code-step" hidden>
           <label for="telegram-code">Six-digit code
@@ -165,10 +165,10 @@
     <div id="status" class="status" aria-live="polite"></div>
 
     <section class="card">
-      <h2>Add Telegram user manually</h2>
+      <h2>Add Telegram user</h2>
+      <p class="hint">Enter the approved handle. The Telegram user ID is captured automatically when the user opens Login_bot and presses Start.</p>
       <form id="add-user-form">
-        <label>Telegram user ID<input name="telegram_user_id" inputmode="numeric" required /></label>
-        <label>Telegram handle<input name="telegram_username" placeholder="@username" /></label>
+        <label>Telegram handle<input name="telegram_username" placeholder="@username" required /></label>
         <label>Display name<input name="telegram_display_name" /></label>
         <label>Role<select name="role"><option value="user">User</option><option value="admin">Admin</option></select></label>
         <label>BotFather token<input name="bot_token" autocomplete="off" placeholder="Required for users" /></label>
@@ -197,8 +197,7 @@
       </div>
       <form id="edit-user-form" class="edit-user-form">
         <input name="id" type="hidden" />
-        <label>Telegram user ID<input name="telegram_user_id" inputmode="numeric" required /></label>
-        <label>Telegram handle<input name="telegram_username" placeholder="@username" /></label>
+        <label>Telegram handle<input name="telegram_username" placeholder="@username" required /></label>
         <label class="full">Display name<input name="telegram_display_name" maxlength="80" /></label>
         <label>Role<select name="role"><option value="user">User</option><option value="admin">Admin</option></select></label>
         <label class="checkbox-field"><input name="enabled" type="checkbox" /> Account enabled</label>

@@ -292,7 +292,7 @@ function createMemoryDb() {
     }) {
       const user = appUsers.find((item) => item.id === String(id));
       if (!user) return null;
-      user.telegram_user_id = String(telegram_user_id);
+      user.telegram_user_id = telegram_user_id ? String(telegram_user_id) : null;
       user.telegram_username = telegram_username;
       user.telegram_display_name = telegram_display_name;
       return { ...user };
@@ -307,7 +307,7 @@ function createMemoryDb() {
     }) {
       const user = appUsers.find((item) => item.id === String(id));
       if (!user) return null;
-      user.telegram_user_id = String(telegram_user_id);
+      user.telegram_user_id = telegram_user_id ? String(telegram_user_id) : null;
       user.telegram_username = telegram_username;
       user.telegram_display_name = telegram_display_name;
       user.role = role;

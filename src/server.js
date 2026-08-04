@@ -251,15 +251,16 @@ function createServer(db, telegram, options = {}) {
 
   app.post('/api/admin/users', wrap(async (req, res) => {
     if (!db.createAppUser) return res.status(501).json({ error: 'Supabase production database is required' });
-    const telegramUserId = String(req.body?.telegram_user_id || '').trim();
     const telegramUsername = String(req.body?.telegram_username || '').trim().replace(/^@/, '') || null;
     const telegramDisplayName = String(req.body?.telegram_display_name || '').trim() || null;
     const role = String(req.body?.role || 'user');
-    if (!/^\d+$/.test(telegramUserId)) return res.status(400).json({ error: 'A numeric Telegram user ID is required' });
+    if (!telegramUsername || !/^[A-Za-z0-9_]{5,32}$/.test(telegramUsername)) {
+      return res.status(400).json({ error: 'A valid Telegram handle is required' });
+    }
     if (!['admin', 'user'].includes(role)) return res.status(400).json({ error: 'Role must be admin or user' });
     if (db.listAppUsers) {
       const existing = (await db.listAppUsers()).find((user) =>
-        String(user.telegram_user_id) === telegramUserId);
+        String(user.telegram_username || '').toLowerCase() === telegramUsername.toLowerCase());
       if (existing) return res.status(409).json({ error: 'This Telegram account is already provisioned' });
     }
     const botToken = String(req.body?.bot_token || '').trim();
@@ -268,11 +269,17 @@ function createServer(db, telegram, options = {}) {
     const userId = await db.createAppUser({
       role,
       bot_id: botId,
-      telegram_user_id: telegramUserId,
+      telegram_user_id: null,
       telegram_username: telegramUsername,
       telegram_display_name: telegramDisplayName,
     });
-    res.status(201).json({ id: userId, telegram_user_id: telegramUserId, role, bot_id: botId });
+    res.status(201).json({
+      id: userId,
+      telegram_user_id: null,
+      telegram_username: telegramUsername,
+      role,
+      bot_id: botId,
+    });
   }));
 
   app.patch('/api/admin/users/:id', wrap(async (req, res) => {
@@ -282,7 +289,7 @@ function createServer(db, telegram, options = {}) {
     const users = await db.listAppUsers();
     const current = users.find((user) => String(user.id) === String(req.params.id));
     if (!current) return res.status(404).json({ error: 'User not found' });
-    const telegramUserId = String(req.body?.telegram_user_id ?? current.telegram_user_id ?? '').trim();
+    const telegramUserId = current.telegram_user_id ? String(current.telegram_user_id) : null;
     const telegramUsername = String(req.body?.telegram_username ?? current.telegram_username ?? '')
       .trim().replace(/^@/, '') || null;
     const telegramDisplayName = String(
@@ -290,11 +297,8 @@ function createServer(db, telegram, options = {}) {
     ).trim() || null;
     const role = String(req.body?.role ?? current.role);
     const enabled = req.body?.enabled === undefined ? current.enabled !== false : Boolean(req.body.enabled);
-    if (!/^\d+$/.test(telegramUserId)) {
-      return res.status(400).json({ error: 'A numeric Telegram user ID is required' });
-    }
-    if (telegramUsername && !/^[A-Za-z0-9_]{5,32}$/.test(telegramUsername)) {
-      return res.status(400).json({ error: 'Telegram handle must be 5-32 letters, numbers, or underscores' });
+    if (!telegramUsername || !/^[A-Za-z0-9_]{5,32}$/.test(telegramUsername)) {
+      return res.status(400).json({ error: 'A valid Telegram handle is required' });
     }
     if (telegramDisplayName && telegramDisplayName.length > 80) {
       return res.status(400).json({ error: 'Display name must be 80 characters or fewer' });
@@ -303,7 +307,7 @@ function createServer(db, telegram, options = {}) {
       return res.status(400).json({ error: 'Role must be admin or user' });
     }
     const duplicate = users.find((user) => String(user.id) !== String(current.id) && (
-      String(user.telegram_user_id) === telegramUserId
+      (telegramUserId && String(user.telegram_user_id) === telegramUserId)
       || (telegramUsername && String(user.telegram_username || '').toLowerCase() === telegramUsername.toLowerCase())
     ));
     if (duplicate) return res.status(409).json({ error: 'Telegram ID or handle is already assigned' });
