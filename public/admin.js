@@ -12,6 +12,8 @@ const editUserBotTokenLabel = document.getElementById('edit-user-bot-token-label
 const editUserBotName = document.getElementById('edit-user-bot-name');
 const editUserBotHandle = document.getElementById('edit-user-bot-handle');
 const editUserStatus = document.getElementById('edit-user-status');
+const addBotTokenStatus = document.getElementById('add-bot-token-status');
+const editBotTokenPreview = document.getElementById('edit-bot-token-preview');
 let currentUsers = new Map();
 let editingUserHasBot = false;
 
@@ -29,6 +31,43 @@ function telegramLabel(user) {
   const name = user.telegram_display_name || user.telegram_username || 'Telegram user';
   const handle = user.telegram_username ? `@${user.telegram_username}` : '';
   return `<strong>${escapeHtml(name)}</strong>${handle ? `<br><span class="muted">${escapeHtml(handle)}</span>` : ''}`;
+}
+
+function botIdentityLabel(bot) {
+  if (!bot) return 'Telegram bot';
+  const name = bot.bot_name || 'Telegram bot';
+  const handle = bot.telegram_username ? `@${bot.telegram_username}` : 'no public handle';
+  const id = bot.telegram_bot_id ? `Telegram ID ${bot.telegram_bot_id}` : 'Telegram ID unavailable';
+  return `${name} (${handle}, ${id})`;
+}
+
+async function verifyBotToken(input, statusElement) {
+  const token = String(input?.value || '').trim();
+  if (!token) {
+    statusElement.textContent = 'Paste a BotFather token first.';
+    statusElement.className = `${statusElement === addBotTokenStatus ? 'status bot-token-status' : 'status'} error`;
+    return null;
+  }
+  statusElement.textContent = 'Checking this token directly with Telegram...';
+  statusElement.className = statusElement === addBotTokenStatus ? 'status bot-token-status' : 'status';
+  const response = await fetch('/api/admin/bots/inspect-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bot_token: token }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    statusElement.textContent = `Error: ${result.error || 'Unable to verify this token'}`;
+    statusElement.className = `${statusElement === addBotTokenStatus ? 'status bot-token-status' : 'status'} error`;
+    return null;
+  }
+  statusElement.textContent = result.already_assigned
+    ? `Detected ${botIdentityLabel(result)}, but it is already assigned to ${result.assigned_to || 'another user'}.`
+    : `Detected ${botIdentityLabel(result)}.`;
+  statusElement.className = `${
+    statusElement === addBotTokenStatus ? 'status bot-token-status' : 'status'
+  } ${result.already_assigned ? 'error' : 'success'}`;
+  return result;
 }
 
 async function loadUsers({ refresh = false } = {}) {
@@ -90,6 +129,8 @@ async function loadUsers({ refresh = false } = {}) {
         : 'Paste a token to assign a bot';
       editUserBotName.value = bot.id ? bot.bot_name || '-' : 'No bot assigned';
       editUserBotHandle.value = bot.telegram_username ? `@${bot.telegram_username}` : '-';
+      editBotTokenPreview.textContent = '';
+      editBotTokenPreview.className = 'status';
       editUserStatus.textContent = '';
       editUserDialog.showModal();
     });
@@ -147,8 +188,8 @@ editUserForm.addEventListener('submit', async (event) => {
     setStatus(
       body.bot_token
         ? editingUserHasBot
-          ? 'Telegram bot replaced. The previous bot and its groups were disabled.'
-          : 'Telegram bot assigned.'
+          ? `${botIdentityLabel(result.bot)} assigned. The previous bot and its groups were disabled.`
+          : `${botIdentityLabel(result.bot)} assigned.`
         : 'User details updated.',
       'success'
     );
@@ -157,6 +198,18 @@ editUserForm.addEventListener('submit', async (event) => {
 });
 
 document.getElementById('cancel-edit-user').addEventListener('click', () => editUserDialog.close());
+document.getElementById('verify-new-bot-token').addEventListener('click', () =>
+  verifyBotToken(addUserForm.elements.bot_token, addBotTokenStatus));
+document.getElementById('verify-edit-bot-token').addEventListener('click', () =>
+  verifyBotToken(editUserForm.elements.bot_token, editBotTokenPreview));
+addUserForm.elements.bot_token.addEventListener('input', () => {
+  addBotTokenStatus.textContent = '';
+  addBotTokenStatus.className = 'status bot-token-status';
+});
+editUserForm.elements.bot_token.addEventListener('input', () => {
+  editBotTokenPreview.textContent = '';
+  editBotTokenPreview.className = 'status';
+});
 document.getElementById('refresh-bot-identities').addEventListener('click', async () => {
   setStatus('Refreshing user and bot identities from Telegram...');
   const outcome = await loadUsers({ refresh: true });
@@ -197,9 +250,11 @@ addUserForm.addEventListener('submit', async (event) => {
     return;
   }
   addUserForm.reset();
+  addBotTokenStatus.textContent = '';
+  addBotTokenStatus.className = 'status bot-token-status';
   setStatus(
     result.bot_id
-      ? 'Telegram user and bot added. Ask them to open Login_bot and press Start to activate sign-in.'
+      ? `Telegram user added and ${botIdentityLabel(result.bot)} assigned. Ask them to open Login_bot and press Start to activate sign-in.`
       : 'Telegram user added without a bot. You can assign one later from Edit. Ask them to open Login_bot and press Start to activate sign-in.',
     'success'
   );

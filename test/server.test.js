@@ -211,6 +211,14 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
         : null,
     createTelegramClientForToken: (token) => ({
       async getMe() {
+        if (token === 'invalid-token') {
+          const error = new Error('Telegram getMe failed: 401 Unauthorized');
+          error.telegramCode = 401;
+          throw error;
+        }
+        if (token === 'webhook-failure-token') {
+          return { id: 789, username: 'rollback_bot', first_name: 'Rollback Bot' };
+        }
         if (token === 'replacement-token') {
           return { id: 456, username: 'replacement_bot', first_name: 'Replacement Bot' };
         }
@@ -220,9 +228,15 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
         return { id: 123, username: 'new_user_bot', first_name: 'New User Bot' };
       },
       async getMyName() {
+        if (token === 'webhook-failure-token') return { name: 'Rollback Bot' };
         if (token === 'replacement-token') return { name: 'Replacement Bot' };
         if (token === 'assigned-later-token') return { name: 'Assigned Later Bot' };
         return { name: 'New User Bot' };
+      },
+      async setWebhook(botId, url, secret) {
+        if (token === 'webhook-failure-token') throw new Error('Webhook registration failed');
+        webhooks.push({ botId, url, secret, token });
+        return true;
       },
       async deleteWebhook() {
         deletedWebhooks.push(token);
@@ -234,6 +248,37 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
   try {
     const headers = { Authorization: 'Bearer admin' };
+    const invalidInspection = await fetch(`${baseUrl}/api/admin/bots/inspect-token`, json('POST', {
+      bot_token: 'invalid-token',
+    }, headers));
+    assert.equal(invalidInspection.status, 400);
+    assert.match((await invalidInspection.json()).error, /Telegram rejected this BotFather token/);
+
+    const inspected = await fetch(`${baseUrl}/api/admin/bots/inspect-token`, json('POST', {
+      bot_token: 'fake-token',
+    }, headers));
+    assert.equal(inspected.status, 200);
+    assert.deepEqual(await inspected.json(), {
+      bot_name: 'New User Bot',
+      telegram_username: 'new_user_bot',
+      telegram_bot_id: '123',
+      already_assigned: false,
+      assigned_to: null,
+    });
+    assert.equal((await db.listBots()).length, 0);
+    assert.equal(webhooks.length, 0);
+
+    const failedProvision = await fetch(`${baseUrl}/api/admin/users`, json('POST', {
+      telegram_username: 'rollback_user',
+      telegram_display_name: 'Rollback User',
+      role: 'user',
+      bot_token: 'webhook-failure-token',
+    }, headers));
+    assert.equal(failedProvision.status, 500);
+    assert.equal((await db.listBots()).length, 0);
+    assert.equal((await db.listAppUsers()).length, 0);
+    assert.deepEqual(deletedWebhooks, ['webhook-failure-token']);
+
     const created = await fetch(`${baseUrl}/api/admin/users`, json('POST', {
       telegram_username: 'new_user',
       telegram_display_name: 'New User',
@@ -248,9 +293,25 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
     assert.equal(body.role, 'user');
     assert.equal(Object.hasOwn(body, 'email'), false);
     assert.ok(body.bot_id);
+    assert.equal(body.bot.bot_name, 'New User Bot');
+    assert.equal(body.bot.telegram_username, 'new_user_bot');
+    assert.equal(body.bot.telegram_bot_id, '123');
     assert.equal(webhooks.length, 1);
-    assert.equal(webhooks[0].botId, body.bot_id);
+    assert.equal(webhooks[0].botId, 'BOT');
+    assert.equal(webhooks[0].token, 'fake-token');
     assert.match(webhooks[0].url, new RegExp(`/api/telegram/${body.bot_id}$`));
+
+    const assignedInspection = await fetch(`${baseUrl}/api/admin/bots/inspect-token`, json('POST', {
+      bot_token: 'fake-token',
+    }, headers));
+    assert.equal(assignedInspection.status, 200);
+    assert.deepEqual(await assignedInspection.json(), {
+      bot_name: 'New User Bot',
+      telegram_username: 'new_user_bot',
+      telegram_bot_id: '123',
+      already_assigned: true,
+      assigned_to: 'New User',
+    });
 
     remoteNames.set(body.bot_id, 'Telegram Managed Name');
     remoteHandles.set(body.bot_id, 'telegram_managed_bot');
@@ -325,7 +386,8 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
     assert.ok(assigned.bot_id);
     assert.equal(assigned.bot.telegram_username, 'assigned_later_bot');
     assert.equal(webhooks.length, 2);
-    assert.equal(webhooks.at(-1).botId, assigned.bot_id);
+    assert.equal(webhooks.at(-1).botId, 'BOT');
+    assert.equal(webhooks.at(-1).token, 'assigned-later-token');
 
     const previousBotId = assigned.bot_id;
     const previousGroupId = await db.createTelegramGroup({
@@ -343,7 +405,7 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
     assert.equal(replaced.bot.telegram_username, 'replacement_bot');
     assert.equal((await db.getBot(previousBotId)).enabled, false);
     assert.equal((await db.getTelegramGroup(previousGroupId)).enabled, false);
-    assert.deepEqual(deletedWebhooks, ['assigned-later-token']);
+    assert.deepEqual(deletedWebhooks, ['webhook-failure-token', 'assigned-later-token']);
     assert.equal(webhooks.length, 3);
 
     const duplicateRes = await fetch(`${baseUrl}/api/admin/users/${unassigned.id}`, json('PATCH', {

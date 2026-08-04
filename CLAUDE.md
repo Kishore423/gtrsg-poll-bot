@@ -58,9 +58,13 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   response as an unavailable refresh, retains the cached handle, and prompts the
   user to press Start; genuine user or bot API failures remain errors.
 - Admins may replace a user's assigned bot by entering a different BotFather
-  token in Edit. The new bot is validated and registered before the single
-  `app_users.bot_id` mapping changes. The previous bot and its managed groups
-  are disabled, its webhook is removed, and historical records remain intact.
+  token in Edit. **Verify token** reads the exact Telegram-owned bot name,
+  handle, and immutable ID before assignment. The new bot is validated and its
+  webhook is registered with that same token before the single `app_users.bot_id`
+  mapping changes. Failed webhook registration or user assignment rolls back the
+  new webhook and database row so a retry is not blocked by a stale mapping. The
+  previous bot and its managed groups are disabled, its webhook is removed, and
+  historical records remain intact.
   A Telegram bot ID already registered in the application cannot be duplicated.
   Postgres enforces this invariant with the partial unique index
   `bots_telegram_bot_id_key`; the memory repository mirrors it for tests, and
