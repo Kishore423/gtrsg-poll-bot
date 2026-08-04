@@ -608,3 +608,259 @@ button svg {
     background-image: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Dimensional layer.
+   Adds material depth (gradient surfaces, bevels, layered elevation) on top of
+   the base theme. Layout, spacing, and element structure are intentionally
+   unchanged so no JS hook or form geometry is affected.
+   --------------------------------------------------------------------------- */
+
+body {
+  background:
+    radial-gradient(1100px 560px at 10% -12%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 62%),
+    radial-gradient(900px 520px at 102% -4%, rgba(198, 231, 224, 0.55) 0%, rgba(198, 231, 224, 0) 58%),
+    linear-gradient(180deg, #eff3f5 0%, #e6ecef 100%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+nav {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(249, 251, 252, 0.95) 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(214, 223, 228, 0.55),
+    0 1px 2px rgba(18, 36, 44, 0.06),
+    0 12px 30px rgba(18, 36, 44, 0.07) !important;
+}
+
+.brand-mark {
+  border-radius: 8px;
+  background: linear-gradient(160deg, #1cab9c 0%, #128c7e 52%, #0c7267 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.16),
+    0 4px 0 #06564e,
+    0 8px 16px rgba(8, 105, 95, 0.3);
+}
+
+/* Page header: tint the artwork panel so headline text keeps contrast. */
+main > header,
+.page-header {
+  border-radius: 10px;
+  background-image:
+    linear-gradient(100deg, #ffffff 0%, rgba(255, 255, 255, 0.92) 38%, rgba(248, 251, 252, 0.35) 62%, rgba(248, 251, 252, 0) 78%),
+    url("/assets/poll-operations-header.png");
+  background-repeat: no-repeat, no-repeat;
+  background-position: center, right center;
+  background-size: cover, auto 100%;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(206, 217, 223, 0.5),
+    0 2px 4px rgba(15, 32, 40, 0.05),
+    0 18px 40px rgba(15, 32, 40, 0.1) !important;
+}
+
+main > header::after,
+.page-header::after {
+  box-shadow: inset 4px 0 0 var(--green), inset 5px 0 10px -5px rgba(8, 105, 95, 0.45);
+}
+
+.card {
+  border-radius: 10px !important;
+  border-color: #d5dee3 !important;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbfc 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 1px 1px rgba(15, 32, 40, 0.045),
+    0 4px 8px rgba(15, 32, 40, 0.045),
+    0 16px 30px rgba(15, 32, 40, 0.075),
+    0 32px 60px rgba(15, 32, 40, 0.045) !important;
+}
+
+.card > h2:first-child::before {
+  background: linear-gradient(180deg, #1cab9c 0%, #0c7267 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 2px 6px rgba(8, 105, 95, 0.3);
+}
+
+.card-header { border-bottom-color: #e2e8ec; }
+
+/* Buttons: bevelled cap, lit top edge, solid extruded base. */
+.primary,
+.telegram-sign-in {
+  background: linear-gradient(180deg, #18a294 0%, #128c7e 55%, #0f7d71 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14),
+    0 3px 0 #085f57,
+    0 6px 10px rgba(8, 105, 95, 0.24),
+    0 12px 22px rgba(8, 105, 95, 0.16) !important;
+}
+
+.primary:hover,
+.telegram-sign-in:hover {
+  background: linear-gradient(180deg, #1cab9c 0%, #16978a 55%, #11887b 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14),
+    0 5px 0 #075b53,
+    0 10px 16px rgba(8, 105, 95, 0.26),
+    0 18px 32px rgba(8, 105, 95, 0.2) !important;
+}
+
+.primary:active,
+.telegram-sign-in:active {
+  background: linear-gradient(180deg, #0f7d71 0%, #12907f 100%) !important;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.22), 0 1px 0 #075b53 !important;
+}
+
+.secondary {
+  background: linear-gradient(180deg, #ffffff 0%, #f2f6f7 100%) !important;
+  box-shadow:
+    inset 0 1px 0 #fff,
+    inset 0 -1px 0 rgba(255, 255, 255, 0.7),
+    0 2px 0 #d3dedc,
+    0 5px 10px rgba(15, 32, 40, 0.07),
+    0 12px 22px rgba(15, 32, 40, 0.05) !important;
+}
+
+.secondary:hover {
+  background: linear-gradient(180deg, #ffffff 0%, #eaf5f2 100%) !important;
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 4px 0 #c6d7d3,
+    0 9px 16px rgba(15, 32, 40, 0.09),
+    0 18px 30px rgba(15, 32, 40, 0.07) !important;
+}
+
+/* Inputs read as carved into the surface rather than drawn on it. */
+input,
+select,
+.time-wheel-picker {
+  background: linear-gradient(180deg, #f1f5f7 0%, #fcfdfe 100%) !important;
+  box-shadow:
+    inset 0 2px 5px rgba(15, 32, 40, 0.075),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 0 #fff !important;
+}
+
+input:focus,
+select:focus {
+  background: linear-gradient(180deg, #ffffff 0%, #ffffff 100%) !important;
+  box-shadow:
+    inset 0 2px 4px rgba(15, 32, 40, 0.05),
+    0 0 0 3px rgba(18, 140, 126, 0.16),
+    0 2px 6px rgba(8, 105, 95, 0.1) !important;
+}
+
+/* Recessed information panels. */
+.filter-bar,
+.timing-preview,
+.template-poll-preview,
+.rules-summary {
+  background: linear-gradient(180deg, #eef3f5 0%, #f7fafb 100%) !important;
+  box-shadow:
+    inset 0 2px 5px rgba(15, 32, 40, 0.06),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+.rule-panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.4) 100%);
+}
+
+/* Group rows sit above the card as tactile, liftable objects. */
+.managed-group-row {
+  border-radius: 9px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fafb 100%);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 2px 0 #d7e0e3,
+    0 5px 10px rgba(15, 32, 40, 0.06),
+    0 12px 24px rgba(15, 32, 40, 0.06);
+}
+
+.managed-group-row:hover {
+  background: linear-gradient(180deg, #ffffff 0%, #f4fbf9 100%) !important;
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 4px 0 #c9dad6,
+    0 12px 20px rgba(15, 32, 40, 0.1),
+    0 24px 40px rgba(15, 32, 40, 0.08) !important;
+}
+
+.workflow-action .workflow-icon {
+  background: linear-gradient(180deg, #f0faf7 0%, #dcf0ea 100%);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    inset 0 -1px 0 rgba(8, 105, 95, 0.08),
+    0 2px 5px rgba(8, 105, 95, 0.14);
+}
+
+/* Dialogs float clearly above the blurred workspace. */
+.group-dialog,
+.modal-panel,
+.auth-dialog,
+dialog {
+  border-radius: 12px !important;
+  background: linear-gradient(180deg, #ffffff 0%, #fafcfd 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 4px 8px rgba(15, 32, 40, 0.08),
+    0 24px 48px rgba(15, 32, 40, 0.18),
+    0 48px 100px rgba(15, 32, 40, 0.24) !important;
+}
+
+.feedback-symbol {
+  background: linear-gradient(180deg, #f0faf7 0%, #d9efe9 100%);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    inset 0 0 0 1px #c7e5dd,
+    0 4px 10px rgba(8, 105, 95, 0.18);
+}
+
+/* Tables: seated header, readable numerics, lifted hover row. */
+table thead {
+  background: linear-gradient(180deg, #f4f8f9 0%, #e9eff2 100%);
+}
+
+th {
+  border-bottom: 2px solid #dbe3e7 !important;
+  color: #4c5964 !important;
+}
+
+td { font-variant-numeric: tabular-nums; }
+
+tbody tr:hover {
+  background: linear-gradient(180deg, #f0faf7 0%, #e7f5f1 100%);
+  box-shadow: inset 0 1px 0 #fff, inset 0 -1px 0 rgba(8, 105, 95, 0.08);
+}
+
+.pill {
+  border-radius: 7px !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 0 0 1px rgba(15, 32, 40, 0.05),
+    0 1px 2px rgba(15, 32, 40, 0.09);
+}
+
+.schedule-row + .schedule-row { border-top-color: #e7edf0; }
+
+@media (max-width: 720px) {
+  main > header,
+  .page-header {
+    background-image:
+      linear-gradient(100deg, #ffffff 0%, rgba(255, 255, 255, 0.94) 46%, rgba(248, 251, 252, 0.3) 70%, rgba(248, 251, 252, 0) 84%),
+      url("/assets/poll-operations-header.png");
+    background-position: center, 122% center;
+    background-size: cover, auto 90%;
+  }
+}
+
+@media (max-width: 480px) {
+  main > header,
+  .page-header {
+    background-image: linear-gradient(160deg, #ffffff 0%, #f5f9fa 100%);
+    background-position: center;
+    background-size: cover;
+  }
+}
