@@ -111,6 +111,10 @@ test('managed workflows stay bound to the clicked group without duplicate select
   assert.match(html, /data-lucide="calendar-x-2"/);
   assert.match(html, /data-lucide="square-pen"/);
   assert.match(theme, /\.group-dialog-actions\s*\{[\s\S]*?grid-template-columns:\s*1fr/);
+  assert.ok(
+    html.indexOf('</main>') < html.indexOf('id="group-action-dialog"'),
+    'viewport dialog must be outside the transformed main element',
+  );
 });
 
 test('shared dimensional theme and icon runtime load on every application page', () => {

@@ -90,6 +90,8 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   navigation, and reduced-motion fallbacks without changing application behavior.
   Dynamic icon hydration must target only non-SVG `[data-lucide]` placeholders;
   generated Lucide SVGs retain that attribute and must not retrigger hydration.
+  Viewport dialog backdrops are direct children of `body`, after `main`; nesting
+  them inside the animated `main` constrains fixed positioning to the content box.
   Admins first search the Admin roster by display name; selecting one user scopes
   group rows and managed schedules to that user's single `bot_id`. Verification
   succeeds only after Telegram accepts a test message sent by that bot to the
