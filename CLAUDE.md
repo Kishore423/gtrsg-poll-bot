@@ -26,10 +26,11 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   ID. Unknown identities receive a generic response but no OTP or session.
 - Bot tokens: admin pastes BotFather token → **encrypted** in DB (never sent to browser).
 - Admins see **all** groups/bots; an admin may have **no bot** (`bot_id` nullable).
-- Bot name is **bidirectional**: UI edit → `setMyName` (shows in BotFather);
-  BotFather rename → pulled back via `getMyName`. `bots.bot_name` is only ever a
-  **cache of Telegram's value**, never an independent label. `@username` is
-  BotFather-only (no API).
+- Bot name and handle are Telegram-owned and read-only in the website. The Admin
+  roster refreshes assigned bots through `getMyName` and `getMe`, including an
+  explicit **Refresh from Telegram** action. `bots.bot_name` and
+  `bots.telegram_username` are caches only. Website rename APIs fail closed;
+  admins make identity changes in Telegram/BotFather and then refresh.
 - Seed roster: `Malla_Sonia@gtr.com.sg` (user, @Pax_services_bot),
   `Yidan_Wang@sats.com.sg` (user, @Flexi_wheelchair_bot),
   `Kirubakaran_Kishore@sats.com.sg` (**admin**, no bot).
@@ -75,9 +76,9 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   cache.
 - Task 6 admin UI/API: `/admin` serves `public/admin.html` / `public/admin.js`.
   Admins can create allow-list users with or without a bot, paste a BotFather
-  token during creation or later from Edit,
-  enable/disable or delete users, list bots, and rename bots through Telegram
-  `setMyName`. `/api/admin/*` is protected by `requireAdmin` when auth is on.
+  token during creation or later from Edit, enable/disable or delete users, and
+  refresh read-only bot names/handles from Telegram. `/api/admin/*` is protected
+  by `requireAdmin` when auth is on.
 - Task 7 dashboard flow: managed groups are auto-detected by webhook updates and
   rendered as clickable rows. Each row still has **Verify bot** and delete
   actions; clicking the row opens a popup with **Weekly default template**,

@@ -45,9 +45,12 @@
     h2 { margin:0 0 1rem; font-size:1rem; }
     p { color:var(--ink-soft); line-height:1.5; }
     .card { background:#fff; border:1px solid var(--border); border-radius:10px; padding:1.25rem; margin-bottom:1.25rem; }
+    .card-header { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1rem; }
+    .card-header h2 { margin:0; }
     form { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:.85rem; align-items:end; }
     label { display:flex; flex-direction:column; gap:.35rem; font-size:.76rem; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em; }
     input,select { padding:.58rem .65rem; border:1px solid var(--border); border-radius:8px; background:#fbfcfd; color:var(--ink); font:inherit; }
+    input[readonly] { cursor:default; background:#eef2f4; color:var(--ink-soft); }
     input:focus,select:focus { outline:none; border-color:var(--green); box-shadow:0 0 0 3px var(--green-light); background:#fff; }
     button { font:inherit; font-weight:700; border:0; border-radius:8px; padding:.62rem .95rem; cursor:pointer; }
     .primary { background:var(--green); color:#fff; }
@@ -177,7 +180,12 @@
     </section>
 
     <section class="card">
-      <h2>Users and bots</h2>
+      <div class="card-header">
+        <h2>Users and bots</h2>
+        <button type="button" id="refresh-bot-identities" class="secondary">
+          <i data-lucide="refresh-cw" aria-hidden="true"></i> Refresh from Telegram
+        </button>
+      </div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Telegram account</th><th>Role</th><th>Bot</th><th>Bot handle</th><th>Status</th><th></th></tr></thead>
@@ -202,8 +210,9 @@
         <label>Role<select name="role"><option value="user">User</option><option value="admin">Admin</option></select></label>
         <label class="checkbox-field"><input name="enabled" type="checkbox" /> Account enabled</label>
         <label class="full">Assign BotFather token<input name="bot_token" autocomplete="off" placeholder="Available while no bot is assigned" /></label>
-        <label class="full">Bot display name<input name="bot_name" maxlength="64" /></label>
-        <p id="edit-user-bot-handle" class="muted full"></p>
+        <label>Bot display name<input id="edit-user-bot-name" readonly /></label>
+        <label>Bot handle<input id="edit-user-bot-handle" readonly /></label>
+        <p class="muted full">Bot identity is managed in Telegram. Change it through BotFather, then use Refresh from Telegram.</p>
         <p id="edit-user-status" class="status full" aria-live="polite"></p>
         <div class="dialog-actions">
           <button id="cancel-edit-user" type="button" class="secondary">Cancel</button>

@@ -106,25 +106,31 @@ test('Telegram OTP endpoints request a code and verify a login session', async (
   });
 });
 
-test('admin APIs create a user bot mapping, register webhook, and sync bot rename', async () => {
+test('admin APIs mirror Telegram bot identity and keep it read-only', async () => {
   const previousKey = process.env.BOT_TOKEN_ENC_KEY;
   process.env.BOT_TOKEN_ENC_KEY = crypto.randomBytes(32).toString('base64');
   const db = createMemoryDb();
   const webhooks = [];
-  const renamed = [];
+  const remoteNames = new Map();
+  const remoteHandles = new Map();
+  const setNameCalls = [];
   const telegram = {
     async setWebhook(botId, url, secret) {
       webhooks.push({ botId, url, secret });
       return true;
     },
     async getMe(botId) {
-      return { id: 9001, username: `${botId}_username`, first_name: 'Tenant Bot' };
+      return {
+        id: 9001,
+        username: remoteHandles.get(botId) || `${botId}_username`,
+        first_name: 'Tenant Bot',
+      };
     },
     async getMyName(botId) {
-      return { name: renamed.at(-1)?.name || `${botId} display` };
+      return { name: remoteNames.get(botId) || `${botId} display` };
     },
     async setMyName(botId, name) {
-      renamed.push({ botId, name });
+      setNameCalls.push({ botId, name });
       return true;
     },
   };
@@ -162,10 +168,13 @@ test('admin APIs create a user bot mapping, register webhook, and sync bot renam
     assert.equal(webhooks[0].botId, body.bot_id);
     assert.match(webhooks[0].url, new RegExp(`/api/telegram/${body.bot_id}$`));
 
+    remoteNames.set(body.bot_id, 'Telegram Managed Name');
+    remoteHandles.set(body.bot_id, 'telegram_managed_bot');
     const listed = await fetch(`${baseUrl}/api/admin/users`, { headers });
     assert.equal(listed.status, 200);
     const users = await listed.json();
-    assert.equal(users[0].bot.telegram_username, 'new_user_bot');
+    assert.equal(users[0].bot.bot_name, 'Telegram Managed Name');
+    assert.equal(users[0].bot.telegram_username, 'telegram_managed_bot');
     assert.equal(Object.hasOwn(users[0], 'email'), false);
     assert.equal(Object.hasOwn(users[0], 'profile_photo_data'), false);
 
@@ -174,7 +183,6 @@ test('admin APIs create a user bot mapping, register webhook, and sync bot renam
       telegram_display_name: 'Edited User',
       role: 'admin',
       enabled: false,
-      bot_name: 'Edited User Bot',
     }, headers));
     assert.equal(editedRes.status, 200);
     const edited = await editedRes.json();
@@ -183,16 +191,25 @@ test('admin APIs create a user bot mapping, register webhook, and sync bot renam
     assert.equal(edited.telegram_display_name, 'Edited User');
     assert.equal(edited.role, 'admin');
     assert.equal(edited.enabled, false);
-    assert.equal(edited.bot.bot_name, 'Edited User Bot');
+    assert.equal(edited.bot.bot_name, 'Telegram Managed Name');
 
-    const renamedRes = await fetch(`${baseUrl}/api/admin/bots/${body.bot_id}`, json('PATCH', {
-      bot_name: 'Renamed Bot',
+    const userRenameRes = await fetch(`${baseUrl}/api/admin/users/${body.id}`, json('PATCH', {
+      bot_name: 'Website Rename',
     }, headers));
-    assert.equal(renamedRes.status, 200);
-    assert.deepEqual(renamed, [
-      { botId: body.bot_id, name: 'Edited User Bot' },
-      { botId: body.bot_id, name: 'Renamed Bot' },
-    ]);
+    assert.equal(userRenameRes.status, 400);
+
+    const botRenameRes = await fetch(`${baseUrl}/api/admin/bots/${body.bot_id}`, json('PATCH', {
+      bot_name: 'Website Rename',
+    }, headers));
+    assert.equal(botRenameRes.status, 405);
+    assert.deepEqual(setNameCalls, []);
+
+    remoteNames.set(body.bot_id, 'Changed In Telegram');
+    remoteHandles.set(body.bot_id, 'changed_in_telegram');
+    const refreshed = await fetch(`${baseUrl}/api/admin/users`, { headers });
+    const refreshedUsers = await refreshed.json();
+    assert.equal(refreshedUsers[0].bot.bot_name, 'Changed In Telegram');
+    assert.equal(refreshedUsers[0].bot.telegram_username, 'changed_in_telegram');
 
     const unassignedRes = await fetch(`${baseUrl}/api/admin/users`, json('POST', {
       telegram_username: 'unassigned_user',

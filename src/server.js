@@ -225,7 +225,14 @@ function createServer(db, telegram, options = {}) {
     if (!db.listAppUsers) return res.status(501).json({ error: 'Supabase production database is required' });
     const users = await db.listAppUsers();
     const bots = db.listBots ? await db.listBots() : [];
-    const botMap = new Map(bots.map((bot) => [String(bot.id), publicBot(bot)]));
+    const syncedBots = await Promise.all(bots.map(async (bot) => {
+      try {
+        return await syncBotIdentity(bot.id) || publicBot(bot);
+      } catch (error) {
+        return { ...publicBot(bot), sync_error: error.message };
+      }
+    }));
+    const botMap = new Map(syncedBots.map((bot) => [String(bot.id), bot]));
     res.json(users.map((user) => {
       const { profile_photo_data: omittedProfilePhoto, ...publicUser } = user;
       return {
@@ -288,6 +295,11 @@ function createServer(db, telegram, options = {}) {
     const users = await db.listAppUsers();
     const current = users.find((user) => String(user.id) === String(req.params.id));
     if (!current) return res.status(404).json({ error: 'User not found' });
+    if (req.body?.bot_name !== undefined || req.body?.bot_handle !== undefined) {
+      return res.status(400).json({
+        error: 'Bot name and handle are managed in Telegram and cannot be changed here',
+      });
+    }
     const telegramUserId = current.telegram_user_id ? String(current.telegram_user_id) : null;
     const telegramUsername = String(req.body?.telegram_username ?? current.telegram_username ?? '')
       .trim().replace(/^@/, '') || null;
@@ -332,22 +344,6 @@ function createServer(db, telegram, options = {}) {
     }
     const effectiveBotId = row.bot_id || current.bot_id;
     let bot = effectiveBotId && db.getBot ? publicBot(await db.getBot(effectiveBotId)) : null;
-    if (req.body?.bot_name !== undefined) {
-      const botName = String(req.body.bot_name || '').trim();
-      if (!effectiveBotId) return res.status(400).json({ error: 'This user does not have a bot' });
-      if (!botName || botName.length > 64) {
-        return res.status(400).json({ error: 'Bot name must be 1-64 characters' });
-      }
-      const remote = await telegram.getMyName(effectiveBotId).catch(() => null);
-      if (remote?.name !== botName) await telegram.setMyName(effectiveBotId, botName);
-      const confirmed = await telegram.getMyName(effectiveBotId).catch(() => ({ name: botName }));
-      const me = await telegram.getMe(effectiveBotId).catch(() => ({}));
-      bot = publicBot(await db.setBotTelegramIdentity(effectiveBotId, {
-        bot_name: confirmed?.name || botName,
-        telegram_username: me.username || bot?.telegram_username || null,
-        telegram_bot_id: me.id || bot?.telegram_bot_id || null,
-      }));
-    }
     res.json({ ...row, bot });
   }));
 
@@ -360,20 +356,9 @@ function createServer(db, telegram, options = {}) {
   }));
 
   app.patch('/api/admin/bots/:id', wrap(async (req, res) => {
-    const botName = String(req.body?.bot_name || '').trim();
-    if (!botName || botName.length > 64) return res.status(400).json({ error: 'Bot name must be 1-64 characters' });
-    if (!db.getBot || !db.setBotTelegramIdentity) return res.status(501).json({ error: 'Supabase production database is required' });
-    const current = await db.getBot(req.params.id);
-    if (!current) return res.status(404).json({ error: 'Bot not found' });
-    const remote = await telegram.getMyName(req.params.id).catch(() => null);
-    if (remote?.name !== botName) await telegram.setMyName(req.params.id, botName);
-    const confirmed = await telegram.getMyName(req.params.id).catch(() => ({ name: botName }));
-    const me = await telegram.getMe(req.params.id).catch(() => ({}));
-    res.json(await db.setBotTelegramIdentity(req.params.id, {
-      bot_name: confirmed?.name || botName,
-      telegram_username: me.username || current.telegram_username || null,
-      telegram_bot_id: me.id || current.telegram_bot_id || null,
-    }));
+    res.status(405).json({
+      error: 'Bot name and handle are managed in Telegram. Refresh the Admin roster after changing them there.',
+    });
   }));
 
   // ---- Slots ----------------------------------------------------------------

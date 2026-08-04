@@ -145,6 +145,10 @@ test('admin provisioning and sign-in require only a Telegram handle', () => {
   assert.doesNotMatch(admin, /name="telegram_user_id"/);
   assert.equal((admin.match(/name="telegram_username"/g) || []).length, 2);
   assert.equal((admin.match(/name="bot_token"/g) || []).length, 2);
+  assert.doesNotMatch(admin, /name="bot_name"/);
+  assert.match(admin, /id="edit-user-bot-name" readonly/);
+  assert.match(admin, /id="edit-user-bot-handle" readonly/);
+  assert.match(admin, /id="refresh-bot-identities"/);
   assert.match(admin, /BotFather token \(optional\)/);
   assert.match(admin, /Leave blank to assign later/);
 });

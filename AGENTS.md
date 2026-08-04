@@ -24,8 +24,10 @@
 >
 > Task 6 added `/admin` plus `/api/admin/*` for allow-list users and bot
 > management. BotFather tokens are optional during user creation; an unassigned
-> user remains valid and an admin can assign a token later from Edit. Tokens are encrypted with
-> `BOT_TOKEN_ENC_KEY`; bot renames call Telegram `setMyName`.
+> user remains valid and an admin can assign a token later from Edit. Tokens are
+> encrypted with `BOT_TOKEN_ENC_KEY`. Bot names and handles are Telegram-owned,
+> read-only website fields; loading or explicitly refreshing the Admin roster
+> mirrors `getMyName`/`getMe`, and website rename APIs fail closed.
 >
 > Task 7 changed the main dashboard Managed groups section: groups are
 > auto-detected when a user's bot is added to Telegram, the **Verify bot** button

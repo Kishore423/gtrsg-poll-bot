@@ -7,6 +7,7 @@ const usersBody = document.getElementById('users-body');
 const addUserForm = document.getElementById('add-user-form');
 const editUserDialog = document.getElementById('edit-user-dialog');
 const editUserForm = document.getElementById('edit-user-form');
+const editUserBotName = document.getElementById('edit-user-bot-name');
 const editUserBotHandle = document.getElementById('edit-user-bot-handle');
 const editUserStatus = document.getElementById('edit-user-status');
 let currentUsers = new Map();
@@ -32,7 +33,7 @@ async function loadUsers() {
   const result = await response.json().catch(() => []);
   if (!response.ok) {
     setStatus(result.error || 'Unable to load users', 'error');
-    return;
+    return { ok: false, syncErrors: 0 };
   }
   currentUsers = new Map(result.map((user) => [String(user.id), user]));
   usersBody.innerHTML = result.map((user) => {
@@ -66,11 +67,8 @@ async function loadUsers() {
       editUserForm.elements.enabled.checked = user.enabled !== false;
       editUserForm.elements.bot_token.value = '';
       editUserForm.elements.bot_token.disabled = Boolean(bot.id);
-      editUserForm.elements.bot_name.value = bot.bot_name || '';
-      editUserForm.elements.bot_name.disabled = !bot.id;
-      editUserBotHandle.textContent = bot.telegram_username
-        ? `Bot handle: @${bot.telegram_username}`
-        : 'No bot is assigned to this user.';
+      editUserBotName.value = bot.id ? bot.bot_name || '-' : 'No bot assigned';
+      editUserBotHandle.value = bot.telegram_username ? `@${bot.telegram_username}` : '-';
       editUserStatus.textContent = '';
       editUserDialog.showModal();
     });
@@ -85,6 +83,10 @@ async function loadUsers() {
       await loadUsers();
     });
   });
+  return {
+    ok: true,
+    syncErrors: result.filter((user) => user.bot?.sync_error).length,
+  };
 }
 
 editUserForm.addEventListener('submit', async (event) => {
@@ -93,7 +95,6 @@ editUserForm.addEventListener('submit', async (event) => {
   const id = formData.get('id');
   const body = Object.fromEntries(formData.entries());
   body.enabled = editUserForm.elements.enabled.checked;
-  if (editUserForm.elements.bot_name.disabled) delete body.bot_name;
   editUserStatus.textContent = 'Saving user details...';
   editUserStatus.className = 'status';
   const response = await fetch(`/api/admin/users/${id}`, {
@@ -113,6 +114,16 @@ editUserForm.addEventListener('submit', async (event) => {
 });
 
 document.getElementById('cancel-edit-user').addEventListener('click', () => editUserDialog.close());
+document.getElementById('refresh-bot-identities').addEventListener('click', async () => {
+  setStatus('Refreshing bot names and handles from Telegram...');
+  const outcome = await loadUsers();
+  if (!outcome?.ok) return;
+  if (outcome.syncErrors) {
+    setStatus(`Unable to refresh ${outcome.syncErrors} bot identity. Cached values are shown.`, 'error');
+    return;
+  }
+  setStatus('Bot names and handles refreshed from Telegram.', 'success');
+});
 
 addUserForm.addEventListener('submit', async (event) => {
   event.preventDefault();
