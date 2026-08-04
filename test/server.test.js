@@ -335,11 +335,32 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
       bot_token: 'replacement-token',
     }, headers));
     assert.equal(duplicateRes.status, 409);
+    assert.match((await duplicateRes.json()).error, /already assigned in the application/);
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
     if (previousKey === undefined) delete process.env.BOT_TOKEN_ENC_KEY;
     else process.env.BOT_TOKEN_ENC_KEY = previousKey;
   }
+});
+
+test('memory repository rejects duplicate immutable Telegram bot IDs', async () => {
+  const db = createMemoryDb();
+  await db.createBot({
+    bot_name: 'First mapping',
+    telegram_bot_id: '9001',
+    token_encrypted: 'first',
+    webhook_secret: 'first-secret',
+  });
+  await assert.rejects(
+    () => db.createBot({
+      bot_name: 'Duplicate mapping',
+      telegram_bot_id: '9001',
+      token_encrypted: 'second',
+      webhook_secret: 'second-secret',
+    }),
+    (error) =>
+      error.code === '23505' && error.constraint === 'bots_telegram_bot_id_key'
+  );
 });
 
 test('a signed-in user can upload only a bounded profile picture to their own account', async () => {

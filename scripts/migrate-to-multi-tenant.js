@@ -21,6 +21,13 @@ const USERS = [
     telegram_username: 'Y6yyyyyyyyyyuu',
     telegram_display_name: 'Yi Dan Wang',
     role: 'user',
+    service: null,
+  },
+  {
+    telegram_user_id: '5620259623',
+    telegram_username: 'ht1193',
+    telegram_display_name: 'Howell',
+    role: 'user',
     service: 'WHCL',
   },
   {

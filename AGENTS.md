@@ -186,8 +186,10 @@ Vercel Cron** for hosting/scheduling.
   BotFather token; replacement validates and registers the new bot first, then
   atomically switches the single `app_users.bot_id` mapping while disabling the
   previous bot and its groups. The old webhook is removed and historical
-  records remain intact. Duplicate Telegram bot IDs are rejected. Clicking an
-  existing avatar opens a full-screen viewer over a translucent black backdrop
+  records remain intact. Duplicate Telegram bot IDs are rejected. Postgres
+  enforces one database bot row per immutable Telegram bot ID with
+  `bots_telegram_bot_id_key`; duplicate token assignment returns HTTP 409.
+  Clicking an existing avatar opens a full-screen viewer over a translucent black backdrop
   with an X close control and a self-only delete action. The shared
   login UI exposes an editable six-digit field immediately after **Send code**
   and enables verification when the challenge response arrives.
@@ -213,6 +215,8 @@ Vercel Cron** for hosting/scheduling.
 - WHCL bot: @Flexi_wheelchair_bot (id 8632673727).
 - PSA bot: @Pax_services_bot (id 8764384354).
 - Login bot: @user_login_otp_bot (`LOGIN`; authentication only).
+- Current dedicated ownership: Howell (`@ht1193`) has the WHCL bot; Sonia
+  (`@sonia_mala`) has the PSA bot; Yi Dan (`@Y6yyyyyyyyyyuu`) is unassigned.
 
 ## Deployment (Vercel + Supabase)
 

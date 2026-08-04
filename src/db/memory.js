@@ -193,6 +193,13 @@ function createMemoryDb() {
 
     // ---- Bots (one per user) -------------------------------------------------
     async createBot({ bot_name, telegram_username, telegram_bot_id, token_encrypted, webhook_secret }) {
+      if (telegram_bot_id != null && bots.some((bot) =>
+        String(bot.telegram_bot_id) === String(telegram_bot_id))) {
+        const error = new Error('Telegram bot ID already exists');
+        error.code = '23505';
+        error.constraint = 'bots_telegram_bot_id_key';
+        throw error;
+      }
       const bot = {
         id: `bot-${++botSeq}`,
         bot_name,

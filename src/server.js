@@ -210,6 +210,14 @@ function createServer(db, telegram, options = {}) {
       : require('./telegram').createTelegramClient({ tokens: { BOT: token } });
   }
 
+  function duplicateTelegramBotError() {
+    const error = new Error(
+      'This Telegram bot is already assigned in the application. Remove its current assignment before assigning it to a different user.'
+    );
+    error.statusCode = 409;
+    return error;
+  }
+
   async function createBotFromToken(botToken) {
     const token = String(botToken || '').trim();
     if (!token) return null;
@@ -222,21 +230,26 @@ function createServer(db, telegram, options = {}) {
       const existingBot = (await db.listBots()).find((bot) =>
         String(bot.telegram_bot_id || '') === String(me.id));
       if (existingBot) {
-        const error = new Error(
-          'This Telegram bot is already registered. Use a different BotFather token.'
-        );
-        error.statusCode = 409;
-        throw error;
+        throw duplicateTelegramBotError();
       }
     }
     const webhookSecret = generateWebhookSecret();
-    const botId = await db.createBot({
-      bot_name: name?.name || me.first_name || me.username || 'Telegram bot',
-      telegram_username: me.username || null,
-      telegram_bot_id: me.id,
-      token_encrypted: encryptToken(token),
-      webhook_secret: webhookSecret,
-    });
+    let botId;
+    try {
+      botId = await db.createBot({
+        bot_name: name?.name || me.first_name || me.username || 'Telegram bot',
+        telegram_username: me.username || null,
+        telegram_bot_id: me.id,
+        token_encrypted: encryptToken(token),
+        webhook_secret: webhookSecret,
+      });
+    } catch (error) {
+      if (error?.code === '23505'
+          && error?.constraint === 'bots_telegram_bot_id_key') {
+        throw duplicateTelegramBotError();
+      }
+      throw error;
+    }
     await registerBotWebhook(botId, webhookSecret);
     return botId;
   }

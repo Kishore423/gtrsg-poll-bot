@@ -61,9 +61,12 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   `app_users.bot_id` mapping changes. The previous bot and its managed groups
   are disabled, its webhook is removed, and historical records remain intact.
   A Telegram bot ID already registered in the application cannot be duplicated.
-- Seed roster: `Malla_Sonia@gtr.com.sg` (user, @Pax_services_bot),
-  `Yidan_Wang@sats.com.sg` (user, @Flexi_wheelchair_bot),
-  `Kirubakaran_Kishore@sats.com.sg` (**admin**, no bot).
+  Postgres enforces this invariant with the partial unique index
+  `bots_telegram_bot_id_key`; the memory repository mirrors it for tests, and
+  duplicate BotFather-token assignment returns HTTP 409.
+- Seed roster: `@sonia_mala` (user, @Pax_services_bot),
+  `@Y6yyyyyyyyyyuu` (user, no bot), `@ht1193` / Howell
+  (user, @Flexi_wheelchair_bot), and `@kishorek888` (**admin**, no bot).
 - Telegram **privacy mode stays ON**. Group auto-detect relies on `my_chat_member`
   (fires on bot-add regardless of privacy); `/start@<bot>` is the fallback.
 

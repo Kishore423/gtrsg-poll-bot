@@ -18,6 +18,8 @@ function createPostgresDb(sql = createSql()) {
       on app_users(telegram_user_id) where telegram_user_id is not null`;
     await sql`create unique index if not exists app_users_telegram_username_key
       on app_users(lower(telegram_username)) where telegram_username is not null`;
+    await sql`create unique index if not exists bots_telegram_bot_id_key
+      on bots(telegram_bot_id) where telegram_bot_id is not null`;
     await sql`create table if not exists telegram_login_challenges (
       id text primary key,
       verifier_hash text not null,
