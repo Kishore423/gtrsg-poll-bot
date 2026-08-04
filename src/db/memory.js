@@ -336,6 +336,21 @@ function createMemoryDb() {
       return { ...user };
     },
 
+    async replaceAppUserBot(id, botId) {
+      const user = appUsers.find((item) => item.id === String(id));
+      if (!user) return null;
+      const oldBotId = user.bot_id;
+      user.bot_id = botId ? String(botId) : null;
+      if (oldBotId && oldBotId !== user.bot_id) {
+        const oldBot = bots.find((item) => item.id === oldBotId);
+        if (oldBot) oldBot.enabled = false;
+        telegramGroups.forEach((group) => {
+          if (String(group.bot_ref || group.bot_id) === oldBotId) group.enabled = false;
+        });
+      }
+      return { ...user, old_bot_id: oldBotId || null };
+    },
+
     async setAppUserEnabled(id, enabled) {
       const user = appUsers.find((item) => item.id === String(id));
       if (!user) return null;

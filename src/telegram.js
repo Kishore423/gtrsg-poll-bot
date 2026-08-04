@@ -102,6 +102,12 @@ function createTelegramClient({ tokens = {}, resolveToken = null, fetchImpl = fe
     });
   }
 
+  async function deleteWebhook(botKey, dropPendingUpdates = true) {
+    return call(botKey, 'deleteWebhook', {
+      drop_pending_updates: Boolean(dropPendingUpdates),
+    });
+  }
+
   async function getMe(botKey) {
     return call(botKey, 'getMe');
   }
@@ -124,6 +130,7 @@ function createTelegramClient({ tokens = {}, resolveToken = null, fetchImpl = fe
     editMessage,
     stopPoll,
     setWebhook,
+    deleteWebhook,
     getMe,
     getChat,
     getMyName,

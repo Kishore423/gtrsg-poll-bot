@@ -17,7 +17,7 @@ const { resolvePollSchedule } = require('./scheduleResolver');
 const { managedTimingForEvent } = require('./scheduleRules');
 const { runScheduledPolls, runScheduledConfirmations, runScheduledClosures } = require('./productionScheduler');
 const { scopeGroups, assertGroupAccess, filterRowsByUserBot } = require('./tenancy');
-const { encryptToken, generateWebhookSecret } = require('./crypto');
+const { encryptToken, decryptToken, generateWebhookSecret } = require('./crypto');
 
 const SERVICES = ['PRIMARY', 'WHCL', 'PSA', 'LOGIN'];
 const ROUTED_SERVICES = ['WHCL', 'PSA'];
@@ -199,16 +199,31 @@ function createServer(db, telegram, options = {}) {
     return url;
   }
 
+  function telegramClientForToken(token) {
+    return options.createTelegramClientForToken
+      ? options.createTelegramClientForToken(token)
+      : require('./telegram').createTelegramClient({ tokens: { BOT: token } });
+  }
+
   async function createBotFromToken(botToken) {
     const token = String(botToken || '').trim();
     if (!token) return null;
-    const tempTelegram = options.createTelegramClientForToken
-      ? options.createTelegramClientForToken(token)
-      : require('./telegram').createTelegramClient({ tokens: { BOT: token } });
+    const tempTelegram = telegramClientForToken(token);
     const [me, name] = await Promise.all([
       tempTelegram.getMe('BOT'),
       tempTelegram.getMyName('BOT').catch(() => null),
     ]);
+    if (db.listBots) {
+      const existingBot = (await db.listBots()).find((bot) =>
+        String(bot.telegram_bot_id || '') === String(me.id));
+      if (existingBot) {
+        const error = new Error(
+          'This Telegram bot is already registered. Use a different BotFather token.'
+        );
+        error.statusCode = 409;
+        throw error;
+      }
+    }
     const webhookSecret = generateWebhookSecret();
     const botId = await db.createBot({
       bot_name: name?.name || me.first_name || me.username || 'Telegram bot',
@@ -330,9 +345,6 @@ function createServer(db, telegram, options = {}) {
       return res.status(400).json({ error: 'Role must be admin or user' });
     }
     const botToken = String(req.body?.bot_token || '').trim();
-    if (current.bot_id && botToken) {
-      return res.status(400).json({ error: 'This user already has an assigned bot' });
-    }
     let row = await db.updateAppUser(req.params.id, {
       telegram_user_id: telegramUserId,
       telegram_username: telegramUsername,
@@ -341,17 +353,37 @@ function createServer(db, telegram, options = {}) {
       enabled,
     });
     if (!row) return res.status(404).json({ error: 'User not found' });
-    if (!current.bot_id && botToken) {
-      if (!db.setAppUserBot) {
+    let replacementWarning = null;
+    if (botToken) {
+      if (!db.replaceAppUserBot && !db.setAppUserBot) {
         return res.status(501).json({ error: 'Supabase production database is required' });
       }
       const assignedBotId = await createBotFromToken(botToken);
-      const assignment = await db.setAppUserBot(req.params.id, assignedBotId);
+      let assignment;
+      try {
+        assignment = db.replaceAppUserBot
+          ? await db.replaceAppUserBot(req.params.id, assignedBotId)
+          : await db.setAppUserBot(req.params.id, assignedBotId);
+      } catch (error) {
+        if (db.deleteBot) await db.deleteBot(assignedBotId).catch(() => null);
+        throw error;
+      }
       row = { ...row, bot_id: assignment.bot_id };
+      if (assignment.old_bot_id && assignment.old_bot_id !== assignment.bot_id && db.getBot) {
+        const oldBot = await db.getBot(assignment.old_bot_id);
+        if (oldBot?.token_encrypted) {
+          try {
+            const oldTelegram = telegramClientForToken(decryptToken(oldBot.token_encrypted));
+            if (oldTelegram.deleteWebhook) await oldTelegram.deleteWebhook('BOT', true);
+          } catch (error) {
+            replacementWarning = `The old bot was disabled, but its Telegram webhook could not be removed: ${error.message}`;
+          }
+        }
+      }
     }
     const effectiveBotId = row.bot_id || current.bot_id;
     let bot = effectiveBotId && db.getBot ? publicBot(await db.getBot(effectiveBotId)) : null;
-    res.json({ ...row, bot });
+    res.json({ ...row, bot, replacement_warning: replacementWarning });
   }));
 
   app.delete('/api/admin/users/:id', wrap(async (req, res) => {

@@ -472,6 +472,35 @@ function createPostgresDb(sql = createSql()) {
       return row || null;
     },
 
+    async replaceAppUserBot(id, botId) {
+      await initPromise;
+      const [row] = await sql`
+        with previous as materialized (
+          select bot_id as old_bot_id from app_users where id = ${id}
+        ),
+        disabled_bot as (
+          update bots set enabled = false, updated_at = now()
+          where id = (select old_bot_id from previous)
+            and id is distinct from ${botId}::uuid
+        ),
+        disabled_groups as (
+          update telegram_groups set enabled = false, updated_at = now()
+          where (
+            bot_ref = (select old_bot_id from previous)
+            or (
+              bot_ref is null
+              and bot_id = (select old_bot_id::text from previous)
+            )
+          )
+          and (select old_bot_id from previous) is distinct from ${botId}::uuid
+        )
+        update app_users set bot_id = ${botId}, updated_at = now()
+        where id = ${id}
+        returning id, role, enabled, bot_id,
+          (select old_bot_id::text from previous) as old_bot_id`;
+      return row || null;
+    },
+
     async setAppUserEnabled(id, enabled) {
       const [row] = await sql`
         update app_users set enabled = ${enabled}, updated_at = now()

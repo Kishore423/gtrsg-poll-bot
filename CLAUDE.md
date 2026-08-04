@@ -40,6 +40,11 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   requests, and Admin roster refreshes. The Admin form may manage the person's
   display label, role, enabled state, and dedicated bot mapping, but cannot
   overwrite either the user handle or the bot identity.
+- Admins may replace a user's assigned bot by entering a different BotFather
+  token in Edit. The new bot is validated and registered before the single
+  `app_users.bot_id` mapping changes. The previous bot and its managed groups
+  are disabled, its webhook is removed, and historical records remain intact.
+  A Telegram bot ID already registered in the application cannot be duplicated.
 - Seed roster: `Malla_Sonia@gtr.com.sg` (user, @Pax_services_bot),
   `Yidan_Wang@sats.com.sg` (user, @Flexi_wheelchair_bot),
   `Kirubakaran_Kishore@sats.com.sg` (**admin**, no bot).

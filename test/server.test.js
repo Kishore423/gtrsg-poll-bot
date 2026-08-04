@@ -141,6 +141,7 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
   const remoteNames = new Map();
   const remoteHandles = new Map();
   const setNameCalls = [];
+  const deletedWebhooks = [];
   const telegram = {
     async setWebhook(botId, url, secret) {
       webhooks.push({ botId, url, secret });
@@ -168,9 +169,25 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
       req.headers.authorization === 'Bearer admin'
         ? { id: 'admin-1', telegram_user_id: '1002', role: 'admin', bot_id: null }
         : null,
-    createTelegramClientForToken: () => ({
-      async getMe() { return { id: 123, username: 'new_user_bot', first_name: 'New User Bot' }; },
-      async getMyName() { return { name: 'New User Bot' }; },
+    createTelegramClientForToken: (token) => ({
+      async getMe() {
+        if (token === 'replacement-token') {
+          return { id: 456, username: 'replacement_bot', first_name: 'Replacement Bot' };
+        }
+        if (token === 'assigned-later-token') {
+          return { id: 234, username: 'assigned_later_bot', first_name: 'Assigned Later Bot' };
+        }
+        return { id: 123, username: 'new_user_bot', first_name: 'New User Bot' };
+      },
+      async getMyName() {
+        if (token === 'replacement-token') return { name: 'Replacement Bot' };
+        if (token === 'assigned-later-token') return { name: 'Assigned Later Bot' };
+        return { name: 'New User Bot' };
+      },
+      async deleteWebhook() {
+        deletedWebhooks.push(token);
+        return true;
+      },
     }),
   }).listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
@@ -260,9 +277,33 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
     assert.equal(assignedRes.status, 200);
     const assigned = await assignedRes.json();
     assert.ok(assigned.bot_id);
-    assert.equal(assigned.bot.telegram_username, 'new_user_bot');
+    assert.equal(assigned.bot.telegram_username, 'assigned_later_bot');
     assert.equal(webhooks.length, 2);
     assert.equal(webhooks.at(-1).botId, assigned.bot_id);
+
+    const previousBotId = assigned.bot_id;
+    const previousGroupId = await db.createTelegramGroup({
+      telegram_chat_id: '-100999',
+      group_name: 'Previous Bot Group',
+      bot_id: previousBotId,
+      bot_ref: previousBotId,
+    });
+    const replacedRes = await fetch(`${baseUrl}/api/admin/users/${unassigned.id}`, json('PATCH', {
+      bot_token: 'replacement-token',
+    }, headers));
+    assert.equal(replacedRes.status, 200);
+    const replaced = await replacedRes.json();
+    assert.notEqual(replaced.bot_id, previousBotId);
+    assert.equal(replaced.bot.telegram_username, 'replacement_bot');
+    assert.equal((await db.getBot(previousBotId)).enabled, false);
+    assert.equal((await db.getTelegramGroup(previousGroupId)).enabled, false);
+    assert.deepEqual(deletedWebhooks, ['assigned-later-token']);
+    assert.equal(webhooks.length, 3);
+
+    const duplicateRes = await fetch(`${baseUrl}/api/admin/users/${unassigned.id}`, json('PATCH', {
+      bot_token: 'replacement-token',
+    }, headers));
+    assert.equal(duplicateRes.status, 409);
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
     if (previousKey === undefined) delete process.env.BOT_TOKEN_ENC_KEY;

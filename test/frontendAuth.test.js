@@ -155,6 +155,10 @@ test('admin provisioning and sign-in require only a Telegram handle', () => {
   assert.match(admin, /id="refresh-bot-identities"/);
   assert.match(admin, /BotFather token \(optional\)/);
   assert.match(admin, /Leave blank to assign later/);
+  const adminScript = readFileSync(join(__dirname, '..', 'public', 'admin.js'), 'utf8');
+  assert.doesNotMatch(adminScript, /bot_token\.disabled\s*=\s*Boolean/);
+  assert.match(adminScript, /Replace assigned bot with BotFather token/);
+  assert.match(adminScript, /previous bot and its groups will be disabled/);
 });
 
 test('Postgres app user roster does not overwrite user handles with bot handles', () => {

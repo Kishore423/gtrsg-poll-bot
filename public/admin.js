@@ -8,10 +8,12 @@ const addUserForm = document.getElementById('add-user-form');
 const editUserDialog = document.getElementById('edit-user-dialog');
 const editUserForm = document.getElementById('edit-user-form');
 const editUserTelegramHandle = document.getElementById('edit-user-telegram-handle');
+const editUserBotTokenLabel = document.getElementById('edit-user-bot-token-label');
 const editUserBotName = document.getElementById('edit-user-bot-name');
 const editUserBotHandle = document.getElementById('edit-user-bot-handle');
 const editUserStatus = document.getElementById('edit-user-status');
 let currentUsers = new Map();
+let editingUserHasBot = false;
 
 function setStatus(message, kind = '') {
   statusEl.textContent = message || '';
@@ -67,7 +69,14 @@ async function loadUsers() {
       editUserForm.elements.role.value = user.role || 'user';
       editUserForm.elements.enabled.checked = user.enabled !== false;
       editUserForm.elements.bot_token.value = '';
-      editUserForm.elements.bot_token.disabled = Boolean(bot.id);
+      editUserForm.elements.bot_token.disabled = false;
+      editingUserHasBot = Boolean(bot.id);
+      editUserBotTokenLabel.textContent = editingUserHasBot
+        ? 'Replace assigned bot with BotFather token'
+        : 'Assign BotFather token';
+      editUserForm.elements.bot_token.placeholder = editingUserHasBot
+        ? 'Leave blank to keep the current bot'
+        : 'Paste a token to assign a bot';
       editUserBotName.value = bot.id ? bot.bot_name || '-' : 'No bot assigned';
       editUserBotHandle.value = bot.telegram_username ? `@${bot.telegram_username}` : '-';
       editUserStatus.textContent = '';
@@ -99,6 +108,10 @@ editUserForm.addEventListener('submit', async (event) => {
     enabled: editUserForm.elements.enabled.checked,
     bot_token: editUserForm.elements.bot_token.value,
   };
+  if (editingUserHasBot && body.bot_token
+      && !window.confirm("Replace this user's assigned Telegram bot? The previous bot and its groups will be disabled.")) {
+    return;
+  }
   editUserStatus.textContent = 'Saving user details...';
   editUserStatus.className = 'status';
   const response = await fetch(`/api/admin/users/${id}`, {
@@ -113,7 +126,18 @@ editUserForm.addEventListener('submit', async (event) => {
     return;
   }
   editUserDialog.close();
-  setStatus('User and bot details updated.', 'success');
+  if (result.replacement_warning) {
+    setStatus(result.replacement_warning, 'error');
+  } else {
+    setStatus(
+      body.bot_token
+        ? editingUserHasBot
+          ? 'Telegram bot replaced. The previous bot and its groups were disabled.'
+          : 'Telegram bot assigned.'
+        : 'User details updated.',
+      'success'
+    );
+  }
   await loadUsers();
 });
 

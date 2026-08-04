@@ -164,9 +164,13 @@ Vercel Cron** for hosting/scheduling.
   login handle and `bots.telegram_username` is the assigned bot handle;
   repository and API results keep them separate. Login_bot refreshes a bound
   user's handle by immutable Telegram ID on `/start`, OTP requests, and Admin
-  roster refreshes. Clicking an existing
-  avatar opens a full-screen viewer over a translucent black backdrop with an X
-  close control and a self-only delete action. The shared
+  roster refreshes. An admin may replace the assigned bot with a different
+  BotFather token; replacement validates and registers the new bot first, then
+  atomically switches the single `app_users.bot_id` mapping while disabling the
+  previous bot and its groups. The old webhook is removed and historical
+  records remain intact. Duplicate Telegram bot IDs are rejected. Clicking an
+  existing avatar opens a full-screen viewer over a translucent black backdrop
+  with an X close control and a self-only delete action. The shared
   login UI exposes an editable six-digit field immediately after **Send code**
   and enables verification when the challenge response arrives.
 - Webhook updates are de-duplicated (`beginWebhookEvent`/`finishWebhookEvent`);

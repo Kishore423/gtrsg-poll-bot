@@ -174,7 +174,7 @@
         <label>Telegram handle<input name="telegram_username" placeholder="@username" required /></label>
         <label>Display name<input name="telegram_display_name" /></label>
         <label>Role<select name="role"><option value="user">User</option><option value="admin">Admin</option></select></label>
-        <label>BotFather token (optional)<input name="bot_token" autocomplete="off" placeholder="Leave blank to assign later" /></label>
+        <label>BotFather token (optional)<input name="bot_token" type="password" autocomplete="new-password" placeholder="Leave blank to assign later" /></label>
         <button type="submit" class="primary"><i data-lucide="user-plus" aria-hidden="true"></i> Add user</button>
       </form>
     </section>
@@ -209,7 +209,7 @@
         <label class="full">Display name<input name="telegram_display_name" maxlength="80" /></label>
         <label>Role<select name="role"><option value="user">User</option><option value="admin">Admin</option></select></label>
         <label class="checkbox-field"><input name="enabled" type="checkbox" /> Account enabled</label>
-        <label class="full">Assign BotFather token<input name="bot_token" autocomplete="off" placeholder="Available while no bot is assigned" /></label>
+        <label class="full"><span id="edit-user-bot-token-label">Assign BotFather token</span><input name="bot_token" type="password" autocomplete="new-password" placeholder="Paste a token to assign a bot" /></label>
         <label>Bot display name<input id="edit-user-bot-name" readonly /></label>
         <label>Bot handle<input id="edit-user-bot-handle" readonly /></label>
         <p class="muted full">User and bot handles are managed in Telegram. Bot names and handles come from the assigned BotFather token. Use Refresh from Telegram after making changes there.</p>
