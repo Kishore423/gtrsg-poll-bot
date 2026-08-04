@@ -298,6 +298,11 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   Successful **Save default** and **Review and schedule** actions show an in-page
   completion dialog naming the selected Telegram group; API failures remain in
   the shared status area and must not open the success dialog.
+  Home, Polls, and Admin retain their existing layouts while sharing a restrained
+  Telegram scheduling illustration in the page header plus dimensional surfaces,
+  table states, modal blur, and reduced-motion-aware transitions from
+  `public/theme.css`. The header artwork lives at
+  `public/assets/poll-operations-header.png`.
   The filter bar filters by event date, Telegram group, and poll type (`test`,
   `custom`, `batch_default`); it intentionally does not include status or bot
   type filters because the Telegram group selection already identifies the group

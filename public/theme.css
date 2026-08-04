@@ -39,13 +39,17 @@ nav {
   background: rgba(255, 255, 255, 0.97) !important;
   border-bottom-color: #dce2e6 !important;
   box-shadow: 0 1px 2px rgba(18, 36, 44, 0.06), 0 8px 24px rgba(18, 36, 44, 0.05) !important;
+  backdrop-filter: blur(14px);
 }
 
 .nav-brand {
+  display: flex !important;
+  align-items: center;
   gap: 0.65rem !important;
   color: var(--ink) !important;
   font-weight: 750 !important;
   letter-spacing: 0 !important;
+  white-space: nowrap;
 }
 
 .nav-brand::before { display: none !important; }
@@ -133,8 +137,37 @@ body.ui-ready main { animation: workspace-in 280ms ease-out both; }
 
 main > header,
 .page-header {
+  position: relative;
+  min-height: 9.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   margin: 0 0 1.6rem !important;
-  padding: 0 !important;
+  padding: 1.4rem 48% 1.4rem 1.5rem !important;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgba(201, 213, 220, 0.86);
+  border-radius: 8px;
+  background-color: #f8fafb;
+  background-image: url("/assets/poll-operations-header.png");
+  background-repeat: no-repeat;
+  background-position: right center;
+  background-size: auto 100%;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(214, 223, 228, 0.38),
+    0 12px 30px rgba(15, 32, 40, 0.07);
+}
+
+main > header::after,
+.page-header::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  box-shadow: inset 4px 0 0 var(--green);
+  pointer-events: none;
 }
 
 main > header h1,
@@ -143,9 +176,11 @@ main > header h1,
   font-size: 1.55rem !important;
   line-height: 1.2;
   letter-spacing: 0 !important;
+  text-wrap: balance;
 }
 
-main > header h1::before {
+main > header h1::before,
+.page-header h1::before {
   width: 0.55rem !important;
   height: 0.55rem !important;
   box-shadow: 0 2px 0 #087267, 0 4px 8px rgba(8, 105, 95, 0.18);
@@ -155,13 +190,19 @@ main > header p,
 .page-header p {
   color: var(--ink-soft) !important;
   font-size: 0.92rem !important;
+  line-height: 1.55;
+  max-width: 34rem;
 }
 
 .card {
+  position: relative;
   border: 1px solid var(--border) !important;
   border-radius: 8px !important;
   background: var(--surface) !important;
-  box-shadow: var(--shadow-low) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    0 1px 2px rgba(15, 32, 40, 0.04),
+    0 10px 26px rgba(15, 32, 40, 0.065) !important;
   padding: 1.5rem !important;
   margin-bottom: 1.25rem !important;
 }
@@ -171,6 +212,22 @@ main > header p,
   font-size: 1rem !important;
   font-weight: 700 !important;
   letter-spacing: 0 !important;
+}
+
+.card > h2:first-child {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.card > h2:first-child::before {
+  content: "";
+  width: 0.28rem;
+  height: 1.1rem;
+  flex: 0 0 auto;
+  border-radius: 2px;
+  background: var(--green);
+  box-shadow: 0 2px 5px rgba(8, 105, 95, 0.18);
 }
 
 .card-header {
@@ -263,11 +320,25 @@ label,
   box-shadow: inset 0 1px 3px rgba(15, 32, 40, 0.035);
 }
 
-.rules-summary { gap: 0 !important; }
+.rules-summary {
+  gap: 0 !important;
+  overflow: hidden;
+  border: 1px solid #dbe3e7;
+  border-radius: 7px;
+  background: #f8fafb;
+  box-shadow: inset 0 1px 0 #fff;
+}
 
 .rule-panel {
-  padding: 0.35rem 1.1rem 0.35rem 1rem !important;
+  padding: 1rem 1.1rem 1rem 1rem !important;
   border-left-width: 3px !important;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.rule-panel + .rule-panel {
+  border-left-color: #467eae !important;
+  border-top: 0 !important;
+  box-shadow: inset 1px 0 0 #e0e7eb;
 }
 
 .schedule-row {
@@ -281,15 +352,15 @@ label,
   border: 1px solid #dbe3e6 !important;
   border-radius: 7px;
   background: #fbfcfd;
-  box-shadow: inset 0 1px 0 #fff, 0 3px 8px rgba(15, 32, 40, 0.05);
+  box-shadow: inset 0 1px 0 #fff, 0 2px 0 #d8e1e4, 0 6px 14px rgba(15, 32, 40, 0.055);
   transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
 }
 
 .managed-group-row:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   border-color: #a7c6c0 !important;
   background: #fff !important;
-  box-shadow: inset 0 1px 0 #fff, 0 7px 15px rgba(15, 32, 40, 0.09);
+  box-shadow: inset 0 1px 0 #fff, 0 3px 0 #cbdad7, 0 12px 22px rgba(15, 32, 40, 0.1);
 }
 
 .group-dialog-backdrop,
@@ -300,6 +371,7 @@ label,
   box-sizing: border-box;
   overflow-y: auto;
   background: rgba(24, 34, 43, 0.55) !important;
+  backdrop-filter: blur(5px) saturate(0.8);
   perspective: 1000px;
 }
 
@@ -434,7 +506,18 @@ dialog {
 table thead { background: #f5f8f9; }
 th { letter-spacing: 0 !important; }
 tbody tr { transition: background 120ms ease; }
+tbody tr:nth-child(even) { background: rgba(244, 247, 248, 0.56); }
+tbody tr:hover { background: #edf7f5; }
 .pill { border-radius: 6px !important; }
+
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: #e8edef; }
+::-webkit-scrollbar-thumb {
+  border: 3px solid #e8edef;
+  border-radius: 8px;
+  background: #9eabb3;
+}
+::-webkit-scrollbar-thumb:hover { background: #75858f; }
 
 button svg {
   width: 1rem;
@@ -495,10 +578,33 @@ button svg {
     padding-top: 1.35rem !important;
   }
 
+  main > header,
+  .page-header {
+    min-height: 8.5rem;
+    padding: 1.15rem 42% 1.15rem 1.15rem !important;
+    background-position: 122% center;
+    background-size: auto 90%;
+  }
+
+  main > header p,
+  .page-header p {
+    font-size: 0.84rem !important;
+    line-height: 1.45;
+  }
+
   .card { padding: 1rem !important; }
   .group-dialog { padding: 1rem !important; }
 
   .group-dialog-actions .workflow-action {
     min-height: 3.7rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  main > header,
+  .page-header {
+    min-height: 7.6rem;
+    padding-right: 1.15rem !important;
+    background-image: none;
   }
 }
