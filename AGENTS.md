@@ -188,12 +188,13 @@ Vercel Cron** for hosting/scheduling.
   remain unbound, receive generic correction guidance, and show **Awaiting
   Login_bot handle verification**; matches show **Verified by Login_bot**. An
   admin may replace the assigned bot with a different
-  BotFather token. **Verify token** reads the exact Telegram-owned bot name,
-  handle, and immutable ID before assignment. Replacement validates the bot and
-  registers its webhook with that same token first, then atomically switches the
-  single `app_users.bot_id` mapping while disabling the previous bot and its
-  groups. Failed webhook registration or user assignment rolls back the new
-  webhook and database row so retries are not blocked by a stale mapping. The
+  BotFather token. Add user and Save changes automatically read the exact
+  Telegram-owned bot name, handle, and immutable ID before assignment; there is
+  no separate verification action. Replacement validates the bot and registers
+  its webhook with that same token first, then atomically switches the single
+  `app_users.bot_id` mapping while disabling the previous bot and its groups.
+  Failed webhook registration or user assignment rolls back the new webhook and
+  database row so retries are not blocked by a stale mapping. The
   old webhook is removed and historical records remain intact. Duplicate
   Telegram bot IDs are rejected. Postgres
   enforces one database bot row per immutable Telegram bot ID with
