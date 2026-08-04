@@ -67,6 +67,10 @@
 >    `app_users` allow-list is the authorization gate and must fail closed — never
 >    let "Telegram verified ⇒ allowed" creep into any endpoint.
 
+> Telegram can only refresh a private user's handle after that user opens
+> Login_bot. A `chat not found` refresh retains cached data and prompts the user
+> to press Start; genuine Telegram API failures remain errors.
+
 Codex-facing adapter. `CLAUDE.md` is the canonical source of project knowledge —
 read it for the full architecture. **Two agents (Claude Code + Codex) work on
 this repo concurrently; update both `CLAUDE.md` and `AGENTS.md` on every durable

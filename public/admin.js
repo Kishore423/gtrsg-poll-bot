@@ -36,7 +36,12 @@ async function loadUsers() {
   const result = await response.json().catch(() => []);
   if (!response.ok) {
     setStatus(result.error || 'Unable to load users', 'error');
-    return { ok: false, syncErrors: 0 };
+    return {
+      ok: false,
+      userSyncUnavailable: 0,
+      userSyncErrors: 0,
+      botSyncErrors: 0,
+    };
   }
   currentUsers = new Map(result.map((user) => [String(user.id), user]));
   usersBody.innerHTML = result.map((user) => {
@@ -95,7 +100,11 @@ async function loadUsers() {
   });
   return {
     ok: true,
-    syncErrors: result.filter((user) => user.sync_error || user.bot?.sync_error).length,
+    userSyncUnavailable: result.filter((user) => user.sync_unavailable).length,
+    userSyncErrors: result.filter((user) => user.sync_error).length,
+    botSyncErrors: new Set(
+      result.filter((user) => user.bot?.sync_error).map((user) => String(user.bot.id))
+    ).size,
   };
 }
 
@@ -146,8 +155,22 @@ document.getElementById('refresh-bot-identities').addEventListener('click', asyn
   setStatus('Refreshing user and bot identities from Telegram...');
   const outcome = await loadUsers();
   if (!outcome?.ok) return;
-  if (outcome.syncErrors) {
-    setStatus(`Unable to refresh ${outcome.syncErrors} Telegram identity. Cached values are shown.`, 'error');
+  if (outcome.userSyncErrors || outcome.botSyncErrors) {
+    const failures = [];
+    if (outcome.userSyncErrors) {
+      failures.push(`${outcome.userSyncErrors} user ${outcome.userSyncErrors === 1 ? 'handle' : 'handles'}`);
+    }
+    if (outcome.botSyncErrors) {
+      failures.push(`${outcome.botSyncErrors} bot ${outcome.botSyncErrors === 1 ? 'identity' : 'identities'}`);
+    }
+    setStatus(`Unable to refresh ${failures.join(' and ')}. Cached values are shown.`, 'error');
+    return;
+  }
+  if (outcome.userSyncUnavailable) {
+    const count = outcome.userSyncUnavailable;
+    setStatus(
+      `Bot identities refreshed. ${count} ${count === 1 ? 'user needs' : 'users need'} to open Login_bot and press Start before ${count === 1 ? 'their handle can' : 'their handles can'} be refreshed. Cached handles are shown.`
+    );
     return;
   }
   setStatus('User handles, bot names, and bot handles refreshed from Telegram.', 'success');

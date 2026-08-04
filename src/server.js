@@ -192,6 +192,11 @@ function createServer(db, telegram, options = {}) {
     }));
   }
 
+  function isUnavailablePrivateTelegramChat(error) {
+    return Number(error?.telegramCode) === 400
+      && /chat not found/i.test(String(error?.message || ''));
+  }
+
   async function registerBotWebhook(botId, secret) {
     if (!options.appUrl) return null;
     const url = `${String(options.appUrl).replace(/\/$/, '')}/api/telegram/${botId}`;
@@ -244,6 +249,9 @@ function createServer(db, telegram, options = {}) {
       try {
         return await options.syncTelegramUserIdentity(user) || user;
       } catch (error) {
+        if (isUnavailablePrivateTelegramChat(error)) {
+          return { ...user, sync_unavailable: true };
+        }
         return { ...user, sync_error: error.message };
       }
     }));

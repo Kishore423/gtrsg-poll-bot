@@ -96,6 +96,35 @@ test('admin roster refreshes a bound user handle from Telegram', async () => {
   });
 });
 
+test('admin roster treats a private Login_bot chat that has not started as unavailable', async () => {
+  await withServer(async ({ db, baseUrl }) => {
+    await db.createAppUser({
+      telegram_user_id: '1001',
+      telegram_username: 'cached_handle',
+      telegram_display_name: 'Pending Login Bot User',
+    });
+    const response = await fetch(`${baseUrl}/api/admin/users`, {
+      headers: { Authorization: 'Bearer admin' },
+    });
+    assert.equal(response.status, 200);
+    const [user] = await response.json();
+    assert.equal(user.telegram_username, 'cached_handle');
+    assert.equal(user.sync_unavailable, true);
+    assert.equal(Object.hasOwn(user, 'sync_error'), false);
+  }, {
+    requireAdminAuth: true,
+    verifyUser: async (req) =>
+      req.headers.authorization === 'Bearer admin'
+        ? { id: 'admin-1', telegram_user_id: '1002', role: 'admin', bot_id: null }
+        : null,
+    syncTelegramUserIdentity: async () => {
+      const error = new Error('Telegram getChat failed: 400 Bad Request: chat not found');
+      error.telegramCode = 400;
+      throw error;
+    },
+  });
+});
+
 test('Telegram OTP endpoints request a code and verify a login session', async () => {
   await withServer(async ({ baseUrl }) => {
     const started = await fetch(`${baseUrl}/api/auth/telegram/otp/request`, json('POST', {

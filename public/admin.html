@@ -186,6 +186,7 @@
           <i data-lucide="refresh-cw" aria-hidden="true"></i> Refresh from Telegram
         </button>
       </div>
+      <p class="hint">Bot details refresh here. A user's Telegram handle is verified and synchronized when they open Login_bot and press Start.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Telegram account</th><th>Role</th><th>Bot</th><th>Bot handle</th><th>Status</th><th></th></tr></thead>
@@ -212,7 +213,7 @@
         <label class="full"><span id="edit-user-bot-token-label">Assign BotFather token</span><input name="bot_token" type="password" autocomplete="new-password" placeholder="Paste a token to assign a bot" /></label>
         <label>Bot display name<input id="edit-user-bot-name" readonly /></label>
         <label>Bot handle<input id="edit-user-bot-handle" readonly /></label>
-        <p class="muted full">User and bot handles are managed in Telegram. Bot names and handles come from the assigned BotFather token. Use Refresh from Telegram after making changes there.</p>
+        <p class="muted full">User and bot handles are managed in Telegram. User handles synchronize when the user presses Start in Login_bot. Bot names and handles come from the assigned BotFather token and synchronize with Refresh from Telegram.</p>
         <p id="edit-user-status" class="status full" aria-live="polite"></p>
         <div class="dialog-actions">
           <button id="cancel-edit-user" type="button" class="secondary">Cancel</button>
