@@ -22,6 +22,8 @@ function setStatus(message, kind) {
 let managedGroups  = [];
 let scheduledPolls = [];
 let visiblePolls = [];
+let currentUser = null;
+let adminUsers = [];
 
 function renderRoleNavigation(user) {
   document.querySelectorAll('[data-admin-nav]').forEach((element) => {
@@ -96,20 +98,58 @@ function sortPollsEarliestFirst(polls) {
 
 /* ── Filter state ───────────────────────────────────────────────── */
 const filterDateInput    = document.getElementById('filter-event-date');
+const filterBotField     = document.getElementById('filter-bot-field');
+const filterBotInput     = document.getElementById('filter-bot');
 const filterGroupInput   = document.getElementById('filter-group');
 const filterTypeInput    = document.getElementById('filter-type');
 const clearFiltersBtn    = document.getElementById('clear-filters-btn');
 
+function botFilterLabel(user) {
+  const bot = user.bot || {};
+  const botName = bot.bot_name || (bot.telegram_username ? `@${bot.telegram_username}` : 'Assigned bot');
+  const botHandle = bot.telegram_username && botName !== `@${bot.telegram_username}`
+    ? ` (@${bot.telegram_username})`
+    : '';
+  const userName = user.telegram_display_name || user.telegram_username || 'Unlabelled user';
+  return `${botName}${botHandle} — ${userName}`;
+}
+
+function populateBotFilter() {
+  if (!filterBotInput) return;
+  const currentValue = filterBotInput.value;
+  const assignedUsers = adminUsers
+    .filter((user) => user.bot_id && user.bot?.id)
+    .sort((a, b) => botFilterLabel(a).localeCompare(botFilterLabel(b)));
+  filterBotInput.innerHTML = [
+    '<option value="">All bots</option>',
+    ...assignedUsers.map((user) =>
+      `<option value="${escapeHtml(user.bot_id)}">${escapeHtml(botFilterLabel(user))}</option>`),
+  ].join('\n');
+  filterBotInput.value = assignedUsers.some((user) => String(user.bot_id) === currentValue)
+    ? currentValue
+    : '';
+}
+
 function populateGroupFilter() {
   if (!filterGroupInput) return;
   const currentVal = filterGroupInput.value;
-  const optionsHtml = ['<option value="">All groups</option>', ...managedGroups.map(g => `<option value="${g.id}">${escapeHtml(g.group_name)}</option>`)].join('\n');
+  const botFilter = filterBotInput?.value || '';
+  const availableGroups = botFilter
+    ? managedGroups.filter((group) => String(group.bot_id) === botFilter)
+    : managedGroups;
+  const optionsHtml = [
+    '<option value="">All groups</option>',
+    ...availableGroups.map(g => `<option value="${g.id}">${escapeHtml(g.group_name)}</option>`),
+  ].join('\n');
   filterGroupInput.innerHTML = optionsHtml;
-  filterGroupInput.value = currentVal;
+  filterGroupInput.value = availableGroups.some((group) => String(group.id) === currentVal)
+    ? currentVal
+    : '';
 }
 
 function applyFilters() {
   const dateFilter    = filterDateInput.value;
+  const botFilter     = filterBotInput?.value || '';
   const groupFilter   = filterGroupInput.value;
   const typeFilter    = filterTypeInput.value;
 
@@ -117,6 +157,7 @@ function applyFilters() {
     const pollDate = String(poll.event_date).slice(0, 10);
 
     if (dateFilter    && pollDate               !== dateFilter)    return false;
+    if (botFilter     && String(poll.bot_id)     !== botFilter)     return false;
     if (groupFilter   && poll.telegram_group_id !== groupFilter)   return false;
     if (typeFilter    && pollTypeValue(poll)    !== typeFilter)    return false;
     return true;
@@ -126,13 +167,20 @@ function applyFilters() {
 }
 
 filterDateInput.addEventListener('change', applyFilters);
+filterBotInput?.addEventListener('change', () => {
+  filterGroupInput.value = '';
+  populateGroupFilter();
+  applyFilters();
+});
 filterGroupInput.addEventListener('change', applyFilters);
 filterTypeInput.addEventListener('change', applyFilters);
 
 clearFiltersBtn.addEventListener('click', () => {
   filterDateInput.value    = '';
+  if (filterBotInput) filterBotInput.value = '';
   filterGroupInput.value   = '';
   filterTypeInput.value    = '';
+  populateGroupFilter();
   visiblePolls = sortPollsEarliestFirst(scheduledPolls);
   renderPollsTable(visiblePolls);
 });
@@ -261,6 +309,14 @@ document.getElementById('refresh-polls-btn').addEventListener('click', loadSched
 
 /* ── Bootstrap ──────────────────────────────────────────────────── */
 async function loadPollsPage() {
+  if (currentUser?.role === 'admin') {
+    const usersRes = await fetch('/api/admin/users', { cache: 'no-store' });
+    if (usersRes.ok && usersRes.status !== 501) {
+      adminUsers = await usersRes.json();
+      populateBotFilter();
+      filterBotField.hidden = false;
+    }
+  }
   const groupsRes = await fetch('/api/telegram-groups');
   if (groupsRes.ok && groupsRes.status !== 501) {
     managedGroups = await groupsRes.json();
@@ -282,11 +338,12 @@ async function bootstrap() {
       window.gtrsgAuth.showLogin('Session expired. Sign in with Telegram again.');
       return;
     }
-    const currentUser = await meResponse.json();
+    currentUser = await meResponse.json();
     window.gtrsgAuth.renderUser(currentUser);
     renderRoleNavigation(currentUser);
   } else {
-    renderRoleNavigation({ role: 'admin' });
+    currentUser = { role: 'admin' };
+    renderRoleNavigation(currentUser);
   }
   await loadPollsPage();
 }

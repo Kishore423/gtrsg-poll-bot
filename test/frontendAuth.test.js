@@ -143,6 +143,17 @@ test('shared dimensional theme and icon runtime load on every application page',
   assert.doesNotMatch(runtime, /node\.matches\?\.\('\[data-lucide\]'\)/);
 });
 
+test('Polls page gives admins a bot filter backed by the Admin roster', () => {
+  const html = readFileSync(join(__dirname, '..', 'public', 'polls.html'), 'utf8');
+  const source = readFileSync(join(__dirname, '..', 'public', 'polls.js'), 'utf8');
+  assert.match(html, /id="filter-bot-field" hidden/);
+  assert.match(html, /id="filter-bot"/);
+  assert.match(source, /currentUser\?\.role === 'admin'/);
+  assert.match(source, /fetch\('\/api\/admin\/users'/);
+  assert.match(source, /String\(poll\.bot_id\)\s*!== botFilter/);
+  assert.match(source, /managedGroups\.filter\(\(group\) => String\(group\.bot_id\) === botFilter\)/);
+});
+
 test('admin provisioning and sign-in require only a Telegram handle', () => {
   const admin = readFileSync(join(__dirname, '..', 'public', 'admin.html'), 'utf8');
   for (const page of ['index.html', 'polls.html', 'admin.html']) {

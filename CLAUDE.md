@@ -433,9 +433,10 @@ live only in Vercel env + the local (gitignored) `.env`.
   `public/theme.css`. The header artwork lives at
   `public/assets/poll-operations-header.png`.
   The filter bar filters by event date, Telegram group, and poll type (`test`,
-  `custom`, `batch_default`); it intentionally does not include status or bot
-  type filters because the Telegram group selection already identifies the group
-  context.
+  `custom`, `batch_default`). Admins additionally get a bot filter populated
+  from the Admin roster; selecting a bot narrows both poll rows and the Telegram
+  group choices. Normal users do not see that control and remain scoped
+  server-side to their assigned bot.
   The Polls page is a monitoring surface and intentionally exposes no bulk
   **Clear all polls** or individual **Remove** controls. Default polls are
   omitted through the template's persistent **Skip event dates** mechanism,
