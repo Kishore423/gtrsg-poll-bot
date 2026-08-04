@@ -98,6 +98,7 @@ test('managed group labels use only the stored Telegram group name', () => {
 
 test('managed workflows stay bound to the clicked group without duplicate selectors', () => {
   const html = readFileSync(join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const theme = readFileSync(join(__dirname, '..', 'public', 'theme.css'), 'utf8');
   assert.doesNotMatch(html, /id="unified-group-select"/);
   assert.doesNotMatch(html, /class="managed-group-select"/);
   assert.doesNotMatch(html, /data-group-workflow="test"/);
@@ -105,7 +106,25 @@ test('managed workflows stay bound to the clicked group without duplicate select
   assert.match(html, /type="hidden" name="telegram_group_id"/);
   assert.match(html, /id="weekly-send-test"/);
   assert.match(html, /id="send-test-poll"/);
-  assert.match(html, /\.group-dialog-actions button:last-child:nth-child\(odd\)[\s\S]*?justify-self: center/);
+  assert.equal((html.match(/class="secondary workflow-action"/g) || []).length, 3);
+  assert.match(html, /data-lucide="calendar-range"/);
+  assert.match(html, /data-lucide="calendar-x-2"/);
+  assert.match(html, /data-lucide="square-pen"/);
+  assert.match(theme, /\.group-dialog-actions\s*\{[\s\S]*?grid-template-columns:\s*1fr/);
+});
+
+test('shared dimensional theme and icon runtime load on every application page', () => {
+  for (const page of ['index.html', 'polls.html', 'admin.html']) {
+    const html = readFileSync(join(__dirname, '..', 'public', page), 'utf8');
+    assert.match(html, /href="\/theme\.css"/);
+    assert.match(html, /src="\/vendor\/lucide\.min\.js"/);
+    assert.match(html, /src="\/theme\.js"/);
+    assert.match(html, /class="brand-mark"/);
+  }
+
+  const theme = readFileSync(join(__dirname, '..', 'public', 'theme.css'), 'utf8');
+  assert.match(theme, /perspective:/);
+  assert.match(theme, /prefers-reduced-motion:\s*reduce/);
 });
 
 test('weekly and one-off forms expose editable confirmation timing', () => {

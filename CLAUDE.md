@@ -83,8 +83,11 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   one-off poll cards stay hidden until a group workflow is chosen. Those workflow
   cards bind to the clicked group without showing another Telegram-group
   dropdown. Test-poll actions remain inside the weekly template and one-off poll
-  sections. With three group-popup actions, the final **Custom poll** action is
-  centered beneath the first row.
+  sections. The group popup presents all three workflows as full-width command
+  rows with Lucide icons, concise supporting text, and consistent depth states.
+  Home, Polls, and Admin share `public/theme.css` / `public/theme.js`: the visual
+  system uses restrained perspective, layered shadows, inset controls, elevated
+  navigation, and reduced-motion fallbacks without changing application behavior.
   Admins first search the Admin roster by display name; selecting one user scopes
   group rows and managed schedules to that user's single `bot_id`. Verification
   succeeds only after Telegram accepts a test message sent by that bot to the

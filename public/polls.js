@@ -183,9 +183,9 @@ function renderPollsTable(polls) {
     const isActive   = ['draft', 'scheduled', 'failed'].includes(poll.status);
 
     const actionBtns = [
-      isActive ? `<button type="button" data-id="${poll.id}" data-action="send-now" class="secondary btn-sm poll-action">Send now</button>` : '',
-      poll.status === 'failed' ? `<button type="button" data-id="${poll.id}" data-action="retry" class="secondary btn-sm poll-action">Retry</button>` : '',
-      isActive ? `<button type="button" data-id="${poll.id}" data-action="cancel" class="danger-link btn-sm poll-action">Cancel</button>` : '',
+      isActive ? `<button type="button" data-id="${poll.id}" data-action="send-now" class="secondary btn-sm poll-action"><i data-lucide="send" aria-hidden="true"></i> Send now</button>` : '',
+      poll.status === 'failed' ? `<button type="button" data-id="${poll.id}" data-action="retry" class="secondary btn-sm poll-action"><i data-lucide="rotate-ccw" aria-hidden="true"></i> Retry</button>` : '',
+      isActive ? `<button type="button" data-id="${poll.id}" data-action="cancel" class="danger-link btn-sm poll-action"><i data-lucide="x-circle" aria-hidden="true"></i> Cancel</button>` : '',
     ].filter(Boolean).join('');
 
     return `
@@ -205,7 +205,7 @@ function renderPollsTable(polls) {
         <td class="col-actions">
           <div class="col-actions">
             ${actionBtns}
-            <button type="button" data-id="${poll.id}" class="secondary btn-sm poll-details">Details</button>
+            <button type="button" data-id="${poll.id}" class="secondary btn-sm poll-details"><i data-lucide="panel-right-open" aria-hidden="true"></i> Details</button>
           </div>
         </td>
       </tr>`;

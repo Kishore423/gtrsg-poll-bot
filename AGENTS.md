@@ -31,9 +31,11 @@
 > remains beside each group, and clicking a group opens a popup for **Weekly
 > default template**, **Skip days**, or **Custom poll**. Those workflow cards
 > bind to the clicked group without another Telegram-group dropdown. Test-poll
-> actions remain inside the weekly template and one-off poll sections. With
-> three popup actions, the final **Custom poll** action is centered beneath the
-> first row.
+> actions remain inside the weekly template and one-off poll sections. All three
+> workflows render as full-width command rows with Lucide icons, supporting
+> text, and consistent depth states. Home, Polls, and Admin share
+> `public/theme.css` / `public/theme.js`, including restrained perspective,
+> layered shadows, inset controls, and reduced-motion fallbacks.
 > Admins first search the Admin roster by display name; selecting one user scopes
 > group rows and managed schedules to that user's single `bot_id`. **Verify bot**
 > reports success only after Telegram accepts a test message sent by that bot to

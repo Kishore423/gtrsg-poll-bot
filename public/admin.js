@@ -44,8 +44,8 @@ async function loadUsers() {
       <td>${bot.telegram_username ? `@${escapeHtml(bot.telegram_username)}` : '<span class="muted">-</span>'}</td>
       <td>${user.enabled === false ? 'Disabled' : 'Enabled'}</td>
       <td><span class="row-actions">
-        <button type="button" class="secondary" data-edit-user="${escapeHtml(user.id)}">Edit</button>
-        <button type="button" class="danger-link" data-delete-user="${escapeHtml(user.id)}">Delete</button>
+        <button type="button" class="secondary" data-edit-user="${escapeHtml(user.id)}"><i data-lucide="pencil" aria-hidden="true"></i> Edit</button>
+        <button type="button" class="danger-link" data-delete-user="${escapeHtml(user.id)}"><i data-lucide="trash-2" aria-hidden="true"></i> Delete</button>
       </span></td>
     </tr>`;
   }).join('');

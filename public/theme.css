@@ -1,0 +1,500 @@
+:root {
+  --green: #128c7e;
+  --green-dark: #08695f;
+  --green-light: #e5f5f2;
+  --ink: #17212b;
+  --ink-soft: #63707e;
+  --border: #d9e0e5;
+  --bg: #eef2f4;
+  --surface: #ffffff;
+  --surface-raised: #fbfcfd;
+  --shadow-low: 0 1px 1px rgba(15, 32, 40, 0.05), 0 7px 18px rgba(15, 32, 40, 0.06);
+  --shadow-mid: 0 2px 3px rgba(15, 32, 40, 0.08), 0 16px 36px rgba(15, 32, 40, 0.11);
+  --shadow-high: 0 5px 8px rgba(15, 32, 40, 0.10), 0 28px 70px rgba(15, 32, 40, 0.22);
+}
+
+html { background: var(--bg); }
+
+body {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  letter-spacing: 0;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 64px 0 auto;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+  z-index: 99;
+}
+
+nav {
+  height: 64px !important;
+  padding: 0 max(1rem, calc((100vw - 1180px) / 2)) !important;
+  gap: 1.75rem !important;
+  background: rgba(255, 255, 255, 0.97) !important;
+  border-bottom-color: #dce2e6 !important;
+  box-shadow: 0 1px 2px rgba(18, 36, 44, 0.06), 0 8px 24px rgba(18, 36, 44, 0.05) !important;
+}
+
+.nav-brand {
+  gap: 0.65rem !important;
+  color: var(--ink) !important;
+  font-weight: 750 !important;
+  letter-spacing: 0 !important;
+}
+
+.nav-brand::before { display: none !important; }
+
+.brand-mark {
+  width: 1.85rem;
+  height: 1.85rem;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid #087267;
+  border-radius: 7px;
+  color: #fff;
+  background: var(--green);
+  box-shadow: 0 4px 0 #075d55, 0 8px 14px rgba(8, 105, 95, 0.22);
+  transform: perspective(100px) rotateX(8deg) rotateY(-8deg);
+  transform-style: preserve-3d;
+}
+
+.brand-mark svg {
+  width: 1rem;
+  height: 1rem;
+  stroke-width: 2.2;
+}
+
+.nav-links { gap: 0.35rem !important; }
+
+.nav-links a {
+  min-height: 2.35rem;
+  display: grid !important;
+  place-items: center;
+  padding: 0.45rem 0.85rem !important;
+  border: 1px solid transparent;
+  border-radius: 7px !important;
+  color: #5c6875 !important;
+  transition: color 150ms ease, background 150ms ease, border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease !important;
+}
+
+.nav-links a:hover {
+  color: var(--ink) !important;
+  background: #f5f8f9 !important;
+  border-color: #e3e8eb;
+  transform: translateY(-1px);
+}
+
+.nav-links a.active {
+  color: var(--green-dark) !important;
+  background: var(--green-light) !important;
+  border-color: #d4ebe7;
+  box-shadow: inset 0 1px 0 #fff, 0 2px 5px rgba(8, 105, 95, 0.08);
+}
+
+.nav-user {
+  min-height: 2.4rem;
+  padding: 0.25rem 0.45rem 0.25rem 0.3rem !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease !important;
+}
+
+.nav-user:hover {
+  background: #f5f8f9 !important;
+  border-color: var(--border) !important;
+  transform: translateY(-1px);
+}
+
+.nav-user-avatar {
+  box-shadow: inset 0 0 0 1px rgba(8, 105, 95, 0.12), 0 2px 5px rgba(15, 32, 40, 0.08);
+}
+
+.nav-account-menu {
+  border-color: #d4dce1 !important;
+  box-shadow: var(--shadow-mid) !important;
+  transform-origin: top right;
+  animation: depth-menu-in 150ms ease-out;
+}
+
+main {
+  width: min(1080px, calc(100% - 2rem));
+  max-width: 1080px !important;
+  padding: 2.25rem 0 5rem !important;
+}
+
+body.ui-ready main { animation: workspace-in 280ms ease-out both; }
+
+main > header,
+.page-header {
+  margin: 0 0 1.6rem !important;
+  padding: 0 !important;
+}
+
+main > header h1,
+.page-header h1 {
+  margin: 0 0 0.35rem !important;
+  font-size: 1.55rem !important;
+  line-height: 1.2;
+  letter-spacing: 0 !important;
+}
+
+main > header h1::before {
+  width: 0.55rem !important;
+  height: 0.55rem !important;
+  box-shadow: 0 2px 0 #087267, 0 4px 8px rgba(8, 105, 95, 0.18);
+}
+
+main > header p,
+.page-header p {
+  color: var(--ink-soft) !important;
+  font-size: 0.92rem !important;
+}
+
+.card {
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  background: var(--surface) !important;
+  box-shadow: var(--shadow-low) !important;
+  padding: 1.5rem !important;
+  margin-bottom: 1.25rem !important;
+}
+
+.card h2 {
+  color: var(--ink) !important;
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+}
+
+.card-header {
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid #e6ebee;
+}
+
+button {
+  min-height: 2.55rem;
+  border-radius: 7px !important;
+  letter-spacing: 0 !important;
+  transition: color 150ms ease, background 150ms ease, border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease !important;
+}
+
+button:not(:disabled):hover { transform: translateY(-2px); }
+button:not(:disabled):active { transform: translateY(1px) !important; }
+
+.primary,
+.telegram-sign-in {
+  border: 1px solid #08766b !important;
+  background: var(--green) !important;
+  color: #fff !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.23), 0 3px 0 #08675e, 0 7px 13px rgba(8, 105, 95, 0.16);
+}
+
+.primary:hover,
+.telegram-sign-in:hover {
+  background: #0e7d71 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 4px 0 #075b53, 0 10px 18px rgba(8, 105, 95, 0.2);
+}
+
+.primary:active,
+.telegram-sign-in:active {
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.13), 0 1px 0 #075b53 !important;
+}
+
+.secondary {
+  border: 1px solid #b8ccc8 !important;
+  background: var(--surface-raised) !important;
+  color: var(--green-dark) !important;
+  box-shadow: inset 0 1px 0 #fff, 0 2px 0 #d5dfdd, 0 5px 10px rgba(15, 32, 40, 0.06);
+}
+
+.secondary:hover {
+  border-color: #82aaa3 !important;
+  background: #f1f8f6 !important;
+  box-shadow: inset 0 1px 0 #fff, 0 3px 0 #c9d9d6, 0 8px 14px rgba(15, 32, 40, 0.08);
+}
+
+.danger-link:hover { transform: none !important; }
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible {
+  outline: 3px solid rgba(18, 140, 126, 0.2) !important;
+  outline-offset: 2px;
+}
+
+input,
+select,
+.time-wheel-picker {
+  border-color: #cfd8de !important;
+  border-radius: 7px !important;
+  background: #f8fafb !important;
+  box-shadow: inset 0 2px 4px rgba(15, 32, 40, 0.045), 0 1px 0 #fff !important;
+}
+
+input:hover,
+select:hover,
+.time-wheel-picker:hover { border-color: #aebbc3 !important; }
+
+input:focus,
+select:focus {
+  background: #fff !important;
+  border-color: var(--green) !important;
+  box-shadow: inset 0 1px 2px rgba(15, 32, 40, 0.04), 0 0 0 3px rgba(18, 140, 126, 0.14) !important;
+}
+
+label,
+.filter-bar label { letter-spacing: 0 !important; }
+
+.filter-bar,
+.timing-preview,
+.template-poll-preview {
+  border-color: #dce3e7 !important;
+  border-radius: 7px !important;
+  background: #f6f8f9 !important;
+  box-shadow: inset 0 1px 3px rgba(15, 32, 40, 0.035);
+}
+
+.rules-summary { gap: 0 !important; }
+
+.rule-panel {
+  padding: 0.35rem 1.1rem 0.35rem 1rem !important;
+  border-left-width: 3px !important;
+}
+
+.schedule-row {
+  min-height: 3.4rem;
+  padding: 0.75rem 0.2rem !important;
+}
+
+.managed-group-row {
+  margin: 0.55rem 0;
+  padding: 0.8rem 0.9rem !important;
+  border: 1px solid #dbe3e6 !important;
+  border-radius: 7px;
+  background: #fbfcfd;
+  box-shadow: inset 0 1px 0 #fff, 0 3px 8px rgba(15, 32, 40, 0.05);
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+.managed-group-row:hover {
+  transform: translateY(-2px);
+  border-color: #a7c6c0 !important;
+  background: #fff !important;
+  box-shadow: inset 0 1px 0 #fff, 0 7px 15px rgba(15, 32, 40, 0.09);
+}
+
+.group-dialog-backdrop,
+.modal-backdrop {
+  background: rgba(24, 34, 43, 0.55) !important;
+  perspective: 1000px;
+}
+
+.group-dialog,
+.modal-panel,
+.auth-dialog,
+dialog {
+  border: 1px solid #cfd8dd !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  box-shadow: var(--shadow-high) !important;
+}
+
+.group-dialog {
+  width: min(92vw, 520px) !important;
+  padding: 1.25rem !important;
+  transform-origin: center 35%;
+  animation: depth-dialog-in 190ms ease-out;
+}
+
+.group-dialog header {
+  align-items: center;
+  margin-bottom: 1rem !important;
+  padding-bottom: 1rem !important;
+  border-bottom: 1px solid #e3e8eb;
+}
+
+.group-dialog h2 { font-size: 1.08rem !important; }
+.group-dialog .hint { color: var(--ink-soft) !important; }
+
+.icon-button {
+  width: 2.35rem;
+  height: 2.35rem;
+  min-height: 2.35rem;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  padding: 0 !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  color: var(--ink-soft) !important;
+  box-shadow: none !important;
+}
+
+.icon-button:hover {
+  border-color: var(--border) !important;
+  background: #f3f6f7 !important;
+  color: var(--ink) !important;
+}
+
+.icon-button svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.icon-button svg + .icon-fallback { display: none; }
+
+.group-dialog-actions {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 0.65rem !important;
+}
+
+.group-dialog-actions .workflow-action {
+  width: 100% !important;
+  min-height: 4rem !important;
+  display: grid;
+  grid-template-columns: 2.35rem minmax(0, 1fr) 1.25rem;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.65rem 0.8rem !important;
+  text-align: left;
+  color: var(--ink) !important;
+  border-color: #d5dfe2 !important;
+}
+
+.group-dialog-actions .workflow-action:last-child {
+  grid-column: auto !important;
+  justify-self: stretch !important;
+}
+
+.workflow-action .workflow-icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid #cce4df;
+  border-radius: 7px;
+  background: var(--green-light);
+  color: var(--green-dark);
+  box-shadow: inset 0 1px 0 #fff, 0 2px 4px rgba(8, 105, 95, 0.08);
+}
+
+.workflow-action .workflow-icon svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.workflow-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.workflow-arrow { color: var(--green-dark); }
+
+.workflow-arrow svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.feedback-dialog { width: min(92vw, 400px) !important; }
+
+.feedback-symbol {
+  width: 3rem;
+  height: 3rem;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 0.9rem;
+  border-radius: 50%;
+  background: var(--green-light);
+  color: var(--green-dark);
+  box-shadow: inset 0 0 0 1px #cce4df, 0 4px 10px rgba(8, 105, 95, 0.12);
+}
+
+.feedback-symbol svg {
+  width: 1.45rem;
+  height: 1.45rem;
+}
+
+.modal-panel { animation: depth-dialog-in 190ms ease-out; }
+
+table thead { background: #f5f8f9; }
+th { letter-spacing: 0 !important; }
+tbody tr { transition: background 120ms ease; }
+.pill { border-radius: 6px !important; }
+
+button svg {
+  width: 1rem;
+  height: 1rem;
+  vertical-align: -0.18em;
+}
+
+@keyframes workspace-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes depth-dialog-in {
+  from { opacity: 0; transform: translateY(12px) rotateX(-3deg) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) rotateX(0) scale(1); }
+}
+
+@keyframes depth-menu-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 720px) {
+  nav {
+    padding: 0 0.75rem !important;
+    gap: 0.55rem !important;
+  }
+
+  .brand-mark {
+    width: 1.65rem;
+    height: 1.65rem;
+  }
+
+  .nav-brand {
+    font-size: 0.88rem !important;
+    gap: 0.45rem !important;
+  }
+
+  .nav-links a {
+    min-height: 2.15rem;
+    padding: 0.35rem 0.5rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  main {
+    width: min(100% - 1rem, 1080px);
+    padding-top: 1.35rem !important;
+  }
+
+  .card { padding: 1rem !important; }
+  .group-dialog { padding: 1rem !important; }
+
+  .group-dialog-actions .workflow-action {
+    min-height: 3.7rem !important;
+  }
+}
+

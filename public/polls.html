@@ -492,6 +492,7 @@
     .telegram-setup { margin:0; color:var(--ink-soft); font-size:.88rem; line-height:1.45; }
     .telegram-setup a { color:#147fb1; font-weight:700; }
   </style>
+  <link rel="stylesheet" href="/theme.css" />
 </head>
 <body>
 
@@ -522,7 +523,7 @@
 
   <!-- Nav bar -->
   <nav>
-    <a href="/" class="nav-brand">Gops poll</a>
+    <a href="/" class="nav-brand"><span class="brand-mark" aria-hidden="true"><i data-lucide="send"></i></span>Gops poll</a>
     <ul class="nav-links">
       <li><a href="/">Home</a></li>
       <li><a href="/polls.html" class="active">Polls</a></li>
@@ -555,7 +556,7 @@
       <div class="card-header">
         <h2>All polls</h2>
         <div class="card-actions">
-          <button type="button" id="refresh-polls-btn" class="secondary btn-sm">↻ Refresh</button>
+          <button type="button" id="refresh-polls-btn" class="secondary btn-sm"><i data-lucide="refresh-cw" aria-hidden="true"></i> Refresh</button>
         </div>
       </div>
       <div class="filter-bar">
@@ -587,12 +588,16 @@
     <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="details-title">
       <div class="modal-header">
         <h2 id="details-title">Poll details</h2>
-        <button type="button" class="secondary btn-sm" id="details-close-btn">Close</button>
+        <button type="button" class="icon-button" id="details-close-btn" aria-label="Close" title="Close">
+          <i data-lucide="x"></i><span class="icon-fallback" aria-hidden="true">x</span>
+        </button>
       </div>
       <div class="modal-body" id="details-modal-body"></div>
     </section>
   </div>
 
+  <script src="/vendor/lucide.min.js"></script>
+  <script src="/theme.js"></script>
   <script src="telegram-auth.js"></script>
   <script src="polls.js"></script>
 </body>

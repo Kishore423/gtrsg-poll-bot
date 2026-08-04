@@ -1224,8 +1224,8 @@ async function loadManagedGroups() {
       <div class="schedule-row managed-group-row" data-id="${escapeHtml(group.id)}" tabindex="0" role="button" aria-label="Manage ${escapeHtml(managedGroupOptionLabel(group))}">
         <span>${servicePill(group.service || group.bot_id)} <strong>${escapeHtml(managedGroupOptionLabel(group))}</strong> (${escapeHtml(group.telegram_chat_id)})</span>
         <span>
-          <button type="button" class="secondary verify-group" data-id="${group.id}">Verify bot</button>
-          <button type="button" class="danger-link delete-group" data-id="${group.id}">Delete</button>
+          <button type="button" class="secondary verify-group" data-id="${group.id}"><i data-lucide="badge-check" aria-hidden="true"></i> Verify bot</button>
+          <button type="button" class="danger-link delete-group" data-id="${group.id}"><i data-lucide="trash-2" aria-hidden="true"></i> Delete</button>
       </span>
     </div>`).join('') : `<p class="hint">${currentUser?.role === 'admin' && !selectedUser
       ? 'Search and select a user above.'

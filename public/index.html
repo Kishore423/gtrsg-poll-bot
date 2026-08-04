@@ -836,6 +836,7 @@
     }
 
   </style>
+  <link rel="stylesheet" href="/theme.css" />
 </head>
 <body>
 
@@ -864,7 +865,7 @@
   </div>
   <!-- Nav bar -->
   <nav>
-    <a href="/" class="nav-brand">Gops poll</a>
+    <a href="/" class="nav-brand"><span class="brand-mark" aria-hidden="true"><i data-lucide="send"></i></span>Gops poll</a>
     <ul class="nav-links">
       <li><a href="/" class="active">Home</a></li>
       <li><a href="/polls.html">Polls</a></li>
@@ -975,18 +976,33 @@
           <h2 id="group-action-title">Manage group</h2>
           <p id="group-action-subtitle" class="hint" style="margin: 0.25rem 0 0;"></p>
         </div>
-        <button type="button" class="danger-link" id="group-action-close" aria-label="Close">Close</button>
+        <button type="button" class="icon-button" id="group-action-close" aria-label="Close" title="Close">
+          <i data-lucide="x"></i><span class="icon-fallback" aria-hidden="true">x</span>
+        </button>
       </header>
       <div class="group-dialog-actions">
-        <button type="button" class="secondary" data-group-workflow="template">Weekly default template</button>
-        <button type="button" class="secondary" data-group-workflow="skip">Skip days</button>
-        <button type="button" class="secondary" data-group-workflow="custom">Custom poll</button>
+        <button type="button" class="secondary workflow-action" data-group-workflow="template">
+          <span class="workflow-icon" aria-hidden="true"><i data-lucide="calendar-range"></i></span>
+          <span class="workflow-label">Weekly default template</span>
+          <span class="workflow-arrow" aria-hidden="true"><i data-lucide="chevron-right"></i></span>
+        </button>
+        <button type="button" class="secondary workflow-action" data-group-workflow="skip">
+          <span class="workflow-icon" aria-hidden="true"><i data-lucide="calendar-x-2"></i></span>
+          <span class="workflow-label">Skip days</span>
+          <span class="workflow-arrow" aria-hidden="true"><i data-lucide="chevron-right"></i></span>
+        </button>
+        <button type="button" class="secondary workflow-action" data-group-workflow="custom">
+          <span class="workflow-icon" aria-hidden="true"><i data-lucide="square-pen"></i></span>
+          <span class="workflow-label">Custom poll</span>
+          <span class="workflow-arrow" aria-hidden="true"><i data-lucide="chevron-right"></i></span>
+        </button>
       </div>
     </div>
   </div>
 
   <div id="action-feedback-dialog" class="group-dialog-backdrop" hidden>
     <div class="group-dialog feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="action-feedback-title" aria-describedby="action-feedback-message">
+      <span class="feedback-symbol" aria-hidden="true"><i data-lucide="check"></i></span>
       <h2 id="action-feedback-title">Completed</h2>
       <p id="action-feedback-message" aria-live="polite"></p>
       <button type="button" class="primary" id="action-feedback-close">OK</button>
@@ -1134,6 +1150,8 @@
   </section>
 
   </main>
+  <script src="/vendor/lucide.min.js"></script>
+  <script src="/theme.js"></script>
   <script src="telegram-auth.js"></script>
   <script src="app.js"></script>
 </body>

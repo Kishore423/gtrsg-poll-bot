@@ -108,6 +108,7 @@
       .edit-user-form .full, .dialog-actions { grid-column:1; }
     }
   </style>
+  <link rel="stylesheet" href="/theme.css" />
 </head>
 <body>
   <div id="auth-overlay" class="auth-overlay" hidden>
@@ -135,7 +136,7 @@
   </div>
 
   <nav>
-    <a href="/" class="nav-brand">Gops poll</a>
+    <a href="/" class="nav-brand"><span class="brand-mark" aria-hidden="true"><i data-lucide="send"></i></span>Gops poll</a>
     <ul class="nav-links">
       <li><a href="/">Home</a></li>
       <li><a href="/polls.html">Polls</a></li>
@@ -171,7 +172,7 @@
         <label>Display name<input name="telegram_display_name" /></label>
         <label>Role<select name="role"><option value="user">User</option><option value="admin">Admin</option></select></label>
         <label>BotFather token<input name="bot_token" autocomplete="off" placeholder="Required for users" /></label>
-        <button type="submit" class="primary">Add user</button>
+        <button type="submit" class="primary"><i data-lucide="user-plus" aria-hidden="true"></i> Add user</button>
       </form>
     </section>
 
@@ -206,12 +207,14 @@
         <p id="edit-user-status" class="status full" aria-live="polite"></p>
         <div class="dialog-actions">
           <button id="cancel-edit-user" type="button" class="secondary">Cancel</button>
-          <button type="submit" class="primary">Save changes</button>
+          <button type="submit" class="primary"><i data-lucide="save" aria-hidden="true"></i> Save changes</button>
         </div>
       </form>
     </div>
   </dialog>
 
+  <script src="/vendor/lucide.min.js"></script>
+  <script src="/theme.js"></script>
   <script src="/telegram-auth.js"></script>
   <script src="/admin.js"></script>
 </body>
