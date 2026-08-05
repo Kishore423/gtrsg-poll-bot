@@ -93,17 +93,59 @@ Vercel Cron** for hosting/scheduling.
 > Migrated off WhatsApp/Baileys entirely. Also past Vercel-Postgres/Neon and HTTP
 > Basic Auth — now Supabase for DB and Telegram for auth. Disregard those obsolete references.
 
+## Multi-tenant confirmed decisions (summary)
+
+- Immutable Telegram user ID = authorization key. Valid OTP grants nothing without an enabled `app_users` row.
+- Bot tokens: admin pastes BotFather token → encrypted in DB (never sent to browser). `BOT_TOKEN_ENC_KEY` required.
+- Admins see all groups/bots; an admin may have no bot (`bot_id` nullable).
+- Bot name/handle are Telegram-owned, read-only on website. `bots.bot_name` / `bots.telegram_username` are caches.
+  `POST /api/admin/telegram-identities/refresh` is the only non-cached refresh; normal roster GETs use stored values.
+- `app_users.telegram_username` = person's login handle; `bots.telegram_username` = assigned bot handle — kept separate.
+- User handles refreshed by Login_bot on `/start`, OTP requests, and explicit Admin refresh. Casing preserved; lookups case-insensitive.
+- Pending users bind only when Login_bot private `/start` handle matches admin-entered handle exactly. Mismatch → unbound + **Awaiting Login_bot handle verification**.
+- `app_users.login_bot_verified_at` (not `telegram_user_id`) is the authoritative Login_bot enrollment state.
+  Legacy migration IDs remain unverified until a matching private Login_bot `/start`.
+- Bot replacement: admin pastes new BotFather token in Edit → token validated + webhook registered → `app_users.bot_id` atomically switched → old bot + its groups disabled, old webhook removed. Failed registration rolls back so retries are not blocked.
+- Duplicate Telegram bot IDs rejected by `bots_telegram_bot_id_key` partial unique index (Postgres + memory mirror). HTTP 409 on duplicate.
+- Seed roster: `@sonia_mala` (user, @Pax_services_bot), `@Y6yyyyyyyyyyuu` (user, no bot),
+  `@ht1193`/Howell (user, @Flexi_wheelchair_bot), `@kishorek888` (admin, no bot).
+- Telegram privacy mode stays ON. Group auto-detect relies on `my_chat_member` updates.
+
 ## Two workflows
 
 - **Managed (production)**: dashboard-scheduled polls with precise timezone
   release/close/confirmation times, cron-driven sending with claim-token
   concurrency, edit-in-place confirmations, waiting lists, poll closures.
-  `src/productionScheduler.js` (including `generateScheduledPollsFromTemplates`),
-  `src/scheduleResolver.js`,
+  `src/productionScheduler.js` (including `generateScheduledPollsFromTemplates`
+  and `sendScheduledPollImmediately`), `src/scheduleResolver.js`,
   `buildManagedConfirmationMessage`, repo `claim*/complete*/fail*/getAllocation`.
 - **Legacy (original slot UI)**: gated by `enableLegacyWorkflow` (on for
   `DB_DRIVER=memory`, `ENABLE_LEGACY_WORKFLOW=true`, or unconfigured Vercel
   preview). Its `/api/slots|polls|...` return 410 when disabled.
+
+## Architecture
+
+- **Bots**: `PRIMARY` bot (`TELEGRAM_BOT_TOKEN`) + optional per-service
+  `TELEGRAM_TOKEN_WHCL` / `TELEGRAM_TOKEN_PSA` (fall back to PRIMARY).
+  WHCL = @Flexi_wheelchair_bot (id 8632673727), PSA = @Pax_services_bot (id 8764384354).
+  Tokens live only in `.env` / Vercel env — never commit.
+- **Login bot**: `LOGIN` = @user_login_otp_bot (`TELEGRAM_LOGIN_BOT_TOKEN`).
+  Sends authentication OTPs only; never captures groups or handles poll updates.
+- **Webhook, not polling**: Telegram → `POST /api/telegram/:service`
+  (`src/server.js` → `src/processUpdate.js`). Authenticated by
+  `X-Telegram-Bot-Api-Secret-Token` header (`TELEGRAM_WEBHOOK_SECRET`).
+  Updates de-duplicated (`beginWebhookEvent`/`finishWebhookEvent`). Any webhook
+  bot route auto-captures managed groups by `(telegram_chat_id, bot_id)` upsert.
+  WHCL/PSA also update the legacy target table; PRIMARY stored as general managed
+  group (`service=null`, `bot_id='PRIMARY'`). One bot → multiple groups.
+  Managed-group names displayed exactly as stored; UI does not append bot/service text.
+- **Data layer**: `src/db/postgres.js` (Supabase via `postgres` lib) and
+  `src/db/memory.js` (tests + local). Keep both in lockstep — memory is what tests run against.
+- **Auth**: `src/telegramAuth.js`. `requireAdmin` gates `/api/admin/*`;
+  `requireUser` gates the rest of `/api/*` except `/api/auth/*`, `/api/telegram/*`, `/api/cron/*`.
+- **Vercel**: explicit `builds` in `vercel.json` (do NOT switch to zero-config — Vercel
+  auto-discovers `src/server.js` as a function and causes 500s on `/`). Only
+  `api/index.js` is the serverless entry. Cron hits `/api/cron/*` (Bearer `CRON_SECRET`).
 
 ## Working agreements
 
@@ -231,26 +273,37 @@ Vercel Cron** for hosting/scheduling.
 
 ## 2026-08-05 fixes (multi-tenant bugs + deployment sheet)
 
-- Per-user polls: `postgres.listScheduledPolls()` now selects
-  `coalesce(g.bot_ref::text, g.bot_id) as bot_id` (scheduled_polls has no bot_id
-  column) so `filterRowsByUserBot` stops hiding every poll from non-admin users.
-  Managed scheduling is Postgres-only (no memory mirror; tests use fake DBs).
-- Bot reassignment: `createBotFromToken` 409s only when another user still owns
-  the matching Telegram bot; an orphan/unowned row is reused via new
-  `db.reactivateBot(id,{token_encrypted,webhook_secret})` (memory + postgres).
-  `PATCH /api/admin/users/:id` accepts `remove_bot:true` to unassign+disable a
-  bot (kept, not hard-deleted — `telegram_groups.bot_ref` is ON DELETE CASCADE)
-  and drop its webhook, freeing it for reassignment. Admin Edit adds a **Remove
-  bot** button. `inspect-token.already_assigned` reflects real ownership.
-- `public/app.js` `servicePill()` returns neutral **General** for non-WHCL/PSA
-  values (incl. UUID bot ids); it no longer mislabels PSA-bot groups as green
-  Wheelchair.
-- Deployment sheet: `GET /api/confirmed-slots.csv` (tenant-scoped; admin
-  `?bot_id=`) exports a pivoted roster CSV (BOM) — columns `Name, Telegram
-  handle, <date>…` (one per event date, `3-Aug` format), one row per person,
-  cell = confirmed shift label for that date (blank if not deployed). Confirmed
-  only. Polls page **Deployment sheet** button downloads via auth-wrapped fetch
-  → blob; file `deployment-sheet-<date>.csv`.
+- **Per-user polls now show (tenancy fix).** `scheduled_polls` has no `bot_id`
+  column, so `postgres.listScheduledPolls()` now selects
+  `coalesce(g.bot_ref::text, g.bot_id) as bot_id`; without it `filterRowsByUserBot`
+  compared against `undefined` and hid every poll from non-admin users. The
+  managed scheduling methods live only in `postgres.js` (memory.js has none), so
+  this has no memory mirror; managed tests use inline fake DBs.
+- **Bot reassignment (orphan reuse + Remove bot).** Replacing a user's bot only
+  disables the old bot row, leaving an orphan that still holds the unique
+  `telegram_bot_id`, which blocked reassigning that token elsewhere (409).
+  `createBotFromToken` now 409s only when another user still **owns** the matching
+  bot; an unowned/orphan row is reused via the new `db.reactivateBot(id, {token_encrypted, webhook_secret})`
+  (memory + postgres), which re-enables the row, refreshes token/secret, and
+  re-registers the webhook. `PATCH /api/admin/users/:id` accepts `remove_bot:true`
+  to unassign + disable a bot (kept, not hard-deleted, to preserve poll history
+  and avoid the `telegram_groups.bot_ref ON DELETE CASCADE`) and remove its
+  webhook, freeing the bot for reassignment. Admin Edit dialog has a **Remove bot**
+  button (`#remove-user-bot`, shown only when the user has a bot). `inspect-token`
+  reports `already_assigned` from actual ownership, not mere row existence.
+- **Service pill no longer mislabels (fix).** `public/app.js` `servicePill()` now
+  returns the neutral **General** pill for anything other than `WHCL`/`PSA`
+  (including per-user UUID bot ids); it previously defaulted every non-`PSA` value
+  to green **Wheelchair**, so a PSA-bot group showed "Wheelchair".
+- **Deployment sheet (who is deployed where).** `GET /api/confirmed-slots.csv`
+  (tenant-scoped; admins may pass `?bot_id=`) streams a **pivoted roster** as
+  UTF-8 CSV (BOM for Excel): columns `Name, Telegram handle, <date>, <date>…`
+  (one column per event date, formatted `3-Aug` via `formatSheetDate`), one row
+  per person, each cell that person's confirmed shift label for that date (two
+  slots joined by ` ; `, blank when not deployed). Confirmed only; waiting-list
+  excluded. People keyed by immutable Telegram id (fallback handle/name). Polls
+  page **Deployment sheet** button (`#export-confirmed-btn`) downloads via
+  auth-wrapped `fetch` → blob; file name `deployment-sheet-<date>.csv`.
 
 ## Bots (live)
 
@@ -419,6 +472,23 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   all client browsers and operating systems. Wheel selection measures row height
   when each scroll event occurs; do not cache dimensions while a managed section
   is hidden, because reopening it can otherwise change persisted times.
+- Allocation is capacity-bound, strictly first-come-first-served by vote arrival
+  (`voted_at_ms`); a voter's original arrival survives edits; a retraction (empty
+  `option_ids`) removes them.
+- Confirmations auto-send 08:00 SGT the day before the slot/event date
+  (`CONFIRMATION_HOUR`, default 8). Managed confirmations include a service title
+  (`Wheelchair` or `PSA`) and event date in the header, and only confirmed
+  participants; waiting-list and unfilled slot rows are intentionally omitted.
+- Telegram needs ≥2 poll options; single-option days get a `Not available`
+  filler (ignored in results/votes). Confirmation messages use Telegram HTML with
+  `tg://user?id=…` mentions; escape all user-supplied names.
+- Poll sending is idempotent (legacy `sent_at`; managed claim tokens).
+- Confirmation delivery is service-specific: PSA due confirmations are grouped
+  into one Telegram message per group/resolved confirmation time, with each event
+  date and its confirmed timeslots listed in date order. Wheelchair confirmations
+  intentionally remain one Telegram confirmation message per poll/event date.
+  `runScheduledConfirmations` sorts non-PSA (Wheelchair) single confirmations by
+  event date before sending and orders PSA batches by their earliest event date.
 - Manual release-batch creation is not part of the primary UI; automatic template
   generation skips active existing polls by default.
 - **Footgun**: don't run `npm run dev-telegram` after webhooks are live — it deletes
