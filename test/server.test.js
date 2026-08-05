@@ -584,6 +584,7 @@ test('tenant scoping permits own templates and custom replacements but blocks ot
     poll_release_time: '17:00',
     confirmation_day_of_week: 5,
     confirmation_time: '12:00',
+    gap_weeks: 1,
     shifts: [{ label: '0800-1700', start_time: '08:00', end_time: '17:00', capacity: 1 }],
   };
   try {
@@ -593,6 +594,14 @@ test('tenant scoping permits own templates and custom replacements but blocks ot
     }, headers));
     assert.equal(ownTemplate.status, 200);
     const scheduleA = await ownTemplate.json();
+    assert.equal(scheduleA.gap_weeks, 1);
+
+    const invalidGap = await fetch(`${baseUrl}/api/weekly-schedules`, json('PUT', {
+      ...template,
+      telegram_group_id: groupA.id,
+      gap_weeks: 13,
+    }, headers));
+    assert.equal(invalidGap.status, 400);
 
     const foreignTemplate = await fetch(`${baseUrl}/api/weekly-schedules`, json('PUT', {
       ...template,

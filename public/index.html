@@ -465,9 +465,17 @@
 
     .template-release-grid {
       display: grid;
-      grid-template-columns: minmax(12rem, max-content) minmax(12rem, max-content);
+      grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
       gap: 1.25rem;
       align-items: end;
+    }
+
+    .field-help {
+      color: var(--ink-soft);
+      font-size: 0.75rem;
+      font-weight: 500;
+      line-height: 1.35;
+      text-transform: none;
     }
 
     .one-off-timing-grid {
@@ -900,18 +908,18 @@
     <div class="rules-summary">
       <div class="rule-panel">
         <strong>Wheelchair</strong>
-        <span>Release Wednesday 17:00 for the following Monday–Sunday. Voting closes and confirmation sends 1 day before each event at 08:00.</span>
+        <span>Each group sends one Monday–Sunday event week. Release lead time is configured with Gap weeks. Voting closes 1 day before each event at 08:00.</span>
       </div>
       <div class="rule-panel psa">
         <strong>PSA</strong>
-        <span>Release Wednesday 17:00 for the following 2 weeks. Voting closes Friday 08:00 and confirmation sends Friday 12:00.</span>
+        <span>Each group sends one Monday–Sunday event week. Release lead time is configured with Gap weeks. Voting closes Friday before the event week at 08:00.</span>
       </div>
     </div>
   </section>
 
   <section class="card legacy-workflow">
     <h2>Weekly poll schedule</h2>
-    <p class="hint">Polls are released on Wednesday. Wheelchair covers the following week; PSA covers the following two weeks.</p>
+    <p class="hint">Legacy batches are limited to the following Monday–Sunday week for both services.</p>
     <form id="schedule-form">
       <label>Service
         <select name="service" required>
@@ -991,11 +999,16 @@
               </select>
             </label>
             <label>Release time<div class="time-wheel-picker" data-name="poll_release_time"></div></label>
+            <label>Gap weeks
+              <input name="gap_weeks" type="number" min="0" max="12" step="1" value="0" required />
+              <span class="field-help">0 = next event week; 1 = leave one full week in between.</span>
+            </label>
             <label>Confirmation day
               <select name="confirmation_day_of_week" required>
                 <option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option>
                 <option value="4">Thursday</option><option value="5" selected>Friday</option><option value="6">Saturday</option><option value="0">Sunday</option>
               </select>
+              <span class="field-help">Always in the week before the event week.</span>
             </label>
             <label>Confirmation time<div class="time-wheel-picker" data-name="confirmation_time"></div></label>
           </div>

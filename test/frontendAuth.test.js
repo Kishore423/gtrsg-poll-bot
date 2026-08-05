@@ -254,10 +254,15 @@ test('weekly and one-off forms expose editable confirmation timing', () => {
   const source = readFileSync(join(__dirname, '..', 'public', 'app.js'), 'utf8');
   assert.match(html, /select name="confirmation_day_of_week"/);
   assert.match(html, /data-name="confirmation_time"/);
+  assert.match(html, /input name="gap_weeks" type="number" min="0" max="12"/);
+  assert.match(html, /Confirmation day/);
+  assert.match(html, /week before the event week/);
   assert.match(html, /input type="date" name="confirmation_date" required/);
   assert.match(html, /data-name="one_off_confirmation_time"/);
   assert.doesNotMatch(source, /body\.confirmation_time = '12:00'/);
   assert.match(source, /Confirmation date and time must be after release date and time/);
+  assert.match(source, /const itemHeight = \(\) => items\[0\]\.offsetHeight \|\| 25\.6/);
+  assert.doesNotMatch(source, /const itemHeight = items\[0\]\.offsetHeight \|\| 28\.8/);
 });
 
 test('weekly default and one-off scheduling show group-specific success popups', () => {

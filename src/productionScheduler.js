@@ -145,7 +145,11 @@ async function generateScheduledPollsFromTemplates(db, now = new Date()) {
     if (!dueRelease) continue;
     const { releaseDate } = dueRelease;
 
-    for (const eventDate of eventDatesForReleaseDate(service, releaseDate)) {
+    for (const eventDate of eventDatesForReleaseDate(
+      service,
+      releaseDate,
+      schedule.gap_weeks
+    )) {
       const excluded = db.isPollDateExcluded &&
         await db.isPollDateExcluded(schedule.telegram_group_id, eventDate);
       if (excluded) continue;
@@ -157,6 +161,7 @@ async function generateScheduledPollsFromTemplates(db, now = new Date()) {
         service,
         eventDate,
         releaseDate,
+        gapWeeks: schedule.gap_weeks,
         releaseDay: schedule.poll_release_day_of_week,
         releaseTime,
         confirmationDay: schedule.confirmation_day_of_week,

@@ -264,13 +264,17 @@ The app currently ships BOTH, selected at runtime:
 - Never commit `.env`/`.env.local`, bot tokens, `DATABASE_URL`, or Supabase keys.
 - Keep `WHCL`/`PSA` routing separate end to end.
 - **Supervisor scheduling requirements implemented (2026-07-13):** default poll
-  release is Wednesday 17:00 SGT. Legacy weekly sending releases WHCL slots for
-  the following Monday-Sunday week and PSA slots for the following two
-  Monday-Sunday weeks. Managed poll creation uses service-specific timing from
-  `src/scheduleRules.js`: PSA cuts off Friday 08:00 SGT and WHCL cuts off 1 day
-  before the event date at 08:00 SGT. Weekly templates persist an independently
-  configurable confirmation weekday/time; when absent, legacy defaults remain
-  PSA Friday 12:00 and WHCL at its day-before 08:00 cutoff. One-off polls persist
+  release is Wednesday 17:00 SGT. Every legacy or managed release batch is
+  limited to one Monday-Sunday event week (at most 7 polls). Managed weekly
+  templates persist `gap_weeks` per Telegram group: 0 targets the next event
+  week, 1 leaves one full week between the release and event weeks, and so on.
+  This lead-time setting is not service-hardcoded. Managed poll creation uses
+  service-specific timing from `src/scheduleRules.js`: PSA cuts off Friday 08:00
+  SGT in the week immediately before the event week and WHCL cuts off 1 day
+  before each event at 08:00 SGT. Weekly confirmation weekday/time also always
+  resolves inside the week immediately before the event week and must remain
+  strictly after release. When absent, legacy defaults remain PSA Friday 12:00
+  and WHCL at its day-before 08:00 cutoff. One-off polls persist
   an explicit confirmation date/time. Every confirmation must resolve strictly
   after its poll release. Vercel Hobby only allows daily cron, so `vercel.json` currently runs
   `/api/cron/scheduler` once daily; exact Wednesday 17:00 / Friday 12:00 delivery
@@ -305,7 +309,10 @@ The app currently ships BOTH, selected at runtime:
   event shifts that are automatically pre-populated on the poll editor card. Start and end
   time inputs use compact custom 24-hour scroll-wheel pickers (drum selectors)
   in separate responsive grid fields for space efficiency and consistent
-  formatting across all client browsers and operating systems.
+  formatting across all client browsers and operating systems. Wheel selection
+  measures row height when each scroll event occurs; do not cache dimensions
+  while a managed section is hidden, because reopening it can otherwise change
+  persisted times.
 - Telegram needs ≥2 poll options; single-option days get a `Not available`
   filler (ignored in results/votes). Confirmation messages are Telegram HTML with
   `tg://user?id=…` mentions; escape all user-supplied names.
@@ -316,8 +323,9 @@ The app currently ships BOTH, selected at runtime:
   scheduled/custom polls for the same group/date, and does not block scheduled sends
   or automatic default-poll generation for that date.
   The Home page template test-poll control sends the entire current release batch
-  for the selected group's saved template (WHCL 7 polls, PSA 14 polls), not a
-  single event-date poll. Its optional release date field overrides the batch
+  for the selected group's saved template (7 polls for either service), not a
+  single event-date poll. It uses that group's saved gap-week rule. Its optional
+  release date field overrides the batch
   release date; when blank it uses the latest configured release day/time that has
   already happened in Asia/Singapore. Test-batch sends are sorted earliest event
   date to latest event date and paced with a short delay between Telegram sends;

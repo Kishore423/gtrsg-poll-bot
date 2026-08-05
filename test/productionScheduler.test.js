@@ -256,6 +256,53 @@ test('automatic template generation creates missing WHCL polls and skips exclude
   assert.equal(created[0].show_empty_shifts, false);
 });
 
+test('automatic PSA generation uses the group gap and creates only one event week', async () => {
+  const created = [];
+  const db = {
+    async listManagedWeeklySchedules() {
+      return [{
+        id: 'schedule-psa',
+        telegram_group_id: 'group-psa',
+        group_name: 'PSA group',
+        service: 'PSA',
+        enabled: true,
+        poll_release_day_of_week: 3,
+        poll_release_time: '17:00',
+        gap_weeks: 1,
+        confirmation_day_of_week: 5,
+        confirmation_time: '12:00',
+        timezone: 'Asia/Singapore',
+        shifts: [{ label: '0800-1700', start_time: '08:00', end_time: '17:00', capacity: 1 }],
+      }];
+    },
+    async getActivePollForDate() { return null; },
+    async isPollDateExcluded() { return false; },
+    async createScheduledEvent(payload) {
+      created.push(payload);
+      return `poll-${created.length}`;
+    },
+  };
+
+  const result = await generateScheduledPollsFromTemplates(
+    db,
+    new Date('2026-08-05T09:01:00Z')
+  );
+
+  assert.equal(result.length, 7);
+  assert.deepEqual(created.map((poll) => poll.event_date), [
+    '2026-08-17',
+    '2026-08-18',
+    '2026-08-19',
+    '2026-08-20',
+    '2026-08-21',
+    '2026-08-22',
+    '2026-08-23',
+  ]);
+  assert.equal(created[0].resolved_release_at, '2026-08-05T09:00:00.000Z');
+  assert.equal(created[0].close_at, '2026-08-14T00:00:00.000Z');
+  assert.equal(created[0].resolved_confirmation_at, '2026-08-14T04:00:00.000Z');
+});
+
 test('automatic template generation does not backfill after the configured release day', async () => {
   let created = 0;
   const db = {

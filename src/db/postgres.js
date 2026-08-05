@@ -37,6 +37,8 @@ function createPostgresDb(sql = createSql()) {
       add column if not exists sent_at timestamptz,
       add column if not exists consumed_at timestamptz`;
     await sql`alter table telegram_groups add column if not exists bot_ref uuid references bots(id) on delete cascade`;
+    await sql`alter table weekly_poll_schedules
+      add column if not exists gap_weeks smallint not null default 0`;
     await sql`create index if not exists telegram_groups_bot_ref_idx on telegram_groups(bot_ref)`;
     await sql`create unique index if not exists telegram_groups_chat_bot_ref_key
       on telegram_groups(telegram_chat_id, bot_ref) where bot_ref is not null`;
@@ -714,16 +716,18 @@ function createPostgresDb(sql = createSql()) {
     async upsertManagedWeeklySchedule(value) {
       const [row] = await sql`insert into weekly_poll_schedules
         (telegram_group_id,event_category,poll_release_day_of_week,poll_release_time,
-          confirmation_day_of_week,confirmation_time,timezone,enabled,shifts)
+          confirmation_day_of_week,confirmation_time,gap_weeks,timezone,enabled,shifts)
         values (${value.telegram_group_id}::uuid,${value.event_category || null},
           ${value.poll_release_day_of_week},${value.poll_release_time},
-          ${value.confirmation_day_of_week},${value.confirmation_time},${value.timezone},${value.enabled},
+          ${value.confirmation_day_of_week},${value.confirmation_time},${value.gap_weeks},
+          ${value.timezone},${value.enabled},
           ${sql.json(value.shifts || [])})
         on conflict (telegram_group_id,event_category) do update set
           poll_release_day_of_week=excluded.poll_release_day_of_week,
           poll_release_time=excluded.poll_release_time,
           confirmation_day_of_week=excluded.confirmation_day_of_week,
-          confirmation_time=excluded.confirmation_time,timezone=excluded.timezone,
+          confirmation_time=excluded.confirmation_time,gap_weeks=excluded.gap_weeks,
+          timezone=excluded.timezone,
           enabled=excluded.enabled,shifts=excluded.shifts,updated_at=now() returning *`;
       return row;
     },

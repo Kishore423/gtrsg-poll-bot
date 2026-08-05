@@ -14,7 +14,11 @@ const { buildConfirmationMessage, NOT_AVAILABLE_OPTION, escapeHtml } = require('
 const { buildConfirmationState } = require('./confirmation');
 const { processTelegramUpdate } = require('./processUpdate');
 const { resolvePollSchedule } = require('./scheduleResolver');
-const { managedTimingForEvent } = require('./scheduleRules');
+const {
+  addLocalDays,
+  eventDatesForReleaseDate,
+  managedTimingForEvent,
+} = require('./scheduleRules');
 const { runScheduledPolls, runScheduledConfirmations, runScheduledClosures } = require('./productionScheduler');
 const { scopeGroups, assertGroupAccess, filterRowsByUserBot } = require('./tenancy');
 const { encryptToken, decryptToken, generateWebhookSecret } = require('./crypto');
@@ -836,11 +840,39 @@ function createServer(db, telegram, options = {}) {
       }
       body[key] = Number(body[key]);
     }
+    body.gap_weeks = Number(body.gap_weeks ?? 0);
+    if (!Number.isInteger(body.gap_weeks) || body.gap_weeks < 0 || body.gap_weeks > 12) {
+      return res.status(400).json({ error: 'gap_weeks must be a whole number from 0 through 12' });
+    }
     if (!body.telegram_group_id || !/^([01]\d|2[0-3]):[0-5]\d$/.test(body.poll_release_time || '') ||
         !/^([01]\d|2[0-3]):[0-5]\d$/.test(body.confirmation_time || '')) {
       return res.status(400).json({ error: 'Group and valid release/confirmation times are required' });
     }
-    await assertGroupAccess(db, req.appUser, body.telegram_group_id);
+    const group = await assertGroupAccess(db, req.appUser, body.telegram_group_id);
+    const service = resolveTelegramGroupService(group, 'WHCL');
+    const referenceReleaseDate = addLocalDays(
+      '2030-01-07',
+      (body.poll_release_day_of_week + 6) % 7
+    );
+    const referenceEventDate = eventDatesForReleaseDate(
+      service,
+      referenceReleaseDate,
+      body.gap_weeks
+    )[0];
+    try {
+      managedTimingForEvent({
+        service,
+        eventDate: referenceEventDate,
+        releaseDate: referenceReleaseDate,
+        releaseDay: body.poll_release_day_of_week,
+        releaseTime: body.poll_release_time,
+        gapWeeks: body.gap_weeks,
+        confirmationDay: body.confirmation_day_of_week,
+        confirmationTime: body.confirmation_time,
+      });
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
     body.timezone = body.timezone || 'Asia/Singapore';
     body.enabled = body.enabled !== false;
     const shifts = Array.isArray(body.shifts) ? body.shifts : [];
@@ -928,8 +960,10 @@ function createServer(db, telegram, options = {}) {
         eventDate: body.event_date,
         releaseDay: weekly.poll_release_day_of_week,
         releaseTime: String(weekly.poll_release_time).slice(0, 5),
+        gapWeeks: weekly.gap_weeks,
         confirmationDay: weekly.confirmation_day_of_week,
         confirmationTime: String(weekly.confirmation_time).slice(0, 5),
+        validateAfterRelease: !(isTest && body.send_immediately),
       });
       body.specific_release_at = body.send_immediately ? body.specific_release_at : timing.releaseAt;
       body.close_at = timing.closeAt;

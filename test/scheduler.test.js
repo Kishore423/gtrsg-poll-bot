@@ -170,7 +170,7 @@ test('runWeeklySend only sends for services whose configured day is today', asyn
   assert.deepEqual((await db.listUnsentSlots()).map((s) => s.service), ['WHCL', 'PSA']);
 });
 
-test('runWeeklySend sends PSA slots for the following two weeks', async () => {
+test('runWeeklySend limits legacy PSA batches to the following week', async () => {
   const db = await seededDb();
   await db.setSetting('poll_send_day_PSA', 3);
   await db.setSetting('poll_send_day_WHCL', 5);
@@ -181,7 +181,7 @@ test('runWeeklySend sends PSA slots for the following two weeks', async () => {
   const tg = makeTelegram();
   const sent = await runWeeklySend(db, tg, {}, new Date('2026-07-15T17:00:00+08:00'));
 
-  assert.equal(sent.length, 2);
-  assert.deepEqual(sent.map((poll) => poll.slot_date), ['2026-07-21', '2026-07-30']);
-  assert.deepEqual((await db.listUnsentSlots()).map((s) => s.slot_date), ['2026-08-03']);
+  assert.equal(sent.length, 1);
+  assert.deepEqual(sent.map((poll) => poll.slot_date), ['2026-07-21']);
+  assert.deepEqual((await db.listUnsentSlots()).map((s) => s.slot_date), ['2026-07-30', '2026-08-03']);
 });

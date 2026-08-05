@@ -162,22 +162,21 @@ function weekday(dateText) {
   return new Date(`${dateText}T00:00:00Z`).getUTCDay();
 }
 
-function releaseDateForEvent(eventDate, releaseDay) {
-  const diff = (weekday(eventDate) - Number(releaseDay) + 7) % 7;
-  return addLocalDays(eventDate, -diff);
+function releaseDateForEvent(eventDate, releaseDay, gapWeeks = 0) {
+  const eventMonday = mondayOfWeek(eventDate);
+  const releaseWeekMonday = addLocalDays(eventMonday, -(Number(gapWeeks || 0) + 1) * 7);
+  return addLocalDays(releaseWeekMonday, (Number(releaseDay) + 6) % 7);
 }
 
-function nextWeekdayOnOrAfter(dateText, targetDay) {
-  const diff = (Number(targetDay) - weekday(dateText) + 7) % 7;
-  return addLocalDays(dateText, diff);
+function mondayOfWeek(dateText) {
+  return addLocalDays(dateText, -((weekday(dateText) + 6) % 7));
 }
 
-function weeklyDateTimeAfter(releaseDate, releaseTime, targetDay, targetTime) {
-  let date = nextWeekdayOnOrAfter(releaseDate, targetDay);
-  if (date === releaseDate && targetTime.slice(0, 5) <= releaseTime.slice(0, 5)) {
-    date = addLocalDays(date, 7);
-  }
-  return `${date}T${targetTime.slice(0, 5)}`;
+function eventWeekDateTime(eventDate, targetDay, targetTime) {
+  const eventMonday = mondayOfWeek(eventDate);
+  const priorWeekMonday = addLocalDays(eventMonday, -7);
+  const date = addLocalDays(priorWeekMonday, (Number(targetDay) + 6) % 7);
+  return `${date}T${String(targetTime).slice(0, 5)}`;
 }
 
 function serviceForGroup(telegramGroupId) {
@@ -189,36 +188,53 @@ function managedTimingForEvent({ telegramGroupId, eventDateVal, schedule }) {
   const service = serviceForGroup(telegramGroupId);
   const releaseDay = schedule?.poll_release_day_of_week ?? DEFAULT_RELEASE_DAY;
   const releaseTime = (schedule?.poll_release_time || DEFAULT_RELEASE_TIME).slice(0, 5);
-  const releaseDate = releaseDateForEvent(eventDateVal, releaseDay);
+  const releaseDate = releaseDateForEvent(eventDateVal, releaseDay, schedule?.gap_weeks);
   const releaseAt = `${releaseDate}T${releaseTime}`;
   const hasConfiguredConfirmation = schedule?.confirmation_day_of_week !== undefined &&
     Boolean(schedule?.confirmation_time);
   const configuredConfirmationAt = hasConfiguredConfirmation
-    ? weeklyDateTimeAfter(
-      releaseDate,
-      releaseTime,
+    ? eventWeekDateTime(
+      eventDateVal,
       Number(schedule.confirmation_day_of_week),
       String(schedule.confirmation_time),
     )
     : null;
 
   if (service === 'PSA') {
-    const cutoffDate = nextWeekdayOnOrAfter(releaseDate, 5);
-    return {
+    const cutoffAt = eventWeekDateTime(
+      eventDateVal,
+      5,
+      '08:00',
+    );
+    const timing = {
       service,
       releaseAt,
-      closeAt: `${cutoffDate}T08:00`,
-      confirmationAt: configuredConfirmationAt || `${cutoffDate}T12:00`,
+      closeAt: cutoffAt,
+      confirmationAt: configuredConfirmationAt || `${cutoffAt.slice(0, 10)}T12:00`,
     };
+    if (timing.closeAt <= releaseAt) {
+      throw new RangeError('PSA release must be before Friday 08:00 in the week before the event week');
+    }
+    if (timing.confirmationAt <= releaseAt) {
+      throw new RangeError('Confirmation date and time must be after release date and time');
+    }
+    return timing;
   }
 
   const cutoffDate = addLocalDays(eventDateVal, -1);
-  return {
+  const timing = {
     service,
     releaseAt,
     closeAt: `${cutoffDate}T08:00`,
     confirmationAt: configuredConfirmationAt || `${cutoffDate}T08:00`,
   };
+  if (timing.closeAt <= releaseAt) {
+    throw new RangeError('Release date and time must be before the event cutoff');
+  }
+  if (timing.confirmationAt <= releaseAt) {
+    throw new RangeError('Confirmation date and time must be after release date and time');
+  }
+  return timing;
 }
 
 function formatLocalDateTime(value) {
@@ -331,6 +347,7 @@ function scheduleFromSaveResult(result, body) {
     poll_release_time: body.poll_release_time,
     confirmation_day_of_week: body.confirmation_day_of_week,
     confirmation_time: body.confirmation_time,
+    gap_weeks: body.gap_weeks,
     timezone: body.timezone,
     enabled: body.enabled !== false,
     shifts: body.shifts,
@@ -344,6 +361,7 @@ function defaultScheduleForGroup(telegramGroupId) {
     poll_release_time: DEFAULT_RELEASE_TIME,
     confirmation_day_of_week: 5,
     confirmation_time: '12:00',
+    gap_weeks: 0,
     timezone: 'Asia/Singapore',
     enabled: true,
   };
@@ -384,11 +402,10 @@ function latestReleaseDateForSchedule(schedule, from = new Date()) {
   return releaseDate;
 }
 
-function batchRangeForReleaseDate(service, releaseDate) {
+function batchRangeForReleaseDate(releaseDate, gapWeeks = 0) {
   const daysUntilMonday = ((1 - weekday(releaseDate) + 7) % 7) || 7;
-  const start = addDays(releaseDate, daysUntilMonday);
-  const count = service === 'PSA' ? 14 : 7;
-  return Array.from({ length: count }, (_, index) => addDays(start, index));
+  const start = addDays(releaseDate, daysUntilMonday + Number(gapWeeks || 0) * 7);
+  return Array.from({ length: 7 }, (_, index) => addDays(start, index));
 }
 
 function sleep(ms) {
@@ -522,15 +539,18 @@ function timingSummaryHtml({ telegramGroupId, eventDateVal, schedule, confirmati
   const service = serviceForGroup(telegramGroupId);
   const timing = eventDateVal ? managedTimingForEvent({ telegramGroupId, eventDateVal, schedule: effectiveSchedule }) : null;
   if (timing && confirmationAt) timing.confirmationAt = confirmationAt;
-  const coverage = service === 'PSA' ? 'following 2 weeks' : 'following Monday-Sunday';
-  const confirmationRule = `Confirmation ${DAY_NAMES[effectiveSchedule.confirmation_day_of_week]} ${String(effectiveSchedule.confirmation_time).slice(0, 5)}.`;
+  const gapWeeks = Number(effectiveSchedule.gap_weeks || 0);
+  const gapRule = gapWeeks === 0
+    ? 'next Monday-Sunday event week'
+    : `${gapWeeks} full gap ${gapWeeks === 1 ? 'week' : 'weeks'} before the Monday-Sunday event week`;
+  const confirmationRule = `Confirmation ${DAY_NAMES[effectiveSchedule.confirmation_day_of_week]} ${String(effectiveSchedule.confirmation_time).slice(0, 5)} in the week before the event week.`;
   const rule = service === 'PSA'
-    ? `Cutoff Friday 08:00. ${confirmationRule}`
+    ? `Cutoff Friday before the event week at 08:00. ${confirmationRule}`
     : `Cutoff 1 day before each event at 08:00. ${confirmationRule}`;
   const source = schedule ? '' : 'Default timing: ';
   return timing
     ? `${servicePill(service)} <strong>${escapeHtml(group.group_name)}</strong><br>Release ${formatLocalDateTime(timing.releaseAt)} · Cutoff ${formatLocalDateTime(timing.closeAt)} · Confirmation ${formatLocalDateTime(timing.confirmationAt)}`
-    : `${servicePill(service)} <strong>${escapeHtml(group.group_name)}</strong><br>Release ${DAY_NAMES[effectiveSchedule.poll_release_day_of_week]} ${String(effectiveSchedule.poll_release_time).slice(0, 5)} for the ${coverage}. ${rule}`;
+    : `${servicePill(service)} <strong>${escapeHtml(group.group_name)}</strong><br>Release ${DAY_NAMES[effectiveSchedule.poll_release_day_of_week]} ${String(effectiveSchedule.poll_release_time).slice(0, 5)}; ${gapRule}. ${rule}`;
 }
 
 function sendPollNow() { /* moved to polls.js */ }
@@ -574,16 +594,16 @@ function createTimeWheelPicker(container, initialValue = '08:00') {
 
   function initWheel(wheel, initialVal, type, onSelect) {
     const items = [...wheel.querySelectorAll('.wheel-item')];
-    const itemHeight = items[0].offsetHeight || 28.8; // Fallback to 1.8rem approx
+    const itemHeight = () => items[0].offsetHeight || 25.6;
     
     const initIdx = items.findIndex(item => item.dataset.val === initialVal);
     if (initIdx !== -1) {
-      wheel.scrollTop = initIdx * itemHeight;
+      wheel.scrollTop = initIdx * itemHeight();
     }
 
     let scrollTimeout;
     function updateActive() {
-      const idx = Math.round(wheel.scrollTop / itemHeight);
+      const idx = Math.round(wheel.scrollTop / itemHeight());
       items.forEach((item, i) => {
         if (i === idx) {
           item.classList.add('active');
@@ -600,8 +620,9 @@ function createTimeWheelPicker(container, initialValue = '08:00') {
       updateActive();
       clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => {
-        const idx = Math.round(wheel.scrollTop / itemHeight);
-        wheel.scrollTo({ top: idx * itemHeight, behavior: 'smooth' });
+        const height = itemHeight();
+        const idx = Math.round(wheel.scrollTop / height);
+        wheel.scrollTo({ top: idx * height, behavior: 'smooth' });
       }, 150);
     });
 
@@ -671,7 +692,7 @@ function createTimeWheelPicker(container, initialValue = '08:00') {
 
   function scrollToVal(wheel, val) {
     const items = [...wheel.querySelectorAll('.wheel-item')];
-    const itemHeight = items[0].offsetHeight || 28.8;
+    const itemHeight = items[0].offsetHeight || 25.6;
     const idx = items.findIndex(item => item.dataset.val === val);
     if (idx !== -1) {
       wheel.scrollTo({ top: idx * itemHeight, behavior: 'smooth' });
@@ -769,7 +790,7 @@ function setTimeWheelPickerValue(container, value) {
     const items = [...wheel.querySelectorAll('.wheel-item')];
     const index = items.findIndex((item) => item.dataset.val === val);
     if (index === -1) return;
-    const itemHeight = items[0]?.offsetHeight || 28.8;
+    const itemHeight = items[0]?.offsetHeight || 25.6;
     wheel.scrollTop = index * itemHeight;
     items.forEach((item, itemIndex) => item.classList.toggle('active', itemIndex === index));
   });
@@ -782,6 +803,7 @@ function syncWeeklyTemplateFormFromSavedSchedule(telegramGroupId) {
   managedScheduleForm.elements.poll_release_time.value = String(schedule.poll_release_time || DEFAULT_RELEASE_TIME).slice(0, 5);
   managedScheduleForm.elements.confirmation_day_of_week.value = String(schedule.confirmation_day_of_week ?? 5);
   managedScheduleForm.elements.confirmation_time.value = String(schedule.confirmation_time || '12:00').slice(0, 5);
+  managedScheduleForm.elements.gap_weeks.value = String(schedule.gap_weeks ?? 0);
   setTimeWheelPickerValue(document.querySelector('[data-name="poll_release_time"]'), managedScheduleForm.elements.poll_release_time.value);
   setTimeWheelPickerValue(document.querySelector('[data-name="confirmation_time"]'), managedScheduleForm.elements.confirmation_time.value);
 
@@ -870,6 +892,7 @@ function updateTemplateTimingPreview() {
     poll_release_time: managedScheduleForm.elements.poll_release_time.value,
     confirmation_day_of_week: Number(managedScheduleForm.elements.confirmation_day_of_week.value),
     confirmation_time: managedScheduleForm.elements.confirmation_time.value,
+    gap_weeks: Number(managedScheduleForm.elements.gap_weeks.value),
   };
   templateTimingPreview.innerHTML = timingSummaryHtml({ telegramGroupId, schedule });
 }
@@ -889,6 +912,7 @@ function updateTemplatePollPreview() {
     poll_release_time: managedScheduleForm.elements.poll_release_time.value || DEFAULT_RELEASE_TIME,
     confirmation_day_of_week: Number(managedScheduleForm.elements.confirmation_day_of_week.value ?? 5),
     confirmation_time: managedScheduleForm.elements.confirmation_time.value || '12:00',
+    gap_weeks: Number(managedScheduleForm.elements.gap_weeks.value || 0),
   };
   const schedule = formSchedule;
   const editorShifts = normalizeShifts(shiftRowsFromContainer(weeklyShiftEditor)
@@ -902,7 +926,7 @@ function updateTemplatePollPreview() {
   }
 
   const releaseDate = nextReleaseDateForSchedule(schedule);
-  const eventDateVal = batchRangeForReleaseDate(serviceForGroup(telegramGroupId), releaseDate)[0];
+  const eventDateVal = batchRangeForReleaseDate(releaseDate, schedule.gap_weeks)[0];
   const { pollQuestion } = pollTextForEvent({ group, eventDateVal, shifts });
   const options = pollOptionLabelsForShifts(shifts);
   weeklyTemplatePollPreview.innerHTML = `
@@ -954,7 +978,7 @@ function updateBatchSummary() {
     return;
   }
   const service = serviceForGroup(telegramGroupId);
-  const dates = releaseDate ? batchRangeForReleaseDate(service, releaseDate) : [];
+  const dates = releaseDate ? batchRangeForReleaseDate(releaseDate, schedule.gap_weeks) : [];
   const rangeText = dates.length ? `${formatLocalDate(dates[0])} to ${formatLocalDate(dates[dates.length - 1])}` : 'Use Next release or choose a release date.';
   batchSummary.innerHTML = `${servicePill(service)} <strong>${escapeHtml(group.group_name)}</strong><br>Release date: ${releaseDate || 'Not selected'} · Event range: ${rangeText}`;
 }
@@ -994,10 +1018,9 @@ function generateBatchRows() {
   if (!Array.isArray(schedule.shifts) || !schedule.shifts.length) { setStatus('Error: Add template shifts before generating a release batch.', 'error'); return; }
   const releaseDate = batchReleaseDateInput.value || nextReleaseDateForSchedule(schedule);
   batchReleaseDateInput.value = releaseDate;
-  const service = serviceForGroup(telegramGroupId);
   const shifts = normalizeShifts(schedule.shifts);
   const shiftSummary = shifts.map((s) => `${s.label} (${s.capacity})`).join(', ');
-  generatedBatchRows = batchRangeForReleaseDate(service, releaseDate).map((eventDate) => {
+  generatedBatchRows = batchRangeForReleaseDate(releaseDate, schedule.gap_weeks).map((eventDate) => {
     const timing = managedTimingForEvent({ telegramGroupId, eventDateVal: eventDate, schedule });
     const existing = activePollForDate(telegramGroupId, eventDate);
     return { eventDate, timing, shifts, shiftSummary, enabled: !existing, disabled: Boolean(existing),
@@ -1051,6 +1074,10 @@ managedScheduleForm.elements.poll_release_day_of_week.addEventListener('change',
   updateTemplatePollPreview();
 });
 managedScheduleForm.elements.confirmation_day_of_week.addEventListener('change', () => {
+  updateTemplateTimingPreview();
+  updateTemplatePollPreview();
+});
+managedScheduleForm.elements.gap_weeks.addEventListener('input', () => {
   updateTemplateTimingPreview();
   updateTemplatePollPreview();
 });
@@ -1153,8 +1180,7 @@ async function submitWeeklyTestPoll() {
   }
 
   const releaseDate = releaseDateOverride || latestReleaseDateForSchedule(schedule);
-  const service = serviceForGroup(telegramGroupId);
-  const eventDates = batchRangeForReleaseDate(service, releaseDate).sort();
+  const eventDates = batchRangeForReleaseDate(releaseDate, schedule.gap_weeks).sort();
   const confirmationAt = new Date(Date.now() + confirmationDelayMinutes * 60 * 1000);
   const preview = [
     `${managedGroupOptionLabel(group)}`,
@@ -1315,8 +1341,12 @@ async function loadManagedSchedules({ syncEditor = true } = {}) {
         const groupLabel = group ? managedGroupOptionLabel(group) : s.group_name;
         const confirmationDay = DAY_NAMES[s.confirmation_day_of_week];
         const serviceRule = service === 'PSA'
-          ? 'PSA cutoff Fri 08:00'
+          ? 'PSA cutoff Fri before event week at 08:00'
           : 'Wheelchair cutoff day-before 08:00';
+        const gapWeeks = Number(s.gap_weeks || 0);
+        const gapDescription = gapWeeks === 0
+          ? 'Next event week'
+          : `${gapWeeks} full gap ${gapWeeks === 1 ? 'week' : 'weeks'}`;
       const shiftsDesc = Array.isArray(s.shifts) && s.shifts.length 
         ? s.shifts.map((sh) => `${sh.label} (${sh.capacity} slots)`).join(', ')
         : 'No template shifts';
@@ -1325,7 +1355,7 @@ async function loadManagedSchedules({ syncEditor = true } = {}) {
             <span>
               ${servicePill(service)} <strong>${escapeHtml(groupLabel)}</strong>: 
               Release: ${releaseDay} at ${String(s.poll_release_time).slice(0, 5)}<br>
-            <small style="color: var(--ink-soft);">Confirmation: ${confirmationDay} at ${String(s.confirmation_time).slice(0, 5)}. ${escapeHtml(serviceRule)}.</small><br>
+            <small style="color: var(--ink-soft);">${escapeHtml(gapDescription)}. Confirmation: ${confirmationDay} at ${String(s.confirmation_time).slice(0, 5)} in the week before events. ${escapeHtml(serviceRule)}.</small><br>
             <small style="color: var(--ink-soft);">${escapeHtml(shiftsDesc)}</small>
           </span>
           <button type="button" class="danger-link delete-schedule" data-id="${s.id}">Delete</button>
@@ -1359,6 +1389,7 @@ managedScheduleForm.addEventListener('submit', async (event) => {
   body.shifts = shifts;
   body.poll_release_day_of_week = Number(body.poll_release_day_of_week);
   body.confirmation_day_of_week = Number(body.confirmation_day_of_week);
+  body.gap_weeks = Number(body.gap_weeks);
 
   setStatus('Saving weekly default...', 'pending');
   const response = await fetch('/api/weekly-schedules', { method: 'PUT',

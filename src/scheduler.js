@@ -8,7 +8,7 @@ const {
 } = require('./scheduleRules');
 
 // Weekly send defaults: Wednesday 17:00 Singapore time. Wheelchair covers the
-// following Monday-Sunday; PSA covers the following two Monday-Sunday weeks.
+// Every legacy release is limited to the following Monday-Sunday week.
 const DEFAULT_SEND_DAY = DEFAULT_RELEASE_DAY;
 const DEFAULT_SEND_TIME = DEFAULT_RELEASE_TIME;
 const SCHEDULE_SERVICES = ['WHCL', 'PSA'];
