@@ -15,9 +15,11 @@
     code: document.getElementById('telegram-code'),
     send: document.getElementById('telegram-send-code'),
     verify: document.getElementById('telegram-verify-code'),
+    resend: document.getElementById('telegram-resend-code'),
     change: document.getElementById('telegram-change-account'),
     setup: document.getElementById('telegram-setup'),
     botLink: document.getElementById('telegram-bot-link'),
+    botQr: document.getElementById('telegram-bot-qr'),
     message: document.getElementById('auth-error'),
     navUser: document.getElementById('nav-user'),
     accountMenu: document.getElementById('nav-account-menu'),
@@ -41,7 +43,7 @@
   }
 
   function showIdentifierStep() {
-    const { identifier, codeStep, code, send, verify, change, setup } = elements();
+    const { identifier, codeStep, code, send, verify, resend, change, setup, botQr } = elements();
     if (identifier) identifier.disabled = false;
     if (codeStep) codeStep.hidden = true;
     if (code) code.value = '';
@@ -55,12 +57,14 @@
       verify.disabled = false;
       verify.textContent = 'Verify code';
     }
+    if (resend) resend.hidden = true;
     if (change) change.hidden = true;
     if (setup) setup.hidden = true;
+    if (botQr) { botQr.hidden = true; botQr.innerHTML = ''; }
   }
 
   function showCodeStep(activeChallenge = challenge) {
-    const { identifier, codeStep, code, send, verify, change, setup, botLink } = elements();
+    const { identifier, codeStep, code, send, verify, resend, change, setup, botLink, botQr } = elements();
     if (identifier) {
       identifier.value = activeChallenge.identifier || identifier.value;
       identifier.disabled = true;
@@ -72,13 +76,45 @@
       verify.disabled = false;
       verify.textContent = 'Verify code';
     }
+    if (resend) {
+      resend.hidden = false;
+      resend.disabled = false;
+      resend.textContent = 'Resend code';
+    }
     if (change) change.hidden = false;
     if (setup) setup.hidden = false;
     if (botLink) {
-      botLink.href = activeChallenge.setup_url;
+      botLink.dataset.setupUrl = activeChallenge.setup_url || '';
       botLink.textContent = `Open @${activeChallenge.bot_username}`;
     }
+    // Reset the QR panel; it is (re)built on demand when the link is clicked.
+    if (botQr) { botQr.hidden = true; botQr.innerHTML = ''; }
     window.setTimeout(() => code?.focus(), 0);
+  }
+
+  // Reveals/hides a QR code of the bot's t.me link so a user can scan it with
+  // their phone camera and open the bot there.
+  function toggleBotQr() {
+    const { botQr, botLink } = elements();
+    if (!botQr) return;
+    const url = botLink?.dataset.setupUrl || challenge?.setup_url;
+    if (!url) return;
+    if (!botQr.hidden) { botQr.hidden = true; return; }
+    botQr.innerHTML = '';
+    if (typeof window.qrcode === 'function') {
+      try {
+        const qr = window.qrcode(0, 'M');
+        qr.addData(url);
+        qr.make();
+        botQr.insertAdjacentHTML('beforeend', qr.createImgTag(5, 2, 'QR code to open the bot'));
+      } catch {
+        // Fall through to the plain link below if QR generation fails.
+      }
+    }
+    botQr.insertAdjacentHTML('beforeend',
+      '<p class="telegram-bot-qr-hint">Scan with your phone camera to open the bot, then press <b>Start</b>.</p>' +
+      `<a class="telegram-bot-qr-open" href="${url}" target="_blank" rel="noopener">Open on this device instead</a>`);
+    botQr.hidden = false;
   }
 
   function showPendingCodeStep(identifierValue) {
@@ -303,16 +339,23 @@
     return response;
   };
 
-  async function requestOtp() {
-    const { identifier, send } = elements();
+  async function requestOtp({ isResend = false } = {}) {
+    const { identifier, send, resend } = elements();
     const value = identifier?.value.trim();
     if (!value) {
       setMessage('Enter your Telegram handle.');
       identifier?.focus();
       return;
     }
+    // On resend the handle field is disabled and we keep the code step visible;
+    // only reset back to the identifier step for a fresh first send.
+    const restoreOnError = () => (isResend ? showCodeStep(challenge) : showIdentifierStep());
     requestInFlight = true;
-    showPendingCodeStep(value);
+    if (isResend) {
+      if (resend) { resend.disabled = true; resend.textContent = 'Sending...'; }
+    } else {
+      showPendingCodeStep(value);
+    }
     setMessage('');
     let response;
     let result;
@@ -325,14 +368,16 @@
       result = await response.json().catch(() => ({}));
     } catch {
       requestInFlight = false;
-      showIdentifierStep();
+      restoreOnError();
       setMessage('Unable to reach the sign-in service. Please try again.');
       return;
     }
     requestInFlight = false;
     if (!response.ok) {
-      showIdentifierStep();
-      setMessage(result.error || 'Unable to send a Telegram code.');
+      restoreOnError();
+      const wait = Number(result.retry_after || result.retryAfter);
+      setMessage(result.error
+        || (wait ? `Please wait ${wait} seconds before requesting another code.` : 'Unable to send a Telegram code.'));
       return;
     }
     challenge = {
@@ -399,7 +444,7 @@
   function init() {
     createProfileViewer();
     const {
-      form, verify, change, code, navUser, accountMenu,
+      form, verify, resend, change, code, botLink, navUser, accountMenu,
       profilePhotoInput, uploadPhoto, signOut, avatar, profileViewer,
       closeProfileViewer: closeViewer, deleteProfilePhoto: deletePhoto,
     } = elements();
@@ -410,7 +455,15 @@
       else requestOtp();
     });
     verify?.addEventListener('click', verifyOtp);
+    resend?.addEventListener('click', () => {
+      if (requestInFlight) return;
+      requestOtp({ isResend: true });
+    });
     change?.addEventListener('click', changeAccount);
+    botLink?.addEventListener('click', (event) => {
+      event.preventDefault();
+      toggleBotQr();
+    });
     code?.addEventListener('input', () => {
       code.value = code.value.replace(/\D/g, '').slice(0, 6);
     });

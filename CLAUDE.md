@@ -182,7 +182,15 @@ WHCL/PSA bots keep running until `scripts/migrate-to-multi-tenant.js` backfills
   The active UI, API, repository, and `app_users` schema are Telegram-only. The
   six-digit field becomes editable immediately after **Send code** while the
   server prepares the browser-bound challenge; verification enables when that
-  response arrives.
+  response arrives. The code step also has a **Resend code** button
+  (`#telegram-resend-code`) that re-requests an OTP for the same handle without
+  leaving the code step (server cooldown/`retry_after` surfaces inline), and the
+  **Open @<login bot>** link (`#telegram-bot-link`) no longer navigates — clicking
+  it toggles a QR code (`#telegram-bot-qr`) of the bot's `t.me` setup URL so users
+  can scan it with a phone camera to open/Start the bot; the panel also offers an
+  "Open on this device" fallback link. QR rendering uses the vendored, offline
+  `public/vendor/qrcode.js` (qrcode-generator UMD, exposes `window.qrcode`), added
+  to Home/Polls/Admin before `telegram-auth.js`.
 - `GET /api/me` returns Telegram identity, role, and `bot_id`. `/api/admin/*`
   remains admin-only and all other management APIs remain tenant-scoped.
 

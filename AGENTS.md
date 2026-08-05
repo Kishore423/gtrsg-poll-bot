@@ -206,7 +206,14 @@ Vercel Cron** for hosting/scheduling.
   Clicking an existing avatar opens a full-screen viewer over a translucent black backdrop
   with an X close control and a self-only delete action. The shared
   login UI exposes an editable six-digit field immediately after **Send code**
-  and enables verification when the challenge response arrives.
+  and enables verification when the challenge response arrives. The code step
+  also has a **Resend code** button (re-requests an OTP for the same handle,
+  staying on the code step; cooldown/`retry_after` shows inline) and the
+  **Open @<login bot>** link toggles a QR of the bot's `t.me` setup URL (scan on
+  phone to open/Start) instead of navigating, with an "open on this device"
+  fallback. QR uses the vendored offline `public/vendor/qrcode.js`
+  (qrcode-generator UMD → `window.qrcode`), loaded before `telegram-auth.js` on
+  all three pages.
 - Webhook updates are de-duplicated (`beginWebhookEvent`/`finishWebhookEvent`);
   preserve that. Any configured webhook bot route (`PRIMARY`, `WHCL`, `PSA`)
   auto-captures a managed Telegram group from bot membership updates or received
