@@ -109,6 +109,31 @@ test('managed confirmation includes service title and omits empty and waiting li
   assert.doesNotMatch(sent[0], /Unfilled/);
 });
 
+test('Wheelchair confirmations send one message per date in event-date order even when claimed jumbled', async () => {
+  const sent = [];
+  const eventDates = { e1: '2026-07-20', e2: '2026-07-21', e3: '2026-07-23' };
+  const db = {
+    async claimDueConfirmations() {
+      return [
+        { id: 'm3', event_id: 'e3', claim_token: 'c3', service: 'WHCL', telegram_chat_id: '-1', header_text: 'Confirmed slots', footer_text: '' },
+        { id: 'm1', event_id: 'e1', claim_token: 'c1', service: 'WHCL', telegram_chat_id: '-1', header_text: 'Confirmed slots', footer_text: '' },
+        { id: 'm2', event_id: 'e2', claim_token: 'c2', service: 'WHCL', telegram_chat_id: '-1', header_text: 'Confirmed slots', footer_text: '' },
+      ];
+    },
+    async getEventDate(eventId) { return eventDates[eventId]; },
+    async getAllocation() { return [{ shift_id: 's1', label: '0800-1700', capacity: 1, status: 'confirmed', telegram_user_id: '5', display_name: 'Alice' }]; },
+    async completeConfirmationSend() { return true; },
+    async failConfirmationSend() { throw new Error('unexpected failure'); },
+  };
+  const telegram = { async sendMessage(service, chatId, html) { sent.push(html); return { message_id: sent.length }; } };
+  const completed = await runScheduledConfirmations(db, telegram);
+  assert.deepEqual(completed, ['m1', 'm2', 'm3']);
+  assert.deepEqual(
+    sent.map((html) => /for (\w+ \d+ \w+)</.exec(html)[1]),
+    ['Mon 20 Jul', 'Tue 21 Jul', 'Thu 23 Jul'],
+  );
+});
+
 test('PSA due confirmations are grouped into one batch message', async () => {
   const completed = [];
   const sent = [];

@@ -303,7 +303,19 @@ async function runScheduledConfirmations(db, telegram, limit = 50) {
     }
   }
 
+  // Non-PSA (e.g. Wheelchair) confirmations send one Telegram message per event
+  // date. Sort by event date so those per-date messages arrive earliest-first
+  // instead of in database claim order, which otherwise looks jumbled — most
+  // visibly when several test dates confirm together.
+  const singleItems = [];
   for (const confirmation of singles) {
+    singleItems.push({
+      confirmation,
+      eventDate: db.getEventDate ? await db.getEventDate(confirmation.event_id) : null,
+    });
+  }
+  singleItems.sort((a, b) => String(a.eventDate || '').localeCompare(String(b.eventDate || '')));
+  for (const { confirmation } of singleItems) {
     try {
       completed.push(await sendSingleConfirmation(db, telegram, confirmation));
     } catch (error) {
@@ -311,7 +323,20 @@ async function runScheduledConfirmations(db, telegram, limit = 50) {
     }
   }
 
+  // PSA groups by resolved send time, so a test batch whose per-poll send times
+  // differ can split into several messages. Order those messages by their
+  // earliest event date too, so the batches themselves are not jumbled.
+  const psaBatches = [];
   for (const confirmations of psaGroups.values()) {
+    let earliest = null;
+    for (const confirmation of confirmations) {
+      const eventDate = db.getEventDate ? await db.getEventDate(confirmation.event_id) : null;
+      if (eventDate && (earliest === null || String(eventDate) < earliest)) earliest = String(eventDate);
+    }
+    psaBatches.push({ confirmations, earliest: earliest || '' });
+  }
+  psaBatches.sort((a, b) => a.earliest.localeCompare(b.earliest));
+  for (const { confirmations } of psaBatches) {
     try {
       completed.push(...await sendPsaBatchConfirmation(db, telegram, confirmations));
     } catch (error) {

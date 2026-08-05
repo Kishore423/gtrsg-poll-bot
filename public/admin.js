@@ -12,6 +12,7 @@ const editUserBotTokenLabel = document.getElementById('edit-user-bot-token-label
 const editUserBotName = document.getElementById('edit-user-bot-name');
 const editUserBotHandle = document.getElementById('edit-user-bot-handle');
 const editUserStatus = document.getElementById('edit-user-status');
+const removeUserBotButton = document.getElementById('remove-user-bot');
 let currentUsers = new Map();
 let editingUserHasBot = false;
 
@@ -98,6 +99,7 @@ async function loadUsers({ refresh = false } = {}) {
         : 'Paste a token to assign a bot';
       editUserBotName.value = bot.id ? bot.bot_name || '-' : 'No bot assigned';
       editUserBotHandle.value = bot.telegram_username ? `@${bot.telegram_username}` : '-';
+      if (removeUserBotButton) removeUserBotButton.hidden = !editingUserHasBot;
       editUserStatus.textContent = '';
       editUserDialog.showModal();
     });
@@ -165,6 +167,32 @@ editUserForm.addEventListener('submit', async (event) => {
   }
   await loadUsers();
 });
+
+if (removeUserBotButton) {
+  removeUserBotButton.addEventListener('click', async () => {
+    const id = editUserForm.elements.id.value;
+    if (!id) return;
+    if (!window.confirm("Remove this user's assigned bot? The bot and its groups will be disabled and freed so it can be assigned to another user.")) {
+      return;
+    }
+    editUserStatus.textContent = 'Removing the assigned bot...';
+    editUserStatus.className = 'status';
+    const response = await fetch(`/api/admin/users/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ remove_bot: true }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      editUserStatus.textContent = `Error: ${result.error}`;
+      editUserStatus.className = 'status error';
+      return;
+    }
+    editUserDialog.close();
+    setStatus('Bot removed. It is now free to assign to another user.', 'success');
+    await loadUsers();
+  });
+}
 
 document.getElementById('cancel-edit-user').addEventListener('click', () => editUserDialog.close());
 document.getElementById('refresh-bot-identities').addEventListener('click', async () => {

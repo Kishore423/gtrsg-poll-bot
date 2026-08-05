@@ -413,6 +413,46 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
     }, headers));
     assert.equal(duplicateRes.status, 409);
     assert.match((await duplicateRes.json()).error, /already assigned in the application/);
+
+    // The previous (assigned-later) bot was disabled by the replace and is now
+    // unowned. Its token must be assignable to a different user by reusing the
+    // orphaned bot row instead of colliding on the unique Telegram bot id.
+    const reuseInspection = await fetch(`${baseUrl}/api/admin/bots/inspect-token`, json('POST', {
+      bot_token: 'assigned-later-token',
+    }, headers));
+    assert.equal((await reuseInspection.json()).already_assigned, false);
+
+    const reuseRes = await fetch(`${baseUrl}/api/admin/users`, json('POST', {
+      telegram_username: 'reuse_user',
+      telegram_display_name: 'Reuse User',
+      role: 'user',
+      bot_token: 'assigned-later-token',
+    }, headers));
+    assert.equal(reuseRes.status, 201);
+    const reuseUser = await reuseRes.json();
+    assert.ok(reuseUser.bot_id);
+    assert.equal(reuseUser.bot.telegram_username, 'assigned_later_bot');
+    assert.equal((await db.getBot(reuseUser.bot_id)).enabled, true);
+
+    // Remove bot: unassigns and frees it, leaving the user with no bot.
+    const removeRes = await fetch(`${baseUrl}/api/admin/users/${reuseUser.id}`, json('PATCH', {
+      remove_bot: true,
+    }, headers));
+    assert.equal(removeRes.status, 200);
+    const removed = await removeRes.json();
+    assert.equal(removed.bot_id, null);
+    assert.equal(removed.bot, null);
+    assert.equal(removed.bot_removed, true);
+
+    // After removal the same bot can be assigned to yet another user.
+    const rehomeRes = await fetch(`${baseUrl}/api/admin/users`, json('POST', {
+      telegram_username: 'rehome_user',
+      telegram_display_name: 'Rehome User',
+      role: 'user',
+      bot_token: 'assigned-later-token',
+    }, headers));
+    assert.equal(rehomeRes.status, 201);
+    assert.ok((await rehomeRes.json()).bot_id);
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
     if (previousKey === undefined) delete process.env.BOT_TOKEN_ENC_KEY;
@@ -1448,4 +1488,59 @@ test('cron endpoint is guarded by the bearer secret', async () => {
     const ok = await fetch(`${baseUrl}/api/cron/confirmations`, { headers: { Authorization: 'Bearer topsecret' } });
     assert.equal(ok.status, 200);
   }, { cronSecret: 'topsecret' });
+});
+
+test('deployment sheet exports confirmed slots as tenant-scoped CSV', async () => {
+  const db = {
+    async listScheduledPolls() {
+      return [
+        { event_id: 'e1', bot_id: 'bot-A', event_date: '2026-07-20', group_name: 'Alpha Group' },
+        { event_id: 'e2', bot_id: 'bot-B', event_date: '2026-07-21', group_name: 'Beta Group' },
+      ];
+    },
+    async getAllocation(eventId) {
+      if (eventId === 'e1') {
+        return [
+          { shift_id: 's1', label: '0800-1700', display_order: 0, status: 'confirmed', confirmed_position: 1, telegram_username: 'alice', display_name: 'Alice' },
+          { shift_id: 's1', label: '0800-1700', display_order: 0, status: 'waiting_list', telegram_username: 'bob', display_name: 'Bob' },
+        ];
+      }
+      return [
+        { shift_id: 's2', label: '0800-1700', display_order: 0, status: 'confirmed', confirmed_position: 1, telegram_username: 'carol', display_name: 'Carol, C' },
+      ];
+    },
+  };
+  const server = createServer(db, makeTelegram(), {
+    enableLegacyWorkflow: false,
+    requireAdminAuth: true,
+    verifyUser: async (req) =>
+      req.headers.authorization === 'Bearer userA'
+        ? { id: 'u-A', telegram_user_id: '1', role: 'user', bot_id: 'bot-A' }
+        : req.headers.authorization === 'Bearer admin'
+          ? { id: 'u-admin', telegram_user_id: '2', role: 'admin', bot_id: null }
+          : null,
+  }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    // A non-admin user only sees their own bot's confirmed slots.
+    const scoped = await fetch(`${baseUrl}/api/confirmed-slots.csv`, { headers: { Authorization: 'Bearer userA' } });
+    assert.equal(scoped.status, 200);
+    assert.match(scoped.headers.get('content-type'), /text\/csv/);
+    assert.match(scoped.headers.get('content-disposition'), /attachment; filename="confirmed-slots-/);
+    const csv = (await scoped.text()).replace(/^﻿/, '');
+    const lines = csv.split('\r\n');
+    assert.equal(lines[0], 'Event date,Group,Shift,Confirmed name,Telegram handle,Position');
+    assert.deepEqual(lines.slice(1), ['2026-07-20,Alpha Group,0800-1700,Alice,@alice,1']);
+    // Waiting-list and the other bot's rows are excluded.
+    assert.doesNotMatch(csv, /Bob/);
+    assert.doesNotMatch(csv, /Beta Group/);
+
+    // Admin can scope by bot_id; CSV quoting handles a comma in the name.
+    const adminCsv = await (await fetch(`${baseUrl}/api/confirmed-slots.csv?bot_id=bot-B`, { headers: { Authorization: 'Bearer admin' } })).text();
+    assert.match(adminCsv, /2026-07-21,Beta Group,0800-1700,"Carol, C",@carol,1/);
+    assert.doesNotMatch(adminCsv, /Alpha Group/);
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
 });

@@ -30,6 +30,12 @@ function isValidTime(value) {
   return typeof value === 'string' && /^\d{2}:?\d{2}$/.test(value);
 }
 
+// RFC-4180 CSV cell: quote when it contains a comma, quote, or newline.
+function csvCell(value) {
+  const str = String(value ?? '');
+  return /[",\r\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+}
+
 function safeEqual(a, b) {
   const ab = Buffer.from(String(a));
   const bb = Buffer.from(String(b));
@@ -275,13 +281,42 @@ function createServer(db, telegram, options = {}) {
       String(bot.telegram_bot_id || '') === String(identity.telegram_bot_id)) || null;
   }
 
-  async function assertBotIdentityAvailable(identity) {
-    if (await findBotByTelegramIdentity(identity)) throw duplicateTelegramBotError(identity);
+  // The app_user id that currently owns a bot row, or null if the bot is
+  // unowned (an orphan left behind after a replace/remove).
+  async function botOwnerUserId(botId) {
+    if (!db.listAppUsers) return null;
+    const owner = (await db.listAppUsers()).find((user) =>
+      String(user.bot_id || '') === String(botId));
+    return owner ? owner.id : null;
   }
 
   async function createBotFromToken(botToken) {
     const inspected = await inspectBotToken(botToken);
-    await assertBotIdentityAvailable(inspected.identity);
+    const existing = await findBotByTelegramIdentity(inspected.identity);
+    if (existing) {
+      // A bot row for this Telegram bot already exists. Block only when another
+      // user still owns it; otherwise it is an orphan from a previous
+      // replace/remove and can be reused so the same bot can be reassigned.
+      if (await botOwnerUserId(existing.id)) throw duplicateTelegramBotError(inspected.identity);
+      if (db.reactivateBot) {
+        const webhookSecret = generateWebhookSecret();
+        await db.reactivateBot(existing.id, {
+          token_encrypted: encryptToken(inspected.token),
+          webhook_secret: webhookSecret,
+        });
+        await registerBotWebhook(existing.id, webhookSecret, inspected.tempTelegram, 'BOT');
+        return {
+          id: existing.id,
+          identity: inspected.identity,
+          rollback: async () => {
+            if (inspected.tempTelegram.deleteWebhook) {
+              await inspected.tempTelegram.deleteWebhook('BOT', true).catch(() => null);
+            }
+          },
+        };
+      }
+      throw duplicateTelegramBotError(inspected.identity);
+    }
     const webhookSecret = generateWebhookSecret();
     let botId;
     try {
@@ -389,7 +424,9 @@ function createServer(db, telegram, options = {}) {
     res.set('Cache-Control', 'no-store');
     res.json({
       ...inspected.identity,
-      already_assigned: Boolean(existingBot),
+      // Only a bot still owned by a user blocks assignment; an orphaned bot row
+      // (no owner) is reusable, so it is not reported as already assigned.
+      already_assigned: Boolean(assignedTo && assignedTo !== 'an existing bot record'),
       assigned_to: assignedTo,
     });
   }));
@@ -479,6 +516,26 @@ function createServer(db, telegram, options = {}) {
       enabled,
     });
     if (!row) return res.status(404).json({ error: 'User not found' });
+    if (req.body?.remove_bot === true) {
+      // Unassign the user's bot. The bot row is kept (not hard-deleted, to
+      // preserve poll history and avoid an FK cascade that would drop its
+      // groups/polls) but disabled and left unowned, so its Telegram bot ID is
+      // free for reassignment via createBotFromToken's orphan reuse.
+      if (current.bot_id) {
+        if (db.replaceAppUserBot) await db.replaceAppUserBot(req.params.id, null);
+        else if (db.setAppUserBot) await db.setAppUserBot(req.params.id, null);
+        if (db.getBot) {
+          const oldBot = await db.getBot(current.bot_id);
+          if (oldBot?.token_encrypted) {
+            try {
+              const oldTelegram = telegramClientForToken(decryptToken(oldBot.token_encrypted));
+              if (oldTelegram.deleteWebhook) await oldTelegram.deleteWebhook('BOT', true);
+            } catch { /* best-effort webhook removal */ }
+          }
+        }
+      }
+      return res.json({ ...row, bot_id: null, bot: null, bot_removed: true });
+    }
     let replacementWarning = null;
     if (botToken) {
       if (!db.replaceAppUserBot && !db.setAppUserBot) {
@@ -676,6 +733,53 @@ function createServer(db, telegram, options = {}) {
   app.get('/api/scheduled-polls', wrap(async (req, res) => {
     const rows = db.listScheduledPolls ? await db.listScheduledPolls() : [];
     res.json(filterRowsByUserBot(rows, req.appUser));
+  }));
+
+  // Deployment sheet: confirmed slots as CSV (opens in Excel), tenant-scoped to
+  // the caller's bot. Answers "who is deployed where" for every upcoming event.
+  app.get('/api/confirmed-slots.csv', wrap(async (req, res) => {
+    if (!db.listScheduledPolls || !db.getAllocation) {
+      return res.status(501).json({ error: 'Supabase production database is required' });
+    }
+    const requestedBotId = req.appUser?.role === 'admin' && req.query.bot_id
+      ? String(req.query.bot_id)
+      : null;
+    let rows = filterRowsByUserBot(await db.listScheduledPolls(), req.appUser);
+    if (requestedBotId) rows = rows.filter((row) => String(row.bot_id) === requestedBotId);
+
+    // One poll per event; keep the list's event-date/group ordering.
+    const seenEvents = new Set();
+    const events = [];
+    for (const row of rows) {
+      if (!row.event_id || seenEvents.has(row.event_id)) continue;
+      seenEvents.add(row.event_id);
+      events.push(row);
+    }
+
+    const lines = [['Event date', 'Group', 'Shift', 'Confirmed name', 'Telegram handle', 'Position']];
+    for (const event of events) {
+      const confirmed = (await db.getAllocation(event.event_id))
+        .filter((row) => row.status === 'confirmed')
+        .sort((a, b) => (a.display_order - b.display_order)
+          || ((a.confirmed_position || 0) - (b.confirmed_position || 0)));
+      for (const row of confirmed) {
+        lines.push([
+          String(event.event_date || '').slice(0, 10),
+          event.group_name || '',
+          row.label || '',
+          row.display_name || '',
+          row.telegram_username ? `@${row.telegram_username}` : '',
+          row.confirmed_position != null ? String(row.confirmed_position) : '',
+        ]);
+      }
+    }
+
+    const csv = lines.map((cols) => cols.map(csvCell).join(',')).join('\r\n');
+    res.set('Content-Type', 'text/csv; charset=utf-8');
+    res.set('Content-Disposition',
+      `attachment; filename="confirmed-slots-${new Date().toISOString().slice(0, 10)}.csv"`);
+    // BOM so Excel reads UTF-8 handles/names correctly.
+    res.send(`﻿${csv}`);
   }));
 
   const requireClearPollsPassword = (req, res) => {

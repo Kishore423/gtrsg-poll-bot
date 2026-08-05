@@ -344,6 +344,41 @@ The app currently ships BOTH, selected at runtime:
   into one Telegram message per group/resolved confirmation time, with each event
   date and its confirmed timeslots listed in date order. Wheelchair confirmations
   intentionally remain one Telegram confirmation message per poll/event date.
+  `runScheduledConfirmations` sorts non-PSA (Wheelchair) single confirmations by
+  event date (via `getEventDate`) before sending, and orders PSA batches by their
+  earliest event date, so per-date messages are never jumbled — most visible when
+  several test dates confirm at once.
+
+### 2026-08-05 fixes (multi-tenant bugs + deployment sheet)
+
+- **Per-user polls now show (tenancy fix).** `scheduled_polls` has no `bot_id`
+  column, so `postgres.listScheduledPolls()` now selects
+  `coalesce(g.bot_ref::text, g.bot_id) as bot_id`; without it `filterRowsByUserBot`
+  compared against `undefined` and hid every poll from non-admin users. The
+  managed scheduling methods live only in `postgres.js` (memory.js has none), so
+  this has no memory mirror; managed tests use inline fake DBs.
+- **Bot reassignment (orphan reuse + Remove bot).** Replacing a user's bot only
+  disables the old bot row, leaving an orphan that still holds the unique
+  `telegram_bot_id`, which blocked reassigning that token elsewhere (409).
+  `createBotFromToken` now 409s only when another user still **owns** the matching
+  bot; an unowned/orphan row is reused via the new `db.reactivateBot(id, {token_encrypted, webhook_secret})`
+  (memory + postgres), which re-enables the row, refreshes token/secret, and
+  re-registers the webhook. `PATCH /api/admin/users/:id` accepts `remove_bot:true`
+  to unassign + disable a bot (kept, not hard-deleted, to preserve poll history
+  and avoid the `telegram_groups.bot_ref ON DELETE CASCADE`) and remove its
+  webhook, freeing the bot for reassignment. Admin Edit dialog has a **Remove bot**
+  button (`#remove-user-bot`, shown only when the user has a bot). `inspect-token`
+  reports `already_assigned` from actual ownership, not mere row existence.
+- **Service pill no longer mislabels (fix).** `public/app.js` `servicePill()` now
+  returns the neutral **General** pill for anything other than `WHCL`/`PSA`
+  (including per-user UUID bot ids); it previously defaulted every non-`PSA` value
+  to green **Wheelchair**, so a PSA-bot group showed "Wheelchair".
+- **Deployment sheet (who is deployed where).** `GET /api/confirmed-slots.csv`
+  (tenant-scoped; admins may pass `?bot_id=`) streams confirmed allocations as
+  UTF-8 CSV (BOM for Excel): Event date, Group, Shift, Confirmed name, Telegram
+  handle, Position — confirmed only, waiting-list/unfilled omitted. Polls page has
+  a **Deployment sheet** button (`#export-confirmed-btn`) that downloads it via the
+  auth-wrapped `fetch` → blob (a plain `<a href>` would drop the session header).
 - Production requires `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_WEBHOOK_SECRET`, `CRON_SECRET`
   (`src/app.js` throws otherwise).

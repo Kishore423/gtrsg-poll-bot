@@ -222,6 +222,26 @@ Vercel Cron** for hosting/scheduling.
 - After every code change, review both `CLAUDE.md` and `AGENTS.md` and keep them
   aligned. No artificial changelog entries.
 
+## 2026-08-05 fixes (multi-tenant bugs + deployment sheet)
+
+- Per-user polls: `postgres.listScheduledPolls()` now selects
+  `coalesce(g.bot_ref::text, g.bot_id) as bot_id` (scheduled_polls has no bot_id
+  column) so `filterRowsByUserBot` stops hiding every poll from non-admin users.
+  Managed scheduling is Postgres-only (no memory mirror; tests use fake DBs).
+- Bot reassignment: `createBotFromToken` 409s only when another user still owns
+  the matching Telegram bot; an orphan/unowned row is reused via new
+  `db.reactivateBot(id,{token_encrypted,webhook_secret})` (memory + postgres).
+  `PATCH /api/admin/users/:id` accepts `remove_bot:true` to unassign+disable a
+  bot (kept, not hard-deleted — `telegram_groups.bot_ref` is ON DELETE CASCADE)
+  and drop its webhook, freeing it for reassignment. Admin Edit adds a **Remove
+  bot** button. `inspect-token.already_assigned` reflects real ownership.
+- `public/app.js` `servicePill()` returns neutral **General** for non-WHCL/PSA
+  values (incl. UUID bot ids); it no longer mislabels PSA-bot groups as green
+  Wheelchair.
+- Deployment sheet: `GET /api/confirmed-slots.csv` (tenant-scoped; admin
+  `?bot_id=`) exports confirmed allocations as UTF-8 CSV (BOM). Polls page
+  **Deployment sheet** button downloads via auth-wrapped fetch → blob.
+
 ## Bots (live)
 
 - `PRIMARY` = `TELEGRAM_BOT_TOKEN`; per-service `TELEGRAM_TOKEN_WHCL` /
@@ -380,7 +400,10 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   grouped into one Telegram message per group/resolved confirmation time, with
   each event date and its confirmed timeslots listed in date order. Wheelchair
   confirmations intentionally remain one Telegram confirmation message per
-  poll/event date. Start and end time inputs
+  poll/event date. `runScheduledConfirmations` sorts single (Wheelchair)
+  confirmations by event date and PSA batches by earliest event date before
+  sending, so per-date messages are not jumbled (notably during test smoke).
+  Start and end time inputs
   use compact custom 24-hour scroll-wheel pickers (drum selectors) in separate
   responsive grid fields for space efficiency and consistent formatting across
   all client browsers and operating systems. Wheel selection measures row height

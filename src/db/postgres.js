@@ -280,7 +280,12 @@ function createPostgresDb(sql = createSql()) {
       return row.id;
     },
     async listScheduledPolls() {
-      return sql`select sp.*,e.title,e.event_date,e.operational_tags,g.group_name,g.telegram_chat_id,
+      // `coalesce(g.bot_ref::text, g.bot_id) as bot_id` is required: scheduled_polls
+      // has no bot_id column, so without this the per-user tenancy filter
+      // (filterRowsByUserBot) compares against undefined and hides every row from
+      // non-admin users. Placed after sp.* so the group's bot wins.
+      return sql`select sp.*,coalesce(g.bot_ref::text, g.bot_id) as bot_id,
+        e.title,e.event_date,e.operational_tags,g.group_name,g.telegram_chat_id,
         cm.status as confirmation_status,cm.resolved_send_at
         from scheduled_polls sp join events e on e.id=sp.event_id
         join telegram_groups g on g.id=sp.telegram_group_id
@@ -357,6 +362,21 @@ function createPostgresDb(sql = createSql()) {
 
     async deleteBot(id) {
       const [row] = await sql`delete from bots where id = ${id} returning id`;
+      return row || null;
+    },
+
+    // Re-enables an existing (previously disabled/orphaned) bot row and refreshes
+    // its token/webhook secret so a freed Telegram bot can be reassigned without
+    // colliding with the unique telegram_bot_id index.
+    async reactivateBot(id, { token_encrypted, webhook_secret } = {}) {
+      const [row] = await sql`
+        update bots set
+          token_encrypted = coalesce(${token_encrypted ?? null}, token_encrypted),
+          webhook_secret = coalesce(${webhook_secret ?? null}, webhook_secret),
+          enabled = true,
+          updated_at = now()
+        where id = ${id}
+        returning id, bot_name, telegram_username, telegram_bot_id, enabled`;
       return row || null;
     },
 

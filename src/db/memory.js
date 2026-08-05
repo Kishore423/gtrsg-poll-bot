@@ -249,6 +249,19 @@ function createMemoryDb() {
       return bots.splice(index, 1)[0];
     },
 
+    // Re-enables an existing (previously disabled/orphaned) bot row and refreshes
+    // its token/webhook secret so a freed Telegram bot can be reassigned without
+    // creating a duplicate telegram_bot_id row.
+    async reactivateBot(id, { token_encrypted, webhook_secret } = {}) {
+      const bot = bots.find((item) => item.id === String(id));
+      if (!bot) return null;
+      if (token_encrypted !== undefined) bot.token_encrypted = token_encrypted;
+      if (webhook_secret !== undefined) bot.webhook_secret = webhook_secret;
+      bot.enabled = true;
+      bot.name_synced_at = new Date().toISOString();
+      return { ...bot };
+    },
+
     // ---- App users (the Telegram allow-list) ---------------------------------
     async createAppUser({
       role = 'user',

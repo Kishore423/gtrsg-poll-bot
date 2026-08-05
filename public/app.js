@@ -137,10 +137,12 @@ function formatTime(hhmm) {
 }
 
 function servicePill(service) {
-  if (!service) return '<span class="pill" style="background: #f4f6f8; color: #5b6472; border: 1px solid var(--border);">General</span>';
-  return service === 'PSA'
-    ? '<span class="pill pill-psa">PSA</span>'
-    : '<span class="pill pill-whcl">Wheelchair</span>';
+  // Only WHCL/PSA are real service routes. Per-user (UUID) bot ids and any other
+  // value are neutral — never fall through to a "Wheelchair" label, which
+  // mislabels e.g. a PSA-bot group as green Wheelchair.
+  if (service === 'PSA') return '<span class="pill pill-psa">PSA</span>';
+  if (service === 'WHCL') return '<span class="pill pill-whcl">Wheelchair</span>';
+  return '<span class="pill" style="background: #f4f6f8; color: #5b6472; border: 1px solid var(--border);">General</span>';
 }
 
 function managedGroupOptionLabel(group) {
