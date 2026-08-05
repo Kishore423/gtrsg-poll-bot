@@ -1490,23 +1490,29 @@ test('cron endpoint is guarded by the bearer secret', async () => {
   }, { cronSecret: 'topsecret' });
 });
 
-test('deployment sheet exports confirmed slots as tenant-scoped CSV', async () => {
+test('deployment sheet exports a tenant-scoped person-by-date roster', async () => {
   const db = {
     async listScheduledPolls() {
       return [
         { event_id: 'e1', bot_id: 'bot-A', event_date: '2026-07-20', group_name: 'Alpha Group' },
+        { event_id: 'e3', bot_id: 'bot-A', event_date: '2026-07-22', group_name: 'Alpha Group' },
         { event_id: 'e2', bot_id: 'bot-B', event_date: '2026-07-21', group_name: 'Beta Group' },
       ];
     },
     async getAllocation(eventId) {
       if (eventId === 'e1') {
         return [
-          { shift_id: 's1', label: '0800-1700', display_order: 0, status: 'confirmed', confirmed_position: 1, telegram_username: 'alice', display_name: 'Alice' },
-          { shift_id: 's1', label: '0800-1700', display_order: 0, status: 'waiting_list', telegram_username: 'bob', display_name: 'Bob' },
+          { shift_id: 's1', label: '0800-1700', display_order: 0, status: 'confirmed', confirmed_position: 1, telegram_user_id: '1', telegram_username: 'alice', display_name: 'Alice' },
+          { shift_id: 's1', label: '0800-1700', display_order: 0, status: 'waiting_list', telegram_user_id: '9', telegram_username: 'bob', display_name: 'Bob' },
+        ];
+      }
+      if (eventId === 'e3') {
+        return [
+          { shift_id: 's3', label: '1030-1830', display_order: 0, status: 'confirmed', confirmed_position: 1, telegram_user_id: '1', telegram_username: 'alice', display_name: 'Alice' },
         ];
       }
       return [
-        { shift_id: 's2', label: '0800-1700', display_order: 0, status: 'confirmed', confirmed_position: 1, telegram_username: 'carol', display_name: 'Carol, C' },
+        { shift_id: 's2', label: '0800-1700', display_order: 0, status: 'confirmed', confirmed_position: 1, telegram_user_id: '2', telegram_username: 'carol', display_name: 'Carol, C' },
       ];
     },
   };
@@ -1523,23 +1529,25 @@ test('deployment sheet exports confirmed slots as tenant-scoped CSV', async () =
   await new Promise((resolve) => server.once('listening', resolve));
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
   try {
-    // A non-admin user only sees their own bot's confirmed slots.
+    // A non-admin user sees only their own bot; one row per person, one column
+    // per date, each cell the confirmed shift for that day.
     const scoped = await fetch(`${baseUrl}/api/confirmed-slots.csv`, { headers: { Authorization: 'Bearer userA' } });
     assert.equal(scoped.status, 200);
     assert.match(scoped.headers.get('content-type'), /text\/csv/);
-    assert.match(scoped.headers.get('content-disposition'), /attachment; filename="confirmed-slots-/);
-    const csv = (await scoped.text()).replace(/^﻿/, '');
-    const lines = csv.split('\r\n');
-    assert.equal(lines[0], 'Event date,Group,Shift,Confirmed name,Telegram handle,Position');
-    assert.deepEqual(lines.slice(1), ['2026-07-20,Alpha Group,0800-1700,Alice,@alice,1']);
-    // Waiting-list and the other bot's rows are excluded.
-    assert.doesNotMatch(csv, /Bob/);
-    assert.doesNotMatch(csv, /Beta Group/);
+    assert.match(scoped.headers.get('content-disposition'), /attachment; filename="deployment-sheet-/);
+    const lines = (await scoped.text()).replace(/^﻿/, '').split('\r\n');
+    assert.equal(lines[0], 'Name,Telegram handle,20-Jul,22-Jul');
+    assert.deepEqual(lines.slice(1), ['Alice,@alice,0800-1700,1030-1830']);
+    // Waiting-list and the other bot's people are excluded.
+    assert.doesNotMatch(lines.join('\n'), /Bob/);
+    assert.doesNotMatch(lines.join('\n'), /Carol/);
 
     // Admin can scope by bot_id; CSV quoting handles a comma in the name.
-    const adminCsv = await (await fetch(`${baseUrl}/api/confirmed-slots.csv?bot_id=bot-B`, { headers: { Authorization: 'Bearer admin' } })).text();
-    assert.match(adminCsv, /2026-07-21,Beta Group,0800-1700,"Carol, C",@carol,1/);
-    assert.doesNotMatch(adminCsv, /Alpha Group/);
+    const adminCsv = (await (await fetch(`${baseUrl}/api/confirmed-slots.csv?bot_id=bot-B`, { headers: { Authorization: 'Bearer admin' } })).text()).replace(/^﻿/, '');
+    const adminLines = adminCsv.split('\r\n');
+    assert.equal(adminLines[0], 'Name,Telegram handle,21-Jul');
+    assert.equal(adminLines[1], '"Carol, C",@carol,0800-1700');
+    assert.doesNotMatch(adminCsv, /Alice/);
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   }

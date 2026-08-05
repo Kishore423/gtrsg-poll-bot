@@ -246,8 +246,11 @@ Vercel Cron** for hosting/scheduling.
   values (incl. UUID bot ids); it no longer mislabels PSA-bot groups as green
   Wheelchair.
 - Deployment sheet: `GET /api/confirmed-slots.csv` (tenant-scoped; admin
-  `?bot_id=`) exports confirmed allocations as UTF-8 CSV (BOM). Polls page
-  **Deployment sheet** button downloads via auth-wrapped fetch → blob.
+  `?bot_id=`) exports a pivoted roster CSV (BOM) — columns `Name, Telegram
+  handle, <date>…` (one per event date, `3-Aug` format), one row per person,
+  cell = confirmed shift label for that date (blank if not deployed). Confirmed
+  only. Polls page **Deployment sheet** button downloads via auth-wrapped fetch
+  → blob; file `deployment-sheet-<date>.csv`.
 
 ## Bots (live)
 

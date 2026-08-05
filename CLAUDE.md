@@ -382,11 +382,17 @@ The app currently ships BOTH, selected at runtime:
   (including per-user UUID bot ids); it previously defaulted every non-`PSA` value
   to green **Wheelchair**, so a PSA-bot group showed "Wheelchair".
 - **Deployment sheet (who is deployed where).** `GET /api/confirmed-slots.csv`
-  (tenant-scoped; admins may pass `?bot_id=`) streams confirmed allocations as
-  UTF-8 CSV (BOM for Excel): Event date, Group, Shift, Confirmed name, Telegram
-  handle, Position — confirmed only, waiting-list/unfilled omitted. Polls page has
-  a **Deployment sheet** button (`#export-confirmed-btn`) that downloads it via the
-  auth-wrapped `fetch` → blob (a plain `<a href>` would drop the session header).
+  (tenant-scoped; admins may pass `?bot_id=`) streams a **pivoted roster** as
+  UTF-8 CSV (BOM for Excel): columns `Name, Telegram handle, <date>, <date>…`
+  (one column per event date, formatted `3-Aug` via `formatSheetDate`), one row
+  per person, each cell that person's confirmed shift label for that date (two
+  slots joined by ` ; `, blank when not deployed). Confirmed only; waiting-list
+  excluded. People keyed by immutable Telegram id (fallback handle/name). This
+  matches the manpower roster layout the supervisor uses; OFF/RD and
+  sub-shift/location detail are not in poll data so cells show the shift time or
+  blank. Polls page **Deployment sheet** button (`#export-confirmed-btn`)
+  downloads it via the auth-wrapped `fetch` → blob (a plain `<a href>` would drop
+  the session header); file name `deployment-sheet-<date>.csv`.
 - Production requires `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_WEBHOOK_SECRET`, `CRON_SECRET`
   (`src/app.js` throws otherwise).

@@ -36,6 +36,14 @@ function csvCell(value) {
   return /[",\r\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 }
 
+// "2026-08-03" -> "3-Aug" for deployment-sheet column headers.
+const SHEET_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function formatSheetDate(iso) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || '').slice(0, 10));
+  if (!match) return String(iso || '');
+  return `${Number(match[3])}-${SHEET_MONTHS[Number(match[2]) - 1]}`;
+}
+
 function safeEqual(a, b) {
   const ab = Buffer.from(String(a));
   const bb = Buffer.from(String(b));
@@ -735,8 +743,9 @@ function createServer(db, telegram, options = {}) {
     res.json(filterRowsByUserBot(rows, req.appUser));
   }));
 
-  // Deployment sheet: confirmed slots as CSV (opens in Excel), tenant-scoped to
-  // the caller's bot. Answers "who is deployed where" for every upcoming event.
+  // Deployment sheet: a pivoted roster (one row per person, one column per event
+  // date; each cell is that person's confirmed shift that day), tenant-scoped to
+  // the caller's bot. Downloads as CSV that opens directly in Excel.
   app.get('/api/confirmed-slots.csv', wrap(async (req, res) => {
     if (!db.listScheduledPolls || !db.getAllocation) {
       return res.status(501).json({ error: 'Supabase production database is required' });
@@ -747,37 +756,56 @@ function createServer(db, telegram, options = {}) {
     let rows = filterRowsByUserBot(await db.listScheduledPolls(), req.appUser);
     if (requestedBotId) rows = rows.filter((row) => String(row.bot_id) === requestedBotId);
 
-    // One poll per event; keep the list's event-date/group ordering.
+    // One poll per event; collect the distinct event dates (columns).
     const seenEvents = new Set();
     const events = [];
     for (const row of rows) {
       if (!row.event_id || seenEvents.has(row.event_id)) continue;
       seenEvents.add(row.event_id);
-      events.push(row);
+      events.push({ event_id: row.event_id, event_date: String(row.event_date || '').slice(0, 10) });
     }
+    const dates = [...new Set(events.map((event) => event.event_date).filter(Boolean))].sort();
 
-    const lines = [['Event date', 'Group', 'Shift', 'Confirmed name', 'Telegram handle', 'Position']];
+    // Build person rows: key by immutable Telegram id (fall back to handle/name),
+    // and record the confirmed shift label per date.
+    const people = new Map();
     for (const event of events) {
       const confirmed = (await db.getAllocation(event.event_id))
         .filter((row) => row.status === 'confirmed')
         .sort((a, b) => (a.display_order - b.display_order)
           || ((a.confirmed_position || 0) - (b.confirmed_position || 0)));
       for (const row of confirmed) {
-        lines.push([
-          String(event.event_date || '').slice(0, 10),
-          event.group_name || '',
-          row.label || '',
-          row.display_name || '',
-          row.telegram_username ? `@${row.telegram_username}` : '',
-          row.confirmed_position != null ? String(row.confirmed_position) : '',
-        ]);
+        const handle = row.telegram_username ? `@${row.telegram_username}` : '';
+        const key = row.telegram_user_id || handle || row.display_name || 'unknown';
+        if (!people.has(key)) {
+          people.set(key, {
+            name: row.display_name || handle || 'Unknown',
+            handle,
+            shifts: {},
+          });
+        }
+        const person = people.get(key);
+        // A person could hold two slots on one date; join them.
+        person.shifts[event.event_date] = person.shifts[event.event_date]
+          ? `${person.shifts[event.event_date]} ; ${row.label || ''}`
+          : (row.label || '');
       }
+    }
+
+    const header = ['Name', 'Telegram handle', ...dates.map(formatSheetDate)];
+    const lines = [header];
+    for (const person of [...people.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+      lines.push([
+        person.name,
+        person.handle,
+        ...dates.map((date) => person.shifts[date] || ''),
+      ]);
     }
 
     const csv = lines.map((cols) => cols.map(csvCell).join(',')).join('\r\n');
     res.set('Content-Type', 'text/csv; charset=utf-8');
     res.set('Content-Disposition',
-      `attachment; filename="confirmed-slots-${new Date().toISOString().slice(0, 10)}.csv"`);
+      `attachment; filename="deployment-sheet-${new Date().toISOString().slice(0, 10)}.csv"`);
     // BOM so Excel reads UTF-8 handles/names correctly.
     res.send(`﻿${csv}`);
   }));

@@ -326,7 +326,7 @@ document.getElementById('export-confirmed-btn').addEventListener('click', async 
     const objectUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = objectUrl;
-    link.download = `confirmed-slots-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `deployment-sheet-${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();
