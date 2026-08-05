@@ -10,7 +10,7 @@ const port = process.env.PORT || 3000;
 const app = buildAppFromEnv();
 const server = app.listen(port, () => {
   const baseUrl = process.env.APP_URL || `http://localhost:${port}`;
-  console.log(`GTRSG poll bot running at ${baseUrl}`);
+  console.log(`Telegram Poll Manager running at ${baseUrl}`);
 });
 server.on('error', (err) => {
   console.error('Fatal: web server failed to start:', err.message);

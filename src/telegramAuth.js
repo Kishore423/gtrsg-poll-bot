@@ -194,7 +194,7 @@ function createTelegramAuth({
       });
       try {
         await telegram.sendMessage(deliveryBotKey, boundUser.telegram_user_id,
-          `<b>Your Gops poll sign-in code</b>\n\n<code>${otp}</code>\n\n` +
+          `<b>Your Telegram Poll Manager sign-in code</b>\n\n<code>${otp}</code>\n\n` +
           'This code expires in 5 minutes. Do not share it with anyone.');
         if (db.markTelegramLoginChallengeSent) {
           await db.markTelegramLoginChallengeSent(id, createdAt);
@@ -274,11 +274,11 @@ function createTelegramAuth({
       await telegram.sendMessage(service, start.chatId,
         '<b>Telegram account could not be verified.</b>\n' +
         'Your current Telegram handle does not match an approved pending account. ' +
-        'Ask the administrator to check the handle entered in Gops poll, then press Start again.');
+        'Ask the administrator to check the handle entered in Telegram Poll Manager, then press Start again.');
       return { handled: 'telegram_login_handle_mismatch' };
     }
     await telegram.sendMessage(service, start.chatId,
-      '<b>Telegram sign-in is ready.</b>\nReturn to the Gops poll website and request a code.');
+      '<b>Telegram sign-in is ready.</b>\nReturn to the Telegram Poll Manager website and request a code.');
     return { handled: 'telegram_login_setup' };
   }
 
