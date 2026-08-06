@@ -100,6 +100,8 @@ test('managed group labels use only the stored Telegram group name', () => {
   const source = readFileSync(join(__dirname, '..', 'public', 'app.js'), 'utf8');
   assert.match(source, /function managedGroupOptionLabel\(group\) \{\s*return group\.group_name \|\| '';\s*\}/);
   assert.doesNotMatch(source, /return `\$\{name\} \(\$\{label\}\)`/);
+  assert.match(source, /<span><strong>\$\{escapeHtml\(managedGroupOptionLabel\(group\)\)\}<\/strong> \(\$\{escapeHtml\(group\.telegram_chat_id\)\}\)<\/span>/);
+  assert.doesNotMatch(source, /<span>\$\{servicePill\(group\.service \|\| group\.bot_id\)\}/);
 });
 
 test('managed workflows stay bound to the clicked group without duplicate selectors', () => {

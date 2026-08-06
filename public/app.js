@@ -1285,7 +1285,7 @@ async function loadManagedGroups() {
   else refreshManagedPreviews();
   managedGroupList.innerHTML = managedGroups.length ? managedGroups.map((group) => `
       <div class="schedule-row managed-group-row" data-id="${escapeHtml(group.id)}" tabindex="0" role="button" aria-label="Manage ${escapeHtml(managedGroupOptionLabel(group))}">
-        <span>${servicePill(group.service || group.bot_id)} <strong>${escapeHtml(managedGroupOptionLabel(group))}</strong> (${escapeHtml(group.telegram_chat_id)})</span>
+        <span><strong>${escapeHtml(managedGroupOptionLabel(group))}</strong> (${escapeHtml(group.telegram_chat_id)})</span>
         <span>
           <button type="button" class="secondary verify-group" data-id="${group.id}"><i data-lucide="badge-check" aria-hidden="true"></i> Verify bot</button>
       </span>

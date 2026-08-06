@@ -229,7 +229,7 @@ async function sendSingleConfirmation(db, telegram, confirmation) {
     showWaitingList: false,
     showEmptyShifts: false,
     eventDate,
-    serviceLabel: SERVICE_LABELS[confirmation.service] || confirmation.service,
+    serviceLabel: SERVICE_LABELS[confirmation.service] || '',
   });
   let messageId = confirmation.telegram_message_id;
   let wasEdit = false;

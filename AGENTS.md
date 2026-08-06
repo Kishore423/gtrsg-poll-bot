@@ -138,7 +138,8 @@ Vercel Cron** for hosting/scheduling.
   bot route auto-captures managed groups by `(telegram_chat_id, bot_id)` upsert.
   WHCL/PSA also update the legacy target table; PRIMARY stored as general managed
   group (`service=null`, `bot_id='PRIMARY'`). One bot → multiple groups.
-  Managed-group names displayed exactly as stored; UI does not append bot/service text.
+  Managed-group rows display exactly the stored Telegram group name and chat ID;
+  they do not show bot/service pills or append bot/service text.
 - **Data layer**: `src/db/postgres.js` (Supabase via `postgres` lib) and
   `src/db/memory.js` (tests + local). Keep both in lockstep — memory is what tests run against.
 - **Auth**: `src/telegramAuth.js`. `requireAdmin` gates `/api/admin/*`;
@@ -185,9 +186,11 @@ Vercel Cron** for hosting/scheduling.
   `runScheduledPolls` also sorts claimed rows in application code before sending
   so production send order does not depend only on the database function return
   order.
-  Managed confirmation messages include a service title (`Wheelchair` or `PSA`)
-  and event date in the header, and only confirmed participants; waiting-list and
-  unfilled slot rows are intentionally omitted.
+  Managed confirmation messages include a known service title (`Wheelchair`,
+  `PSA`, or `General`) and event date in the header. Dedicated bot UUID routes
+  omit the service-title line so internal identifiers never appear in Telegram.
+  Only confirmed participants are included; waiting-list and unfilled slot rows
+  are intentionally omitted.
 - The data layer is a repository with two implementations sharing one async
   interface (`src/db/memory.js`, `src/db/postgres.js`); keep them in lockstep —
   the memory one is what the tests run against.
@@ -476,9 +479,11 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   (`voted_at_ms`); a voter's original arrival survives edits; a retraction (empty
   `option_ids`) removes them.
 - Confirmations auto-send 08:00 SGT the day before the slot/event date
-  (`CONFIRMATION_HOUR`, default 8). Managed confirmations include a service title
-  (`Wheelchair` or `PSA`) and event date in the header, and only confirmed
-  participants; waiting-list and unfilled slot rows are intentionally omitted.
+  (`CONFIRMATION_HOUR`, default 8). Managed confirmations include a known service
+  title (`Wheelchair`, `PSA`, or `General`) and event date in the header.
+  Dedicated bot UUID routes omit the service-title line so internal identifiers
+  never appear in Telegram. Only confirmed participants are included;
+  waiting-list and unfilled slot rows are intentionally omitted.
 - Telegram needs ≥2 poll options; single-option days get a `Not available`
   filler (ignored in results/votes). Confirmation messages use Telegram HTML with
   `tg://user?id=…` mentions; escape all user-supplied names.

@@ -247,8 +247,8 @@ The app currently ships BOTH, selected at runtime:
   row and templates/polls are scoped by `telegram_group_id`. `src/telegramUpdates.js`
   parses updates; `src/telegram.js` is the Bot API client (sendPoll,
   sendMessage, editMessage, stopPoll, setWebhook).
-  Managed-group names are displayed exactly as stored by Telegram; the UI does
-  not append bot/service text such as `(PSA bot)` to the group name.
+  Managed-group rows display exactly the stored Telegram group name and chat ID;
+  they do not show bot/service pills or append bot/service text.
 - **Data layer**: repository with two implementations sharing one async
   interface — `src/db/postgres.js` (Supabase Postgres via the `postgres` lib,
   `DATABASE_URL`) and `src/db/memory.js` (tests + local). `scripts/migrate.js`
@@ -309,9 +309,11 @@ The app currently ships BOTH, selected at runtime:
   (`voted_at_ms`); a voter's original arrival survives edits; a retraction (empty
   `option_ids`) removes them.
 - Confirmations auto-send 08:00 SGT the day before the slot/event date
-  (`CONFIRMATION_HOUR`, default 8). Managed confirmations include a service title
-  (`Wheelchair` or `PSA`) and event date in the header, and only confirmed
-  participants; waiting-list and unfilled slot rows are intentionally omitted.
+  (`CONFIRMATION_HOUR`, default 8). Managed confirmations include a known service
+  title (`Wheelchair`, `PSA`, or `General`) and event date in the header.
+  Dedicated bot UUID routes omit the service-title line so internal identifiers
+  never appear in Telegram. Only confirmed participants are included;
+  waiting-list and unfilled slot rows are intentionally omitted.
   Managed confirmations are set to 1 day before the event date at 8:00 AM SGT,
   and weekly schedules store a template of
   event shifts that are automatically pre-populated on the poll editor card. Start and end

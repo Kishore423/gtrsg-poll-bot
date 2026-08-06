@@ -109,6 +109,38 @@ test('managed confirmation includes service title and omits empty and waiting li
   assert.doesNotMatch(sent[0], /Unfilled/);
 });
 
+test('dedicated bot confirmations never expose the internal bot UUID as a title', async () => {
+  const botId = '757d5ebc-6fd1-4723-89af-7e497e2c221a';
+  const sent = [];
+  const db = {
+    async claimDueConfirmations() {
+      return [{
+        id: 'm',
+        event_id: 'e',
+        claim_token: 'c',
+        service: botId,
+        telegram_chat_id: '-1',
+        header_text: 'Confirmed slots',
+        footer_text: 'take note pls',
+      }];
+    },
+    async getEventDate() { return '2026-08-07'; },
+    async getAllocation() { return []; },
+    async completeConfirmationSend() { return true; },
+    async failConfirmationSend() { throw new Error('unexpected failure'); },
+  };
+  const telegram = {
+    async sendMessage(service, chatId, html) {
+      sent.push(html);
+      return { message_id: 9 };
+    },
+  };
+
+  assert.deepEqual(await runScheduledConfirmations(db, telegram), ['m']);
+  assert.doesNotMatch(sent[0], new RegExp(botId));
+  assert.match(sent[0], /^<b>Confirmed slots for (?:tomor, )?Fri 7 Aug<\/b>/);
+});
+
 test('Wheelchair confirmations send one message per date in event-date order even when claimed jumbled', async () => {
   const sent = [];
   const eventDates = { e1: '2026-07-20', e2: '2026-07-21', e3: '2026-07-23' };
