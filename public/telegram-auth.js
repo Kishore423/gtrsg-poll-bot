@@ -25,6 +25,7 @@
     accountMenu: document.getElementById('nav-account-menu'),
     profilePhotoInput: document.getElementById('nav-profile-photo-input'),
     uploadPhoto: document.getElementById('nav-upload-photo'),
+    deploymentSheetsToggle: document.getElementById('nav-deployment-sheets-toggle'),
     signOut: document.getElementById('nav-sign-out'),
     accountStatus: document.getElementById('nav-account-status'),
     avatar: document.getElementById('nav-user-avatar'),
@@ -177,6 +178,14 @@
       avatar.title = renderedUser.profile_photo_data ? 'View profile picture' : '';
     }
     container.hidden = false;
+    document.querySelectorAll?.('[data-deployment-nav]').forEach((item) => {
+      item.hidden = !renderedUser.deployment_sheets_enabled;
+    });
+    const { deploymentSheetsToggle } = elements();
+    if (deploymentSheetsToggle) {
+      deploymentSheetsToggle.checked = Boolean(renderedUser.deployment_sheets_enabled);
+    }
+    window.refreshIcons?.();
   }
 
   function setAccountStatus(message = '', kind = '') {
@@ -324,6 +333,34 @@
     }
   }
 
+  async function saveDeploymentSheetsPreference(event) {
+    const toggle = event.currentTarget;
+    const enabled = Boolean(toggle.checked);
+    toggle.disabled = true;
+    setAccountStatus(enabled ? 'Enabling deployment sheets...' : 'Hiding deployment sheets...');
+    try {
+      const response = await window.fetch('/api/me/deployment-sheets', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Unable to update deployment sheets.');
+      renderUser({ deployment_sheets_enabled: Boolean(result.deployment_sheets_enabled) });
+      setAccountStatus(
+        result.deployment_sheets_enabled
+          ? 'Deployment sheets added to the navbar.'
+          : 'Deployment sheets hidden from the navbar.',
+        'success'
+      );
+    } catch (error) {
+      toggle.checked = !enabled;
+      setAccountStatus(error.message, 'error');
+    } finally {
+      toggle.disabled = false;
+    }
+  }
+
   window.fetch = async (input, init = {}) => {
     const url = typeof input === 'string' ? input : input.url;
     const isManagementApi = url.startsWith('/api/') && !url.startsWith('/api/auth/');
@@ -445,7 +482,7 @@
     createProfileViewer();
     const {
       form, verify, resend, change, code, botLink, navUser, accountMenu,
-      profilePhotoInput, uploadPhoto, signOut, avatar, profileViewer,
+      profilePhotoInput, uploadPhoto, deploymentSheetsToggle, signOut, avatar, profileViewer,
       closeProfileViewer: closeViewer, deleteProfilePhoto: deletePhoto,
     } = elements();
     form?.addEventListener('submit', (event) => {
@@ -473,6 +510,7 @@
     });
     uploadPhoto?.addEventListener('click', () => profilePhotoInput?.click());
     profilePhotoInput?.addEventListener('change', uploadProfilePhoto);
+    deploymentSheetsToggle?.addEventListener('change', saveDeploymentSheetsPreference);
     signOut?.addEventListener('click', () => {
       clearSession();
       clearChallenge();

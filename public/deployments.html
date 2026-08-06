@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" href="data:," />
+  <title>Deployment sheets - Telegram Poll Manager</title>
+  <meta name="description" content="Download confirmed weekly Telegram deployment sheets." />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --green: #008a68;
+      --green-dark: #006c52;
+      --green-light: #e1f3ed;
+      --red: #bd3e33;
+      --ink: #142a33;
+      --ink-soft: #586b73;
+      --border: #cbd5d8;
+      --bg: #f5f7f6;
+    }
+    [hidden] { display: none !important; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: var(--bg); font-family: 'Source Sans 3', 'Segoe UI', sans-serif; }
+    nav { position: sticky; top: 0; z-index: 100; min-height: 64px; display: flex; align-items: center; gap: 1.5rem; padding: 0 1.5rem; }
+    .nav-brand { display: flex; align-items: center; gap: 0.6rem; text-decoration: none; font-weight: 700; }
+    .nav-links { display: flex; align-self: stretch; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
+    .nav-links a { display: flex; align-items: center; gap: 0.4rem; height: 100%; padding: 0 0.85rem; text-decoration: none; }
+    .nav-spacer { flex: 1; }
+    .nav-account { position: relative; }
+    .nav-user { display: flex; align-items: center; gap: 0.5rem; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+    .nav-user-avatar { width: 2rem; height: 2rem; display: grid; place-items: center; border-radius: 50%; background: var(--green-light); color: var(--green-dark); }
+    .nav-user-avatar.has-photo { color: transparent; background-position: center; background-size: cover; }
+    .nav-account-menu { position: absolute; top: calc(100% + 0.65rem); right: 0; width: 15.5rem; padding: 0.45rem; }
+    .nav-account-menu button { width: 100%; border: 0; padding: 0.65rem 0.7rem; text-align: left; background: transparent; color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
+    .nav-account-menu .sign-out { color: var(--red); }
+    .nav-account-status { margin: 0.3rem 0.7rem 0.45rem; color: var(--ink-soft); font-size: 0.78rem; }
+    main { width: min(1180px, calc(100% - 2.5rem)); margin: 0 auto; padding: 1.75rem 0 5rem; }
+    .deployment-ledger { padding: 0 !important; overflow: hidden; }
+    .deployments-page .deployment-ledger > .card-header { display: flex !important; align-items: center; justify-content: space-between; gap: 1rem; }
+    .deployment-week + .deployment-week { border-top: 1px solid var(--border); }
+    .deployment-week-header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; background: #edf1f1; }
+    .deployment-week-header h2 { margin: 0; }
+    .deployment-week-header span { color: var(--ink-soft); }
+    .deployment-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 1rem; min-height: 5.25rem; padding: 1rem 1.25rem; border-top: 1px solid #e2e8e9; background: #fff; }
+    .deployment-row h3 { margin: 0 0 0.15rem; font: 700 1.15rem/1.2 'Barlow Condensed', 'Arial Narrow', sans-serif; }
+    .deployment-row p { margin: 0; color: var(--ink-soft); }
+    .download-sheet { min-width: 10rem; }
+    .empty-state { padding: 2.5rem 1.25rem; text-align: center; color: var(--ink-soft); }
+    .empty-state i, .empty-state svg { width: 2rem; height: 2rem; margin-bottom: 0.6rem; color: var(--green); }
+    .page-status { min-height: 1.5rem; margin: 0 0 1rem; color: var(--ink-soft); }
+    .page-status.error { color: var(--red); }
+    .auth-overlay { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 1.5rem; background: rgba(20,42,51,0.58); }
+    .auth-dialog { width: min(32rem, 100%); padding: 1.8rem; border-radius: 4px; background: #fff; box-shadow: 0 26px 70px rgba(8,23,29,0.28); }
+    .auth-dialog h2 { margin: 0 0 0.35rem; }
+    .auth-dialog form { display: grid; gap: 1rem; margin-top: 1rem; }
+    .auth-dialog label { display: grid; gap: 0.45rem; font-weight: 700; }
+    .auth-dialog input { width: 100%; min-height: 3.1rem; padding: 0.8rem 0.95rem; border: 1px solid var(--border); border-radius: 3px; font: inherit; }
+    .auth-error { min-height: 1.25rem; margin: 0.35rem 0 0; color: var(--red); }
+    .auth-error.success { color: var(--green-dark); }
+    .otp-auth-actions { display: flex; flex-wrap: wrap; gap: 0.65rem; }
+    .otp-auth-actions button { flex: 1 1 10rem; min-height: 3rem; }
+    .telegram-sign-in { border: 0; background: #229ed9; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+    .telegram-change-account { border: 1px solid var(--border); background: #fff; color: var(--ink); }
+    .telegram-code-step { display: grid; gap: 0.45rem; }
+    .otp-code-input { text-align: center; font-size: 1.15rem; }
+    .telegram-setup { margin: 0; color: var(--ink-soft); }
+    @media (max-width: 720px) {
+      nav { gap: 0.5rem; padding: 0 0.5rem; }
+      .nav-brand { font-size: 0; }
+      .nav-links a { padding: 0 0.55rem; }
+      .nav-links a span { display: none; }
+      .nav-user-name { display: none; }
+      main { width: calc(100% - 1rem); }
+      .deployment-row { grid-template-columns: 1fr; }
+      .download-sheet { width: 100%; }
+      .deployments-page .deployment-ledger > .card-header { align-items: stretch; flex-direction: column; }
+    }
+  </style>
+  <link rel="stylesheet" href="/theme.css" />
+</head>
+<body class="deployments-page">
+  <div id="auth-overlay" class="auth-overlay" hidden>
+    <div class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title-deployments">
+      <h2 id="auth-title-deployments">Sign in</h2>
+      <p>Enter your approved Telegram handle. A six-digit code will be sent to Telegram.</p>
+      <form id="telegram-otp-form">
+        <label for="telegram-identifier">Telegram handle
+          <input id="telegram-identifier" name="identifier" autocomplete="username" placeholder="@username" required />
+        </label>
+        <div id="telegram-code-step" class="telegram-code-step" hidden>
+          <label for="telegram-code">Six-digit code
+            <input id="telegram-code" class="otp-code-input" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" />
+          </label>
+        </div>
+        <div class="otp-auth-actions">
+          <button type="submit" id="telegram-send-code" class="telegram-sign-in">Send code</button>
+          <button type="button" id="telegram-verify-code" class="telegram-sign-in" hidden>Verify code</button>
+          <button type="button" id="telegram-resend-code" class="telegram-change-account" hidden>Resend code</button>
+          <button type="button" id="telegram-change-account" class="telegram-change-account" hidden>Change account</button>
+        </div>
+        <p id="telegram-setup" class="telegram-setup" hidden>No code? <a id="telegram-bot-link" href="#" role="button">Open the bot and press Start</a>, then request a new code.</p>
+        <div id="telegram-bot-qr" class="telegram-bot-qr" hidden aria-live="polite"></div>
+      </form>
+      <p id="auth-error" class="auth-error" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <nav>
+    <a href="/" class="nav-brand"><span class="brand-mark" aria-hidden="true"><i data-lucide="send"></i></span>Telegram Poll Manager</a>
+    <ul class="nav-links">
+      <li><a href="/"><i data-lucide="house" aria-hidden="true"></i><span>Home</span></a></li>
+      <li><a href="/polls.html"><i data-lucide="list-checks" aria-hidden="true"></i><span>Polls</span></a></li>
+      <li data-deployment-nav hidden><a href="/deployments.html" class="active"><i data-lucide="file-spreadsheet" aria-hidden="true"></i><span>Deployment sheets</span></a></li>
+      <li data-admin-nav hidden><a href="/admin"><i data-lucide="settings" aria-hidden="true"></i><span>Admin</span></a></li>
+    </ul>
+    <div class="nav-spacer"></div>
+    <div class="nav-account">
+      <button id="nav-user" class="nav-user" type="button" hidden aria-label="Account menu" aria-expanded="false">
+        <span id="nav-user-avatar" class="nav-user-avatar" aria-hidden="true"></span>
+        <span id="nav-user-name" class="nav-user-name"></span>
+      </button>
+      <div id="nav-account-menu" class="nav-account-menu" hidden>
+        <button id="nav-upload-photo" type="button">Upload profile picture</button>
+        <input id="nav-profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+        <label class="nav-preference-toggle">
+          <span><strong>Deployment sheets</strong><small>Show in navbar</small></span>
+          <input id="nav-deployment-sheets-toggle" type="checkbox" role="switch" />
+          <span class="nav-switch-track" aria-hidden="true"></span>
+        </label>
+        <button id="nav-sign-out" class="sign-out" type="button">Sign out</button>
+        <p id="nav-account-status" class="nav-account-status" aria-live="polite"></p>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <header>
+      <h1>Deployment sheets</h1>
+      <p>Confirmed weekly deployments across the Telegram groups available to your account.</p>
+    </header>
+    <p id="deployment-status" class="page-status" aria-live="polite"></p>
+    <section class="card deployment-ledger" aria-labelledby="deployment-ledger-title">
+      <div class="card-header">
+        <div>
+          <h2 id="deployment-ledger-title">Latest four deployment weeks</h2>
+          <p>Each download contains one group and one confirmed Monday-Sunday batch.</p>
+        </div>
+        <button id="refresh-deployments" type="button" class="secondary"><i data-lucide="refresh-cw"></i> Refresh</button>
+      </div>
+      <div id="deployment-list"></div>
+    </section>
+  </main>
+
+  <script src="/vendor/lucide.min.js"></script>
+  <script src="/vendor/qrcode.js"></script>
+  <script src="/theme.js"></script>
+  <script src="/telegram-auth.js"></script>
+  <script src="/deployments.js"></script>
+</body>
+</html>

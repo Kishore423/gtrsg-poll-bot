@@ -397,6 +397,12 @@ The app currently ships BOTH, selected at runtime:
   the Polls page no longer exposes a bot-wide deployment button. The command
   uses auth-wrapped `fetch` and downloads
   `deployment-sheet-<group>-<start>-to-<end>.xlsx`.
+  Users may also enable the account-level **Deployment sheets** panel from their
+  navbar account menu. The panel lists one download per Telegram group and
+  Monday-Sunday event batch only after every existing poll in that batch has a
+  `sent` or `updated` confirmation. It retains the latest four distinct confirmed
+  event weeks dynamically; older sheets disappear without deleting poll history.
+  Normal users remain scoped to all groups belonging to their one assigned bot.
 - Production requires `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_WEBHOOK_SECRET`, `CRON_SECRET`
   (`src/app.js` throws otherwise).
@@ -546,8 +552,10 @@ live only in Vercel env + the local (gitignored) `.env`.
   Home, Polls, and Admin show the user's admin-managed
   `telegram_display_name` in the navbar after authentication, with the Telegram
   handle as a fallback when no display name is set. Clicking that identity opens
-  the shared account menu for profile-picture upload and Sign out. Profile
-  pictures are resized to 256x256 WebP in the browser, capped at 200 KB by the
+  the shared account menu for profile-picture upload, the per-user
+  **Deployment sheets** navbar toggle, and Sign out. The toggle is stored in
+  `app_users.deployment_sheets_enabled`, defaults false, and affects only that
+  user's navigation. Profile pictures are resized to 256x256 WebP in the browser, capped at 200 KB by the
   API, and stored in `app_users.profile_photo_data`; users can update only their
   own picture. Admin user rows expose an Edit dialog with a read-only Telegram
   handle plus editable display name, role, enabled status, and dedicated bot

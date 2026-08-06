@@ -13,7 +13,8 @@ function createPostgresDb(sql = createSql()) {
       add column if not exists telegram_username text,
       add column if not exists telegram_display_name text,
       add column if not exists login_bot_verified_at timestamptz,
-      add column if not exists profile_photo_data text`;
+      add column if not exists profile_photo_data text,
+      add column if not exists deployment_sheets_enabled boolean not null default false`;
     await sql`create unique index if not exists app_users_telegram_user_id_key
       on app_users(telegram_user_id) where telegram_user_id is not null`;
     await sql`create unique index if not exists app_users_telegram_username_key
@@ -405,7 +406,8 @@ function createPostgresDb(sql = createSql()) {
     async listAppUsers() {
       return sql`
         select u.id, u.telegram_user_id::text, u.telegram_username,
-               u.telegram_display_name, u.profile_photo_data, u.role, u.enabled,
+               u.telegram_display_name, u.profile_photo_data,
+               u.deployment_sheets_enabled, u.role, u.enabled,
                u.bot_id, u.login_bot_verified_at, u.created_at
         from app_users u
         order by u.role desc, coalesce(u.telegram_display_name, u.telegram_username)`;
@@ -415,7 +417,8 @@ function createPostgresDb(sql = createSql()) {
       await initPromise;
       const [row] = await sql`
         select id, telegram_user_id::text, telegram_username,
-               telegram_display_name, profile_photo_data, role, enabled, bot_id,
+               telegram_display_name, profile_photo_data, deployment_sheets_enabled,
+               role, enabled, bot_id,
                login_bot_verified_at
         from app_users where telegram_user_id = ${telegramUserId} and enabled`;
       return row || null;
@@ -426,7 +429,8 @@ function createPostgresDb(sql = createSql()) {
       const normalized = String(identifier).toLowerCase();
       const [row] = await sql`
         select id, telegram_user_id::text, telegram_username,
-               telegram_display_name, profile_photo_data, role, enabled, bot_id,
+               telegram_display_name, profile_photo_data, deployment_sheets_enabled,
+               role, enabled, bot_id,
                login_bot_verified_at
         from app_users
         where enabled and (
@@ -456,7 +460,8 @@ function createPostgresDb(sql = createSql()) {
           updated_at = now()
         where id = ${id}
         returning id, telegram_user_id::text, telegram_username,
-                  telegram_display_name, profile_photo_data, role, enabled, bot_id,
+                  telegram_display_name, profile_photo_data, deployment_sheets_enabled,
+                  role, enabled, bot_id,
                   login_bot_verified_at`;
       return row || null;
     },
@@ -479,7 +484,8 @@ function createPostgresDb(sql = createSql()) {
           updated_at = now()
         where id = ${id}
         returning id, telegram_user_id::text, telegram_username,
-                  telegram_display_name, profile_photo_data, role, enabled, bot_id,
+                  telegram_display_name, profile_photo_data, deployment_sheets_enabled,
+                  role, enabled, bot_id,
                   login_bot_verified_at`;
       return row || null;
     },
@@ -490,8 +496,21 @@ function createPostgresDb(sql = createSql()) {
         update app_users set profile_photo_data = ${profilePhotoData}, updated_at = now()
         where id = ${id}
         returning id, telegram_user_id::text, telegram_username,
-                  telegram_display_name, profile_photo_data, role, enabled, bot_id,
+                  telegram_display_name, profile_photo_data, deployment_sheets_enabled,
+                  role, enabled, bot_id,
                   login_bot_verified_at`;
+      return row || null;
+    },
+
+    async setAppUserDeploymentSheetsEnabled(id, enabled) {
+      await initPromise;
+      const [row] = await sql`
+        update app_users
+        set deployment_sheets_enabled = ${Boolean(enabled)}, updated_at = now()
+        where id = ${id}
+        returning id, telegram_user_id::text, telegram_username,
+                  telegram_display_name, profile_photo_data, deployment_sheets_enabled,
+                  role, enabled, bot_id, login_bot_verified_at`;
       return row || null;
     },
 

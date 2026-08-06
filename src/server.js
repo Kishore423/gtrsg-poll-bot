@@ -45,11 +45,24 @@ function formatSheetDate(iso) {
   return `${Number(match[3])}-${SHEET_MONTHS[Number(match[2]) - 1]}`;
 }
 
-async function collectDeploymentRoster(db, appUser, requestedBotId = null, requestedGroupId = null) {
+async function collectDeploymentRoster(
+  db,
+  appUser,
+  requestedBotId = null,
+  requestedGroupId = null,
+  startDate = null,
+  endDate = null
+) {
   let rows = filterRowsByUserBot(await db.listScheduledPolls(), appUser);
   if (requestedBotId) rows = rows.filter((row) => String(row.bot_id) === requestedBotId);
   if (requestedGroupId) {
     rows = rows.filter((row) => String(row.telegram_group_id) === requestedGroupId);
+  }
+  if (startDate) {
+    rows = rows.filter((row) => String(row.event_date || '').slice(0, 10) >= startDate);
+  }
+  if (endDate) {
+    rows = rows.filter((row) => String(row.event_date || '').slice(0, 10) <= endDate);
   }
 
   const seenEvents = new Set();
@@ -88,6 +101,73 @@ async function collectDeploymentRoster(db, appUser, requestedBotId = null, reque
     dates,
     people: [...people.values()].sort((a, b) => a.name.localeCompare(b.name)),
   };
+}
+
+function addIsoDays(isoDate, days) {
+  const date = new Date(`${isoDate}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function isIsoDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function mondayOfIsoWeek(isoDate) {
+  const date = new Date(`${isoDate}T00:00:00.000Z`);
+  const day = date.getUTCDay();
+  return addIsoDays(isoDate, -((day + 6) % 7));
+}
+
+function requestedDeploymentRange(query) {
+  const startDate = query.start_date ? String(query.start_date) : null;
+  const endDate = query.end_date ? String(query.end_date) : null;
+  if (!startDate && !endDate) return { startDate: null, endDate: null };
+  if (!isIsoDate(startDate) ||
+      !isIsoDate(endDate) ||
+      mondayOfIsoWeek(startDate) !== startDate ||
+      endDate !== addIsoDays(startDate, 6)) {
+    const error = new Error('start_date and end_date must describe one seven-day deployment week');
+    error.statusCode = 400;
+    throw error;
+  }
+  return { startDate, endDate };
+}
+
+function confirmedDeploymentBatches(rows) {
+  const batches = new Map();
+  for (const row of rows) {
+    const eventDate = String(row.event_date || '').slice(0, 10);
+    if (!row.telegram_group_id || !isIsoDate(eventDate)) continue;
+    const startDate = mondayOfIsoWeek(eventDate);
+    const key = `${row.telegram_group_id}:${startDate}`;
+    if (!batches.has(key)) {
+      batches.set(key, {
+        telegram_group_id: String(row.telegram_group_id),
+        group_name: row.group_name || 'Telegram group',
+        start_date: startDate,
+        end_date: addIsoDays(startDate, 6),
+        rows: [],
+      });
+    }
+    batches.get(key).rows.push(row);
+  }
+
+  const confirmed = [...batches.values()]
+    .filter((batch) => batch.rows.length > 0 && batch.rows.every((row) =>
+      ['sent', 'updated'].includes(String(row.confirmation_status || ''))
+    ));
+  const retainedWeeks = [...new Set(confirmed.map((batch) => batch.start_date))]
+    .sort()
+    .reverse()
+    .slice(0, 4);
+  return confirmed
+    .filter((batch) => retainedWeeks.includes(batch.start_date))
+    .sort((a, b) => b.start_date.localeCompare(a.start_date)
+      || a.group_name.localeCompare(b.group_name))
+    .map(({ rows: omittedRows, ...batch }) => batch);
 }
 
 function safeEqual(a, b) {
@@ -184,6 +264,7 @@ function createServer(db, telegram, options = {}) {
       telegram_username: req.appUser.telegram_username,
       telegram_display_name: req.appUser.telegram_display_name,
       profile_photo_data: req.appUser.profile_photo_data,
+      deployment_sheets_enabled: Boolean(req.appUser.deployment_sheets_enabled),
       role: req.appUser.role,
       bot_id: req.appUser.bot_id,
     });
@@ -226,6 +307,30 @@ function createServer(db, telegram, options = {}) {
     const user = await db.setAppUserProfilePhoto(req.appUser.id, null);
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json({ deleted: true });
+  }));
+
+  app.patch('/api/me/deployment-sheets', wrap(async (req, res) => {
+    if (!db.setAppUserDeploymentSheetsEnabled) {
+      return res.status(501).json({ error: 'Supabase production database is required' });
+    }
+    if (typeof req.body?.enabled !== 'boolean') {
+      return res.status(400).json({ error: 'enabled must be true or false' });
+    }
+    const user = await db.setAppUserDeploymentSheetsEnabled(req.appUser.id, req.body.enabled);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ deployment_sheets_enabled: Boolean(user.deployment_sheets_enabled) });
+  }));
+
+  app.get('/api/deployment-sheets', wrap(async (req, res) => {
+    if (options.requireAdminAuth && !req.appUser?.deployment_sheets_enabled) {
+      return res.status(403).json({ error: 'Enable Deployment sheets from your account menu first' });
+    }
+    if (!db.listScheduledPolls) {
+      if (!options.requireAdminAuth) return res.json([]);
+      return res.status(501).json({ error: 'Supabase production database is required' });
+    }
+    const rows = filterRowsByUserBot(await db.listScheduledPolls(), req.appUser);
+    res.json(confirmedDeploymentBatches(rows));
   }));
 
   function publicBot(bot) {
@@ -804,11 +909,14 @@ function createServer(db, telegram, options = {}) {
       ? String(req.query.telegram_group_id)
       : null;
     if (requestedGroupId) await assertGroupAccess(db, req.appUser, requestedGroupId);
+    const { startDate, endDate } = requestedDeploymentRange(req.query);
     const { dates, people } = await collectDeploymentRoster(
       db,
       req.appUser,
       requestedBotId,
-      requestedGroupId
+      requestedGroupId,
+      startDate,
+      endDate
     );
     const header = ['Name', 'Telegram handle', ...dates.map(formatSheetDate)];
     const lines = [header];
@@ -839,11 +947,14 @@ function createServer(db, telegram, options = {}) {
       ? String(req.query.telegram_group_id)
       : null;
     if (requestedGroupId) await assertGroupAccess(db, req.appUser, requestedGroupId);
+    const { startDate, endDate } = requestedDeploymentRange(req.query);
     const roster = await collectDeploymentRoster(
       db,
       req.appUser,
       requestedBotId,
-      requestedGroupId
+      requestedGroupId,
+      startDate,
+      endDate
     );
     const workbook = await buildDeploymentWorkbook({ ...roster, formatDate: formatSheetDate });
     res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

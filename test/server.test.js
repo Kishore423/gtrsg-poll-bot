@@ -518,6 +518,35 @@ test('a signed-in user can upload only a bounded profile picture to their own ac
   });
 });
 
+test('a user controls whether deployment sheets appear in their navbar', async () => {
+  await withServer(async ({ db, baseUrl }) => {
+    await db.createAppUser({
+      telegram_user_id: '1001',
+      telegram_username: 'deployment_user',
+      telegram_display_name: 'Deployment User',
+    });
+    const headers = { Authorization: 'Bearer user' };
+    assert.equal((await db.getAppUserByTelegramId('1001')).deployment_sheets_enabled, false);
+
+    const enabled = await fetch(`${baseUrl}/api/me/deployment-sheets`, json('PATCH', {
+      enabled: true,
+    }, headers));
+    assert.equal(enabled.status, 200);
+    assert.deepEqual(await enabled.json(), { deployment_sheets_enabled: true });
+    assert.equal((await db.getAppUserByTelegramId('1001')).deployment_sheets_enabled, true);
+
+    const invalid = await fetch(`${baseUrl}/api/me/deployment-sheets`, json('PATCH', {
+      enabled: 'yes',
+    }, headers));
+    assert.equal(invalid.status, 400);
+  }, {
+    requireAdminAuth: true,
+    verifyUser: async (req) => req.headers.authorization === 'Bearer user'
+      ? { id: 'app-user-1', telegram_user_id: '1001', role: 'user', bot_id: null }
+      : null,
+  });
+});
+
 test('tenant scoping limits managed groups to the caller bot', async () => {
   await withServer(async ({ db, baseUrl }) => {
     const groupA = await db.upsertTelegramGroupFromWebhook({
@@ -1495,9 +1524,9 @@ test('deployment sheet exports a tenant-scoped person-by-date roster', async () 
   const db = {
     async listScheduledPolls() {
       return [
-        { event_id: 'e1', telegram_group_id: 'group-A', bot_id: 'bot-A', event_date: '2026-07-20', group_name: 'Alpha Group' },
-        { event_id: 'e3', telegram_group_id: 'group-A', bot_id: 'bot-A', event_date: '2026-07-22', group_name: 'Alpha Group' },
-        { event_id: 'e2', telegram_group_id: 'group-B', bot_id: 'bot-B', event_date: '2026-07-21', group_name: 'Beta Group' },
+        { event_id: 'e1', telegram_group_id: 'group-A', bot_id: 'bot-A', event_date: '2026-07-20', group_name: 'Alpha Group', confirmation_status: 'sent' },
+        { event_id: 'e3', telegram_group_id: 'group-A', bot_id: 'bot-A', event_date: '2026-07-22', group_name: 'Alpha Group', confirmation_status: 'updated' },
+        { event_id: 'e2', telegram_group_id: 'group-B', bot_id: 'bot-B', event_date: '2026-07-21', group_name: 'Beta Group', confirmation_status: 'sent' },
       ];
     },
     async getTelegramGroup(id) {
@@ -1529,9 +1558,9 @@ test('deployment sheet exports a tenant-scoped person-by-date roster', async () 
     requireAdminAuth: true,
     verifyUser: async (req) =>
       req.headers.authorization === 'Bearer userA'
-        ? { id: 'u-A', telegram_user_id: '1', role: 'user', bot_id: 'bot-A' }
+        ? { id: 'u-A', telegram_user_id: '1', role: 'user', bot_id: 'bot-A', deployment_sheets_enabled: true }
         : req.headers.authorization === 'Bearer admin'
-          ? { id: 'u-admin', telegram_user_id: '2', role: 'admin', bot_id: null }
+          ? { id: 'u-admin', telegram_user_id: '2', role: 'admin', bot_id: null, deployment_sheets_enabled: true }
           : null,
   }).listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
@@ -1549,6 +1578,17 @@ test('deployment sheet exports a tenant-scoped person-by-date roster', async () 
     // Waiting-list and the other bot's people are excluded.
     assert.doesNotMatch(lines.join('\n'), /Bob/);
     assert.doesNotMatch(lines.join('\n'), /Carol/);
+
+    const deploymentSheets = await fetch(`${baseUrl}/api/deployment-sheets`, {
+      headers: { Authorization: 'Bearer userA' },
+    });
+    assert.equal(deploymentSheets.status, 200);
+    assert.deepEqual(await deploymentSheets.json(), [{
+      telegram_group_id: 'group-A',
+      group_name: 'Alpha Group',
+      start_date: '2026-07-20',
+      end_date: '2026-07-26',
+    }]);
 
     const xlsx = await fetch(`${baseUrl}/api/confirmed-slots.xlsx`, {
       headers: { Authorization: 'Bearer userA' },
@@ -1586,12 +1626,86 @@ test('deployment sheet exports a tenant-scoped person-by-date roster', async () 
       { headers: { Authorization: 'Bearer userA' } }
     )).status, 404);
 
+    const weekXlsx = await fetch(
+      `${baseUrl}/api/confirmed-slots.xlsx?telegram_group_id=group-A&start_date=2026-07-20&end_date=2026-07-26`,
+      { headers: { Authorization: 'Bearer userA' } }
+    );
+    assert.equal(weekXlsx.status, 200);
+    const weekWorkbook = new ExcelJS.Workbook();
+    await weekWorkbook.xlsx.load(Buffer.from(await weekXlsx.arrayBuffer()));
+    assert.deepEqual(weekWorkbook.getWorksheet('Deployment').getRow(1).values.slice(1), [
+      'Telegram handle', 'Name', '20-Jul', '22-Jul',
+    ]);
+
     // Admin can scope by bot_id; CSV quoting handles a comma in the name.
     const adminCsv = (await (await fetch(`${baseUrl}/api/confirmed-slots.csv?bot_id=bot-B`, { headers: { Authorization: 'Bearer admin' } })).text()).replace(/^﻿/, '');
     const adminLines = adminCsv.split('\r\n');
     assert.equal(adminLines[0], 'Name,Telegram handle,21-Jul');
     assert.equal(adminLines[1], '"Carol, C",@carol,0800-1700');
     assert.doesNotMatch(adminCsv, /Alice/);
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
+});
+
+test('deployment panel retains only the latest four fully confirmed event weeks', async () => {
+  const starts = ['2026-06-29', '2026-07-06', '2026-07-13', '2026-07-20', '2026-07-27'];
+  const db = {
+    async listScheduledPolls() {
+      return [
+        ...starts.map((event_date, index) => ({
+          event_id: `event-${index}`,
+          telegram_group_id: 'group-A',
+          bot_id: 'bot-A',
+          event_date,
+          group_name: 'Alpha Group',
+          confirmation_status: 'sent',
+        })),
+        {
+          event_id: 'event-incomplete',
+          telegram_group_id: 'group-A',
+          bot_id: 'bot-A',
+          event_date: '2026-08-03',
+          group_name: 'Alpha Group',
+          confirmation_status: 'scheduled',
+        },
+      ];
+    },
+  };
+  const server = createServer(db, makeTelegram(), {
+    enableLegacyWorkflow: false,
+    requireAdminAuth: true,
+    verifyUser: async (req) => req.headers.authorization === 'Bearer enabled'
+      ? {
+          id: 'user-A',
+          telegram_user_id: '1',
+          role: 'user',
+          bot_id: 'bot-A',
+          deployment_sheets_enabled: true,
+        }
+      : req.headers.authorization === 'Bearer disabled'
+        ? {
+            id: 'user-B',
+            telegram_user_id: '2',
+            role: 'user',
+            bot_id: 'bot-A',
+            deployment_sheets_enabled: false,
+          }
+        : null,
+  }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const response = await fetch(`${baseUrl}/api/deployment-sheets`, {
+      headers: { Authorization: 'Bearer enabled' },
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).map((sheet) => sheet.start_date), [
+      '2026-07-27', '2026-07-20', '2026-07-13', '2026-07-06',
+    ]);
+    assert.equal((await fetch(`${baseUrl}/api/deployment-sheets`, {
+      headers: { Authorization: 'Bearer disabled' },
+    })).status, 403);
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   }

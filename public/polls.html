@@ -538,6 +538,7 @@
     <ul class="nav-links">
       <li><a href="/"><i data-lucide="house" aria-hidden="true"></i><span>Home</span></a></li>
       <li><a href="/polls.html" class="active"><i data-lucide="list-checks" aria-hidden="true"></i><span>Polls</span></a></li>
+      <li data-deployment-nav hidden><a href="/deployments.html"><i data-lucide="file-spreadsheet" aria-hidden="true"></i><span>Deployment sheets</span></a></li>
       <li data-admin-nav hidden><a href="/admin"><i data-lucide="settings" aria-hidden="true"></i><span>Admin</span></a></li>
     </ul>
     <div class="nav-spacer"></div>
@@ -550,6 +551,11 @@
       <div id="nav-account-menu" class="nav-account-menu" hidden>
         <button id="nav-upload-photo" type="button">Upload profile picture</button>
         <input id="nav-profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+        <label class="nav-preference-toggle">
+          <span><strong>Deployment sheets</strong><small>Show in navbar</small></span>
+          <input id="nav-deployment-sheets-toggle" type="checkbox" role="switch" />
+          <span class="nav-switch-track" aria-hidden="true"></span>
+        </label>
         <button id="nav-sign-out" class="sign-out" type="button">Sign out</button>
         <p id="nav-account-status" class="nav-account-status" aria-live="polite"></p>
       </div>

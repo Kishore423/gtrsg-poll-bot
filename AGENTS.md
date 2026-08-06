@@ -219,7 +219,10 @@ Vercel Cron** for hosting/scheduling.
   identity, while handle and display name are metadata. Home, Polls,
   and Admin show the admin-managed `telegram_display_name` in the navbar after
   authentication, falling back to the Telegram handle when needed. Clicking the
-  identity opens a shared account menu with profile-picture upload and Sign out.
+  identity opens a shared account menu with profile-picture upload, a per-user
+  **Deployment sheets** navbar toggle, and Sign out. The deployment toggle is
+  stored as `app_users.deployment_sheets_enabled`, defaults false, and affects
+  only the signed-in user's navigation.
   Uploads are resized to 256x256 WebP client-side, capped at 200 KB server-side,
   and saved to the caller's own `app_users.profile_photo_data`. Admin user rows
   have an Edit dialog with a read-only Telegram handle plus editable display
@@ -312,6 +315,12 @@ Vercel Cron** for hosting/scheduling.
   the Polls page no longer exposes a bot-wide deployment button. The command
   uses auth-wrapped `fetch` and downloads
   `deployment-sheet-<group>-<start>-to-<end>.xlsx`.
+  Users may also enable the account-level **Deployment sheets** panel from their
+  navbar account menu. The panel lists one download per Telegram group and
+  Monday-Sunday event batch only after every existing poll in that batch has a
+  `sent` or `updated` confirmation. It retains the latest four distinct confirmed
+  event weeks dynamically; older sheets disappear without deleting poll history.
+  Normal users remain scoped to all groups belonging to their one assigned bot.
 
 ## Bots (live)
 

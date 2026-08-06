@@ -165,8 +165,15 @@ Inputs and selects use white fill, `#afbec2` 1px borders, 3px corners, and `inse
 ### Navigation
 Navigation is a 64px operations-ink band. Links are square, full-height cells. Hover and active states use `#1d3843`; the active route adds a 3px `#31bd92` bottom rule.
 
+The optional **Deployment sheets** route is controlled by a compact switch in
+the account menu. It is hidden by default and uses the same active-route
+treatment when enabled.
+
 ### Tables and Rosters
 Tables use an operations-ink header, soft ruled rows, alternating bands, and green-soft hover. Managed-group rows use border-separated white bands and an inset green selection rule.
+
+The deployment archive groups ruled download rows beneath week headers. Each
+row represents one Telegram group and one confirmed event week.
 
 ### Command Dialog
 The group command dialog is `min(92vw, 570px)` with 4px corners and high elevation. Workflow choices are `4.75rem` ruled rows. Its deployment command names the selected group's earliest and latest poll dates and downloads that group's person-by-date workbook.

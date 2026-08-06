@@ -270,6 +270,7 @@ function createMemoryDb() {
       telegram_username = null,
       telegram_display_name = null,
       profile_photo_data = null,
+      deployment_sheets_enabled = false,
       login_bot_verified_at = null,
     }) {
       const user = {
@@ -278,6 +279,7 @@ function createMemoryDb() {
         telegram_username,
         telegram_display_name,
         profile_photo_data,
+        deployment_sheets_enabled: Boolean(deployment_sheets_enabled),
         login_bot_verified_at,
         role,
         bot_id: bot_id ? String(bot_id) : null,
@@ -345,6 +347,13 @@ function createMemoryDb() {
       const user = appUsers.find((item) => item.id === String(id));
       if (!user) return null;
       user.profile_photo_data = profilePhotoData;
+      return { ...user };
+    },
+
+    async setAppUserDeploymentSheetsEnabled(id, enabled) {
+      const user = appUsers.find((item) => item.id === String(id));
+      if (!user) return null;
+      user.deployment_sheets_enabled = Boolean(enabled);
       return { ...user };
     },
 

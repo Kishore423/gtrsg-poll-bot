@@ -55,12 +55,27 @@ test('navbar renders the admin-managed Telegram display name', () => {
 });
 
 test('every signed-in page includes the shared account actions', () => {
-  for (const file of ['index.html', 'polls.html', 'admin.html']) {
+  for (const file of ['index.html', 'polls.html', 'admin.html', 'deployments.html']) {
     const html = readFileSync(join(__dirname, '..', 'public', file), 'utf8');
     assert.match(html, /id="nav-upload-photo"/);
     assert.match(html, /id="nav-profile-photo-input"/);
+    assert.match(html, /id="nav-deployment-sheets-toggle"/);
     assert.match(html, /id="nav-sign-out"/);
   }
+});
+
+test('deployment sheets navigation is user-controlled and defaults hidden', () => {
+  for (const file of ['index.html', 'polls.html', 'admin.html', 'deployments.html']) {
+    const html = readFileSync(join(__dirname, '..', 'public', file), 'utf8');
+    assert.match(html, /<li data-deployment-nav hidden>/);
+  }
+  const authSource = readFileSync(join(__dirname, '..', 'public', 'telegram-auth.js'), 'utf8');
+  const pageSource = readFileSync(join(__dirname, '..', 'public', 'deployments.js'), 'utf8');
+  assert.match(authSource, /\/api\/me\/deployment-sheets/);
+  assert.match(authSource, /item\.hidden = !renderedUser\.deployment_sheets_enabled/);
+  assert.match(pageSource, /\/api\/deployment-sheets/);
+  assert.match(pageSource, /start_date: button\.dataset\.startDate/);
+  assert.match(pageSource, /end_date: button\.dataset\.endDate/);
 });
 
 test('Home and Polls expose an Admin nav item only through role-gated markup', () => {

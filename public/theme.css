@@ -127,6 +127,80 @@ nav {
   animation: depth-menu-in 150ms ease-out;
 }
 
+.nav-preference-toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 3.7rem;
+  margin: 0.25rem 0;
+  padding: 0.65rem 0.7rem;
+  border-top: 1px solid var(--rule-line-soft, #e2e8e9);
+  border-bottom: 1px solid var(--rule-line-soft, #e2e8e9);
+  cursor: pointer;
+}
+
+.nav-preference-toggle > span:first-child {
+  display: grid;
+  flex: 1;
+  gap: 0.05rem;
+}
+
+.nav-preference-toggle strong {
+  color: var(--operations-ink, #142a33);
+  font: 700 1rem/1.2 'Barlow Condensed', 'Arial Narrow', sans-serif;
+}
+
+.nav-preference-toggle small {
+  color: var(--muted-copy, #586b73);
+  font-size: 0.78rem;
+}
+
+.nav-preference-toggle input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+}
+
+.nav-switch-track {
+  position: relative;
+  inline-size: 2.5rem;
+  block-size: 1.4rem;
+  flex: 0 0 auto;
+  border: 1px solid #8da0a6;
+  border-radius: 999px;
+  background: #dfe6e7;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.nav-switch-track::after {
+  content: '';
+  position: absolute;
+  inset-block-start: 0.16rem;
+  inset-inline-start: 0.18rem;
+  inline-size: 0.95rem;
+  block-size: 0.95rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(20, 42, 51, 0.3);
+  transition: transform 140ms ease;
+}
+
+.nav-preference-toggle input:checked + .nav-switch-track {
+  border-color: var(--ops-green, #008a68);
+  background: var(--ops-green, #008a68);
+}
+
+.nav-preference-toggle input:checked + .nav-switch-track::after {
+  transform: translateX(1.08rem);
+}
+
+.nav-preference-toggle input:focus-visible + .nav-switch-track {
+  outline: 3px solid rgba(0, 138, 104, 0.28);
+  outline-offset: 2px;
+}
+
 main {
   width: min(1080px, calc(100% - 2rem));
   max-width: 1080px !important;

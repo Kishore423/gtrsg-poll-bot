@@ -295,6 +295,7 @@ function createTelegramAuth({
       telegram_display_name: appUser.telegram_display_name || null,
       login_bot_verified_at: appUser.login_bot_verified_at,
       profile_photo_data: appUser.profile_photo_data || null,
+      deployment_sheets_enabled: Boolean(appUser.deployment_sheets_enabled),
       role: appUser.role,
       bot_id: appUser.bot_id || null,
     };
