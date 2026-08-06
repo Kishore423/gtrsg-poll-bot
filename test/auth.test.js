@@ -349,6 +349,54 @@ test('signed sessions reject tampering and expiration', () => {
   assert.equal(verifySession(SESSION_SECRET, token, now + 61_000), null);
 });
 
+test('admins can open a tab-local effective user session without changing the base session', async () => {
+  const { auth, botId, db } = await seeded();
+  const target = (await db.listAppUsers()).find((user) => user.telegram_user_id === '977476515');
+  const adminToken = signSession(SESSION_SECRET, '2132609363', Date.now(), 3600);
+  const result = await auth.startImpersonation(requestWith(adminToken), target.id);
+  assert.equal(result.status, 'impersonating');
+  assert.equal(result.user.telegram_display_name, 'Yi Dan');
+
+  const effectiveUser = await auth.verifyUser(requestWith(result.access_token));
+  assert.equal(effectiveUser.telegram_user_id, '977476515');
+  assert.equal(effectiveUser.role, 'user');
+  assert.equal(effectiveUser.bot_id, botId);
+  assert.equal(effectiveUser.impersonation.actor_telegram_user_id, '2132609363');
+  assert.equal(effectiveUser.impersonation.effective_display_name, 'Yi Dan');
+
+  const unchangedAdmin = await auth.verifyUser(requestWith(adminToken));
+  assert.equal(unchangedAdmin.role, 'admin');
+  assert.equal(unchangedAdmin.impersonation, null);
+});
+
+test('impersonation rejects non-admins, chained sessions, and pending targets', async () => {
+  const { auth, db } = await seeded();
+  const users = await db.listAppUsers();
+  const target = users.find((user) => user.telegram_user_id === '977476515');
+  const admin = users.find((user) => user.telegram_user_id === '2132609363');
+  const userToken = signSession(SESSION_SECRET, '977476515', Date.now(), 3600);
+  await assert.rejects(
+    auth.startImpersonation(requestWith(userToken), admin.id),
+    (error) => error.statusCode === 403,
+  );
+
+  const pendingId = await db.createAppUser({
+    telegram_username: 'pending_user',
+    telegram_display_name: 'Pending User',
+  });
+  const adminToken = signSession(SESSION_SECRET, '2132609363', Date.now(), 3600);
+  await assert.rejects(
+    auth.startImpersonation(requestWith(adminToken), pendingId),
+    (error) => error.statusCode === 409 && /Login_bot/.test(error.message),
+  );
+
+  const first = await auth.startImpersonation(requestWith(adminToken), target.id);
+  await assert.rejects(
+    auth.startImpersonation(requestWith(first.access_token), admin.id),
+    (error) => error.statusCode === 401,
+  );
+});
+
 test('route guards require a valid Telegram session and preserve admin RBAC', async () => {
   const { auth } = await seeded();
   const missing = await runMiddleware(requireUser(auth.verifyUser), requestWith(null));

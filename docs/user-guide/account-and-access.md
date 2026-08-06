@@ -19,7 +19,21 @@ There are two roles:
 - **User** — sees and manages only the Telegram groups that **their own bot** is
   in. Users do not see the Admin page.
 - **Admin** — sees all groups and bots, and can manage the list of users and
-  their bots from the Admin page.
+  their bots from the Admin page. An admin can also open a verified user's
+  account in a separate test tab from the user roster.
+
+## Admin user testing
+
+On the **Admin** page, click **View as user** beside an enabled, Login_bot-verified
+account. The account opens in a separate tab with the same group, poll, and
+deployment access that the selected user has. The Admin roster remains open in
+the original tab, so different users can be tested in separate tabs.
+
+An amber **Testing as** banner remains visible while the test view is active.
+Click **Exit user view** to return that tab to the administrator account. Closing
+the tab also ends that tab's test view. Test views do not replace the admin's
+normal sign-in and do not impose a separate short timeout; they cannot outlive
+the underlying admin session.
 
 ## Signing in
 

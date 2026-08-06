@@ -94,6 +94,8 @@ The visual world combines deep ink navigation, cool paper-grey workspaces, ruled
 - Source Sans 3 for instructions, values, supporting copy, and records.
 - Operational green for readiness, selection, focus, and primary action.
 - Depth concentrated on navigation, primary actions, menus, and overlays.
+- Admin user-test views carry a persistent amber **Testing as** banner directly
+  below navigation, with an explicit **Exit user view** command.
 
 ## Colors
 

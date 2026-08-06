@@ -241,6 +241,25 @@ test('admin provisioning and sign-in require only a Telegram handle', () => {
   assert.match(adminScript, /cache:\s*'no-store'/);
 });
 
+test('admins can enter and clearly exit a tab-local user test view', () => {
+  const adminScript = readFileSync(join(__dirname, '..', 'public', 'admin.js'), 'utf8');
+  const authSource = readFileSync(join(__dirname, '..', 'public', 'telegram-auth.js'), 'utf8');
+  const serverSource = readFileSync(join(__dirname, '..', 'src', 'server.js'), 'utf8');
+  const theme = readFileSync(join(__dirname, '..', 'public', 'theme.css'), 'utf8');
+
+  assert.match(adminScript, /data-view-user/);
+  assert.match(adminScript, /\/api\/admin\/impersonation/);
+  assert.match(adminScript, /window\.open\('\/', '_blank'\)/);
+  assert.match(adminScript, /startImpersonation\(result, userViewWindow \|\| window\)/);
+  assert.match(authSource, /gtrsg-impersonation/);
+  assert.match(authSource, /impersonation\?\.access_token \|\| session\?\.access_token/);
+  assert.match(authSource, /Testing as/);
+  assert.match(authSource, /Exit user view/);
+  assert.match(authSource, /window\.location\.href = '\/admin'/);
+  assert.match(serverSource, /app\.post\('\/api\/admin\/impersonation'/);
+  assert.match(theme, /\.impersonation-banner\s*\{/);
+});
+
 test('Postgres app user roster does not overwrite user handles with bot handles', () => {
   const source = readFileSync(join(__dirname, '..', 'src', 'db', 'postgres.js'), 'utf8');
   const listAppUsers = source.match(/async listAppUsers\(\) \{([\s\S]*?)\n    \},/);

@@ -53,6 +53,12 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   timestamp; OTP delivery, session issuance, and the Admin verified label all
   require it. The schema migration only backfills users with a previously
   successful Login_bot OTP delivery.
+- Admin roster rows expose **View as user** only for enabled, Login_bot-verified
+  accounts. The signed effective-user token retains the authenticated admin as
+  its actor, cannot outlive the base admin session, and is stored per browser tab.
+  Test views open in a separate tab with a persistent **Testing as** banner and
+  an explicit **Exit user view** action. There is no database session lock or
+  separate short impersonation timeout.
 - Telegram can only refresh a private user's handle through Login_bot after that
   user has opened the bot. The Admin roster treats Telegram's `chat not found`
   response as an unavailable refresh, retains the cached handle, and prompts the

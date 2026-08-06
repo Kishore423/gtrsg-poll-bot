@@ -37,10 +37,11 @@ function normalizeTelegramIdentifier(value) {
   return null;
 }
 
-function signSession(secret, telegramUserId, nowMs, ttlSeconds) {
+function signSession(secret, telegramUserId, nowMs, ttlSeconds, extraClaims = {}) {
   const header = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const issuedAt = Math.floor(nowMs / 1000);
   const payload = base64url(JSON.stringify({
+    ...extraClaims,
     sub: String(telegramUserId),
     iat: issuedAt,
     exp: issuedAt + ttlSeconds,
@@ -286,8 +287,26 @@ function createTelegramAuth({
     if (!sessionSecret) return null;
     const claims = verifySession(sessionSecret, bearerToken(req), now());
     if (!claims) return null;
-    const appUser = await db.getAppUserByTelegramId(claims.sub);
-    if (!appUser || appUser.enabled === false || !appUser.login_bot_verified_at) return null;
+    const actor = await db.getAppUserByTelegramId(claims.sub);
+    if (!actor || actor.enabled === false || !actor.login_bot_verified_at) return null;
+    let appUser = actor;
+    let impersonation = null;
+    if (claims.imp) {
+      if (actor.role !== 'admin' || !db.listAppUsers) return null;
+      appUser = (await db.listAppUsers())
+        .find((user) => String(user.id) === String(claims.imp));
+      if (!appUser
+          || appUser.enabled === false
+          || !appUser.telegram_user_id
+          || !appUser.login_bot_verified_at) return null;
+      impersonation = {
+        actor_user_id: actor.id,
+        actor_telegram_user_id: String(actor.telegram_user_id),
+        actor_display_name: actor.telegram_display_name || actor.telegram_username || 'Admin',
+        effective_user_id: appUser.id,
+        effective_display_name: appUser.telegram_display_name || appUser.telegram_username || 'Telegram user',
+      };
+    }
     return {
       id: appUser.id,
       telegram_user_id: String(appUser.telegram_user_id),
@@ -298,10 +317,55 @@ function createTelegramAuth({
       deployment_sheets_enabled: Boolean(appUser.deployment_sheets_enabled),
       role: appUser.role,
       bot_id: appUser.bot_id || null,
+      impersonation,
     };
   }
 
-  return { requestOtp, verifyOtp, completeFromUpdate, verifyUser, syncUserIdentity };
+  async function startImpersonation(req, targetUserId) {
+    if (!sessionSecret) throw authError('Authentication is not configured', 503);
+    const claims = verifySession(sessionSecret, bearerToken(req), now());
+    if (!claims || claims.imp) throw authError('Admin authentication required', 401);
+    const actor = await db.getAppUserByTelegramId(claims.sub);
+    if (!actor || actor.enabled === false || !actor.login_bot_verified_at || actor.role !== 'admin') {
+      throw authError('Admin access required', 403);
+    }
+    if (!db.listAppUsers) throw authError('User directory is unavailable', 501);
+    const target = (await db.listAppUsers())
+      .find((user) => String(user.id) === String(targetUserId));
+    if (!target) throw authError('User not found', 404);
+    if (target.enabled === false) throw authError('Enable this user before testing their account', 409);
+    if (!target.telegram_user_id || !target.login_bot_verified_at) {
+      throw authError('This user must verify with Login_bot before their account can be tested', 409);
+    }
+    const remainingSeconds = Number(claims.exp) - Math.floor(now() / 1000);
+    if (remainingSeconds <= 0) throw authError('Admin authentication required', 401);
+    return {
+      status: 'impersonating',
+      access_token: signSession(
+        sessionSecret,
+        actor.telegram_user_id,
+        now(),
+        remainingSeconds,
+        { imp: String(target.id) },
+      ),
+      expires_at: Number(claims.exp),
+      user: {
+        id: target.id,
+        telegram_username: target.telegram_username || null,
+        telegram_display_name: target.telegram_display_name || null,
+        role: target.role,
+      },
+    };
+  }
+
+  return {
+    requestOtp,
+    verifyOtp,
+    completeFromUpdate,
+    verifyUser,
+    syncUserIdentity,
+    startImpersonation,
+  };
 }
 
 module.exports = {

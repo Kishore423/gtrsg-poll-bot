@@ -212,6 +212,13 @@ Vercel Cron** for hosting/scheduling.
   `app_users.login_bot_verified_at` must be set by a matching private `/start`
   (or a backfilled successful Login_bot OTP delivery) before OTP delivery or
   session issuance is allowed.
+  Admin roster rows expose **View as user** only for enabled, Login_bot-verified
+  accounts. `POST /api/admin/impersonation` issues a signed effective-user token
+  whose actor remains the authenticated admin and whose expiry cannot exceed the
+  base admin session. The browser stores that token in per-tab `sessionStorage`,
+  opens the test view in a separate tab, displays a persistent **Testing as**
+  banner, and clears only that tab's effective-user token on **Exit user view**.
+  There is no database impersonation lock or separate short test timeout.
   `/api/auth/telegram/otp/verify` consumes the five-minute browser-bound challenge
   and issues a signed 12-hour session. Codes allow five attempts and successful
   sends have a one-minute cooldown plus a five-per-hour cap. Unknown or

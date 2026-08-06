@@ -131,6 +131,29 @@ nav {
   animation: depth-menu-in 150ms ease-out;
 }
 
+.impersonation-banner {
+  position: sticky;
+  top: 64px;
+  z-index: 98;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  min-height: 3.25rem;
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid #d59b28;
+  background: #fff4d6;
+  color: #61450f;
+  box-shadow: 0 4px 12px rgba(70, 49, 10, 0.12);
+}
+
+.impersonation-banner button {
+  min-height: 2.2rem;
+  padding: 0.35rem 0.75rem;
+  border-color: #9b731f !important;
+  color: #61450f !important;
+}
+
 .nav-preference-toggle {
   position: relative;
   display: flex;

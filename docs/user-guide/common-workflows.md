@@ -95,3 +95,15 @@ belonging to their assigned bot.
 
 1. Edit the user who currently has the bot and click **Remove bot**.
 2. Edit the target user and paste the same BotFather token to assign it there.
+
+## (Admin) Test a user's account
+
+1. Go to **Admin** and find an enabled user who is verified by Login_bot.
+2. Click **View as user**. Their account opens in a separate tab while the Admin
+   roster stays open.
+3. Confirm the amber **Testing as** banner names the intended user, then test
+   their groups, polls, or deployment access.
+4. Click **Exit user view** when finished, or close that test tab.
+
+Each test tab keeps its own selected user. Opening one user's test view does not
+change another tab or sign the actual user out.

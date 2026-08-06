@@ -61,6 +61,12 @@ async function loadUsers({ refresh = false } = {}) {
   currentUsers = new Map(result.map((user) => [String(user.id), user]));
   usersBody.innerHTML = result.map((user) => {
     const bot = user.bot || {};
+    const canViewAsUser = user.enabled !== false
+      && Boolean(user.telegram_user_id)
+      && Boolean(user.login_bot_verified_at);
+    const viewAsUserTitle = user.enabled === false
+      ? 'Enable this user before testing their account'
+      : 'This user must verify with Login_bot before their account can be tested';
     return `<tr>
       <td>${telegramLabel(user)}<br><span class="muted">${
         user.login_bot_verified_at
@@ -72,6 +78,11 @@ async function loadUsers({ refresh = false } = {}) {
       <td>${bot.telegram_username ? `@${escapeHtml(bot.telegram_username)}` : '<span class="muted">-</span>'}</td>
       <td>${user.enabled === false ? 'Disabled' : 'Enabled'}</td>
       <td><span class="row-actions">
+        ${String(user.id) === String(currentUser?.id) ? '' : `
+          <button type="button" class="secondary" data-view-user="${escapeHtml(user.id)}"
+            ${canViewAsUser ? '' : `disabled title="${viewAsUserTitle}"`}>
+            <i data-lucide="user-round-search" aria-hidden="true"></i> View as user
+          </button>`}
         <button type="button" class="secondary" data-edit-user="${escapeHtml(user.id)}"><i data-lucide="pencil" aria-hidden="true"></i> Edit</button>
         <button type="button" class="danger-link" data-delete-user="${escapeHtml(user.id)}"><i data-lucide="trash-2" aria-hidden="true"></i> Delete</button>
       </span></td>
@@ -102,6 +113,30 @@ async function loadUsers({ refresh = false } = {}) {
       if (removeUserBotButton) removeUserBotButton.hidden = !editingUserHasBot;
       editUserStatus.textContent = '';
       editUserDialog.showModal();
+    });
+  });
+
+  usersBody.querySelectorAll('[data-view-user]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const userViewWindow = window.open('/', '_blank');
+      button.disabled = true;
+      setStatus('Opening user view...');
+      try {
+        const response = await fetch('/api/admin/impersonation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: button.dataset.viewUser }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'Unable to open user view');
+        window.gtrsgAuth.startImpersonation(result, userViewWindow || window);
+        button.disabled = false;
+        setStatus('User view opened in a separate tab.', 'success');
+      } catch (error) {
+        userViewWindow?.close();
+        button.disabled = false;
+        setStatus(`Error: ${error.message}`, 'error');
+      }
     });
   });
 

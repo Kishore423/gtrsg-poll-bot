@@ -70,6 +70,35 @@ test('admin-only routes reject a provisioned non-admin', async () => {
       : null });
 });
 
+test('admin impersonation endpoint issues an effective-user session through the auth service', async () => {
+  const calls = [];
+  await withServer(async ({ baseUrl }) => {
+    const response = await fetch(`${baseUrl}/api/admin/impersonation`, json(
+      'POST',
+      { user_id: 'target-user' },
+      { Authorization: 'Bearer admin' },
+    ));
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(await response.json(), {
+      status: 'impersonating',
+      access_token: 'effective-token',
+    });
+    assert.deepEqual(calls, ['target-user']);
+  }, {
+    requireAdminAuth: true,
+    verifyUser: async (req) =>
+      req.headers.authorization === 'Bearer admin'
+        ? { id: 'admin-1', telegram_user_id: '1002', role: 'admin', bot_id: null }
+        : null,
+    startImpersonation: async (req, userId) => {
+      assert.equal(req.appUser.role, 'admin');
+      calls.push(userId);
+      return { status: 'impersonating', access_token: 'effective-token' };
+    },
+  });
+});
+
 test('admin roster refreshes a bound user handle from Telegram', async () => {
   await withServer(async ({ db, baseUrl }) => {
     await db.createAppUser({

@@ -2,8 +2,10 @@
   const nativeFetch = window.fetch.bind(window);
   const sessionKey = 'gtrsg-auth';
   const challengeKey = 'gtrsg-telegram-otp';
+  const impersonationKey = 'gtrsg-impersonation';
   let session = JSON.parse(sessionStorage.getItem(sessionKey) || 'null');
   let challenge = JSON.parse(sessionStorage.getItem(challengeKey) || 'null');
+  let impersonation = JSON.parse(sessionStorage.getItem(impersonationKey) || 'null');
   let requestInFlight = false;
   let renderedUser = null;
 
@@ -147,7 +149,26 @@
 
   function clearSession() {
     session = null;
+    impersonation = null;
     sessionStorage.removeItem(sessionKey);
+    sessionStorage.removeItem(impersonationKey);
+  }
+
+  function exitImpersonation() {
+    impersonation = null;
+    sessionStorage.removeItem(impersonationKey);
+    window.location.href = '/admin';
+  }
+
+  function startImpersonation(value, targetWindow = window) {
+    if (!value?.access_token) throw new Error('Impersonation session is missing');
+    const targetStorage = targetWindow.sessionStorage;
+    if (session?.access_token) {
+      targetStorage.setItem(sessionKey, JSON.stringify(session));
+    }
+    targetStorage.setItem(impersonationKey, JSON.stringify(value));
+    if (targetWindow === window) impersonation = value;
+    targetWindow.location.replace('/');
   }
 
   function clearChallenge() {
@@ -191,7 +212,30 @@
         ? 'Deployment sheets are always available to admins'
         : '';
     }
+    renderImpersonationBanner(renderedUser.impersonation);
     window.refreshIcons?.();
+  }
+
+  function renderImpersonationBanner(state) {
+    let banner = document.getElementById('impersonation-banner');
+    if (!state) {
+      banner?.remove();
+      return;
+    }
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'impersonation-banner';
+      banner.className = 'impersonation-banner';
+      banner.innerHTML = `
+        <span><strong>Testing as</strong> <span data-impersonation-name></span></span>
+        <button type="button" class="secondary">Exit user view</button>`;
+      banner.querySelector('button').addEventListener('click', exitImpersonation);
+      const nav = document.querySelector('nav');
+      if (nav) nav.insertAdjacentElement('afterend', banner);
+      else document.body.prepend(banner);
+    }
+    banner.querySelector('[data-impersonation-name]').textContent =
+      state.effective_display_name || 'Telegram user';
   }
 
   function setAccountStatus(message = '', kind = '') {
@@ -371,13 +415,20 @@
     const url = typeof input === 'string' ? input : input.url;
     const isManagementApi = url.startsWith('/api/') && !url.startsWith('/api/auth/');
     const headers = new Headers(init.headers || (typeof input === 'string' ? undefined : input.headers));
-    if (isManagementApi && session?.access_token) {
-      headers.set('Authorization', `Bearer ${session.access_token}`);
+    const accessToken = impersonation?.access_token || session?.access_token;
+    if (isManagementApi && accessToken) {
+      headers.set('Authorization', `Bearer ${accessToken}`);
     }
     const response = await nativeFetch(input, { ...init, headers });
     if (isManagementApi && response.status === 401) {
-      clearSession();
-      showLogin('Your session expired. Sign in again.');
+      if (impersonation) {
+        impersonation = null;
+        sessionStorage.removeItem(impersonationKey);
+        window.location.reload();
+      } else {
+        clearSession();
+        showLogin('Your session expired. Sign in again.');
+      }
     }
     return response;
   };
@@ -549,5 +600,8 @@
     clearSession,
     renderUser,
     hasSession: () => Boolean(session?.access_token),
+    startImpersonation,
+    exitImpersonation,
+    isImpersonating: () => Boolean(impersonation?.access_token),
   };
 })();

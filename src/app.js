@@ -56,6 +56,7 @@ function buildAppFromEnv() {
     verifyUser: auth.verifyUser,
     requestTelegramOtp: auth.requestOtp,
     verifyTelegramOtp: auth.verifyOtp,
+    startImpersonation: auth.startImpersonation,
     syncTelegramUserIdentity: auth.syncUserIdentity,
     completeTelegramLogin: auth.completeFromUpdate,
     requireAdminAuth: !unconfiguredPreview && process.env.REQUIRE_ADMIN_AUTH !== 'false' && process.env.DB_DRIVER !== 'memory',

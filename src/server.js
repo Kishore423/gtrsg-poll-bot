@@ -260,6 +260,7 @@ function createServer(db, telegram, options = {}) {
   // show the Admin link. Unprovisioned callers get the 403 from requireUser.
   app.get('/api/me', requireUser(options.verifyUser || (async () => null)), (req, res) => {
     res.json({
+      id: req.appUser.id,
       telegram_user_id: req.appUser.telegram_user_id,
       telegram_username: req.appUser.telegram_username,
       telegram_display_name: req.appUser.telegram_display_name,
@@ -267,6 +268,7 @@ function createServer(db, telegram, options = {}) {
       deployment_sheets_enabled: Boolean(req.appUser.deployment_sheets_enabled),
       role: req.appUser.role,
       bot_id: req.appUser.bot_id,
+      impersonation: req.appUser.impersonation || null,
     });
   });
 
@@ -548,6 +550,14 @@ function createServer(db, telegram, options = {}) {
     if (!db.listAppUsers) return res.status(501).json({ error: 'Supabase production database is required' });
     res.set('Cache-Control', 'no-store');
     res.json(await adminUserRoster());
+  }));
+
+  app.post('/api/admin/impersonation', wrap(async (req, res) => {
+    if (!options.startImpersonation) {
+      return res.status(501).json({ error: 'Admin impersonation is unavailable' });
+    }
+    res.set('Cache-Control', 'no-store');
+    res.json(await options.startImpersonation(req, req.body?.user_id));
   }));
 
   app.post('/api/admin/telegram-identities/refresh', wrap(async (req, res) => {
