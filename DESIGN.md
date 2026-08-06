@@ -167,7 +167,9 @@ Navigation is a 64px operations-ink band. Links are square, full-height cells. H
 
 The optional **Deployment sheets** route is controlled by a compact switch in
 the account menu. It is hidden by default and uses the same active-route
-treatment when enabled.
+treatment when enabled. The switch is a user-level visibility preference; sheet
+readiness, grouping, and downloads remain scoped to one Telegram group and one
+confirmed event week.
 
 ### Tables and Rosters
 Tables use an operations-ink header, soft ruled rows, alternating bands, and green-soft hover. Managed-group rows use border-separated white bands and an inset green selection rule.

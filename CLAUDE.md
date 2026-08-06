@@ -518,7 +518,9 @@ live only in Vercel env + the local (gitignored) `.env`.
 - The Home page weekly template form uses a dedicated vertical layout for release
   controls, shift rows, and Add/Save actions. Do not rely on the global `form`
   grid for this section; it causes the time wheel pickers and action buttons to
-  overlap at production widths. A Telegram poll preview sits below the horizontal
+  overlap at production widths. Keep release and confirmation fields top-aligned
+  so taller time wheels do not push adjacent controls downward, and render only
+  one visible weekly-template heading. A Telegram poll preview sits below the horizontal
   divider and above the **Test template poll** heading/input controls at the
   bottom of section 1; `ensureTemplatePreviewPlacement()` also enforces that DOM
   order at runtime. The preview shows the generated question and option labels from current shift

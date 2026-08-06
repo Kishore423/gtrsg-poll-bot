@@ -425,7 +425,10 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   only; `CRON_SECRET` must not be accepted as a fallback.
   The weekly template form uses a dedicated vertical layout for release controls,
   shift rows, and Add/Save actions; do not put those controls back into the global
-  `form` grid because it causes overlap with the custom time wheel pickers. A
+  `form` grid because it causes overlap with the custom time wheel pickers. Its
+  release and confirmation fields are top-aligned so taller time wheels do not
+  push adjacent day and gap-week controls downward, and the card renders only one
+  visible **Weekly default template** heading. A
   Telegram poll preview sits below the horizontal divider and above the
   **Test template poll** heading/input controls at the bottom of section 1;
   `ensureTemplatePreviewPlacement()` also enforces that DOM order at runtime. It shows the generated

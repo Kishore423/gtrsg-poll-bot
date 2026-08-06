@@ -272,6 +272,9 @@ test('dynamic icon hydration ignores generated Lucide SVGs', () => {
 test('weekly and one-off forms expose editable confirmation timing', () => {
   const html = readFileSync(join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const source = readFileSync(join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.equal((html.match(/<h[23][^>]*>Weekly default template<\/h[23]>/g) || []).length, 1);
+  assert.match(html, /\.template-release-grid[\s\S]*?align-items: start/);
+  assert.match(html, /\.one-off-timing-grid[\s\S]*?align-items: start/);
   assert.match(html, /select name="confirmation_day_of_week"/);
   assert.match(html, /data-name="confirmation_time"/);
   assert.match(html, /input name="gap_weeks" type="number" min="0" max="12"/);
