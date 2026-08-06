@@ -380,21 +380,6 @@
       font-size: 0.85rem;
     }
 
-    .rules-summary {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 0.8rem;
-    }
-
-    .rule-panel {
-      border-top: 1px solid var(--green);
-      padding: 0.65rem 0 0;
-    }
-
-    .rule-panel.psa { border-top-color: #3455a4; }
-    .rule-panel strong { display: block; margin-bottom: 0.25rem; }
-    .rule-panel span { color: var(--ink-soft); font-size: 0.86rem; line-height: 1.45; }
-
     .timing-preview {
       grid-column: 1 / -1;
       background: #fafbfc;
@@ -912,34 +897,6 @@
   <div class="actions-row dashboard-status-row" aria-live="polite">
     <span id="status"></span>
   </div>
-
-  <section class="card" id="managed-rules-section">
-    <h2>Release rules</h2>
-    <div class="rules-summary">
-      <div class="rule-panel">
-        <div class="rule-panel-heading">
-          <strong>Wheelchair</strong>
-          <span class="rule-status">Group controlled</span>
-        </div>
-        <dl class="rule-ledger">
-          <div><dt>Batch span</dt><dd>Mon–Sun · 7 polls max</dd></div>
-          <div><dt>Lead time</dt><dd>Set with Gap weeks</dd></div>
-          <div><dt>Voting closes</dt><dd>Day before · 08:00</dd></div>
-        </dl>
-      </div>
-      <div class="rule-panel psa">
-        <div class="rule-panel-heading">
-          <strong>PSA</strong>
-          <span class="rule-status">Group controlled</span>
-        </div>
-        <dl class="rule-ledger">
-          <div><dt>Batch span</dt><dd>Mon–Sun · 7 polls max</dd></div>
-          <div><dt>Lead time</dt><dd>Set with Gap weeks</dd></div>
-          <div><dt>Voting closes</dt><dd>Prior Friday · 08:00</dd></div>
-        </dl>
-      </div>
-    </div>
-  </section>
 
   <section class="card legacy-workflow">
     <h2>Weekly poll schedule</h2>

@@ -121,7 +121,7 @@ Condensed headings and labels evoke manifests, movement boards, and printed oper
 - **Title** (700, `1.1rem`): Docket and workflow headings.
 - **Body** (Source Sans 3): Instructions, values, records, and supporting copy.
 - **Label** (700, `0.76rem`, zero tracking): Form labels and operating metadata.
-- **Ledger Metadata** (700, `0.66rem`): Uppercase rule-ledger terms.
+- **Ledger Metadata** (700, `0.66rem`): Uppercase compact operating terms.
 
 **The Condensed Command Rule.** Use Barlow Condensed for commands and hierarchy, not for long explanatory passages.
 
@@ -129,7 +129,7 @@ Condensed headings and labels evoke manifests, movement boards, and printed oper
 
 The desktop workspace is `min(1180px, calc(100% - 2.5rem))` with `1.75rem` top padding. The masthead is `8.25rem` high, reserves 47% of its width for technical line-art, and ends with a 3px operational-green rule.
 
-Sections are full-width white docket bands with `1.35rem` padding and 1px top and bottom rules. Cards do not float. Release rules use two columns and three-field ledgers. Managed groups and workflow commands are vertically ruled rows.
+Sections are full-width white docket bands with `1.35rem` padding and 1px top and bottom rules. Cards do not float. Managed groups and workflow commands are vertically ruled rows, with the managed-group roster immediately following the page masthead.
 
 At `760px`, rule ledgers collapse to one column. At `720px`, the workspace becomes `calc(100% - 1rem)` and the masthead reserves 39% for artwork. At `520px`, the brand contracts to its mark, masthead artwork is removed, and section padding becomes `1rem`.
 
