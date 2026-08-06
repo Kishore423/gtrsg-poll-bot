@@ -383,16 +383,20 @@ The app currently ships BOTH, selected at runtime:
   returns the neutral **General** pill for anything other than `WHCL`/`PSA`
   (including per-user UUID bot ids); it previously defaulted every non-`PSA` value
   to green **Wheelchair**, so a PSA-bot group showed "Wheelchair".
-- **Deployment sheet (who is deployed where).** The Polls page downloads
-  `GET /api/confirmed-slots.xlsx` (tenant-scoped; admins may pass `?bot_id=`) as
+- **Deployment sheet (who is deployed where).** The Home page group command
+  menu downloads `GET /api/confirmed-slots.xlsx?telegram_group_id=<id>` as
   a formatted Excel roster with `Telegram handle`, `Name`, then chronological
   event-date columns formatted `3-Aug`. Confirmed shifts are stacked as
   `Shift: <label>` lines in bordered, wrapped cells; the header is frozen and
   print-ready in landscape. `GET /api/confirmed-slots.csv` remains for
   integrations. Confirmed only; waiting-list excluded. People are keyed by
   immutable Telegram id (fallback handle/name). OFF/RD and staff-number fields
-  are not in the current data model. The button uses auth-wrapped `fetch` and
-  downloads `deployment-sheet-<date>.xlsx`.
+  are not in the current data model. The command label shows the selected
+  group's earliest and latest poll dates, and remains disabled when that group
+  has no poll dates. Both export endpoints assert access to the requested group;
+  the Polls page no longer exposes a bot-wide deployment button. The command
+  uses auth-wrapped `fetch` and downloads
+  `deployment-sheet-<group>-<start>-to-<end>.xlsx`.
 - Production requires `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_WEBHOOK_SECRET`, `CRON_SECRET`
   (`src/app.js` throws otherwise).

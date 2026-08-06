@@ -1495,10 +1495,17 @@ test('deployment sheet exports a tenant-scoped person-by-date roster', async () 
   const db = {
     async listScheduledPolls() {
       return [
-        { event_id: 'e1', bot_id: 'bot-A', event_date: '2026-07-20', group_name: 'Alpha Group' },
-        { event_id: 'e3', bot_id: 'bot-A', event_date: '2026-07-22', group_name: 'Alpha Group' },
-        { event_id: 'e2', bot_id: 'bot-B', event_date: '2026-07-21', group_name: 'Beta Group' },
+        { event_id: 'e1', telegram_group_id: 'group-A', bot_id: 'bot-A', event_date: '2026-07-20', group_name: 'Alpha Group' },
+        { event_id: 'e3', telegram_group_id: 'group-A', bot_id: 'bot-A', event_date: '2026-07-22', group_name: 'Alpha Group' },
+        { event_id: 'e2', telegram_group_id: 'group-B', bot_id: 'bot-B', event_date: '2026-07-21', group_name: 'Beta Group' },
       ];
+    },
+    async getTelegramGroup(id) {
+      return id === 'group-A'
+        ? { id, bot_id: 'bot-A' }
+        : id === 'group-B'
+          ? { id, bot_id: 'bot-B' }
+          : null;
     },
     async getAllocation(eventId) {
       if (eventId === 'e1') {
@@ -1563,6 +1570,21 @@ test('deployment sheet exports a tenant-scoped person-by-date roster', async () 
     assert.equal(sheet.views[0].ySplit, 1);
     assert.equal(sheet.getCell('C2').alignment.wrapText, true);
     assert.equal(sheet.getCell('C2').border.top.style, 'thin');
+
+    const groupXlsx = await fetch(
+      `${baseUrl}/api/confirmed-slots.xlsx?telegram_group_id=group-A`,
+      { headers: { Authorization: 'Bearer userA' } }
+    );
+    assert.equal(groupXlsx.status, 200);
+    const groupWorkbook = new ExcelJS.Workbook();
+    await groupWorkbook.xlsx.load(Buffer.from(await groupXlsx.arrayBuffer()));
+    assert.deepEqual(groupWorkbook.getWorksheet('Deployment').getRow(1).values.slice(1), [
+      'Telegram handle', 'Name', '20-Jul', '22-Jul',
+    ]);
+    assert.equal((await fetch(
+      `${baseUrl}/api/confirmed-slots.xlsx?telegram_group_id=group-B`,
+      { headers: { Authorization: 'Bearer userA' } }
+    )).status, 404);
 
     // Admin can scope by bot_id; CSV quoting handles a comma in the name.
     const adminCsv = (await (await fetch(`${baseUrl}/api/confirmed-slots.csv?bot_id=bot-B`, { headers: { Authorization: 'Bearer admin' } })).text()).replace(/^﻿/, '');

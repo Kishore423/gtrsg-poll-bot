@@ -45,9 +45,12 @@ function formatSheetDate(iso) {
   return `${Number(match[3])}-${SHEET_MONTHS[Number(match[2]) - 1]}`;
 }
 
-async function collectDeploymentRoster(db, appUser, requestedBotId = null) {
+async function collectDeploymentRoster(db, appUser, requestedBotId = null, requestedGroupId = null) {
   let rows = filterRowsByUserBot(await db.listScheduledPolls(), appUser);
   if (requestedBotId) rows = rows.filter((row) => String(row.bot_id) === requestedBotId);
+  if (requestedGroupId) {
+    rows = rows.filter((row) => String(row.telegram_group_id) === requestedGroupId);
+  }
 
   const seenEvents = new Set();
   const events = [];
@@ -797,7 +800,16 @@ function createServer(db, telegram, options = {}) {
     const requestedBotId = req.appUser?.role === 'admin' && req.query.bot_id
       ? String(req.query.bot_id)
       : null;
-    const { dates, people } = await collectDeploymentRoster(db, req.appUser, requestedBotId);
+    const requestedGroupId = req.query.telegram_group_id
+      ? String(req.query.telegram_group_id)
+      : null;
+    if (requestedGroupId) await assertGroupAccess(db, req.appUser, requestedGroupId);
+    const { dates, people } = await collectDeploymentRoster(
+      db,
+      req.appUser,
+      requestedBotId,
+      requestedGroupId
+    );
     const header = ['Name', 'Telegram handle', ...dates.map(formatSheetDate)];
     const lines = [header];
     for (const person of people) {
@@ -823,7 +835,16 @@ function createServer(db, telegram, options = {}) {
     const requestedBotId = req.appUser?.role === 'admin' && req.query.bot_id
       ? String(req.query.bot_id)
       : null;
-    const roster = await collectDeploymentRoster(db, req.appUser, requestedBotId);
+    const requestedGroupId = req.query.telegram_group_id
+      ? String(req.query.telegram_group_id)
+      : null;
+    if (requestedGroupId) await assertGroupAccess(db, req.appUser, requestedGroupId);
+    const roster = await collectDeploymentRoster(
+      db,
+      req.appUser,
+      requestedBotId,
+      requestedGroupId
+    );
     const workbook = await buildDeploymentWorkbook({ ...roster, formatDate: formatSheetDate });
     res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.set('Content-Disposition',

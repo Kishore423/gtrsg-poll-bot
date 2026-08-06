@@ -169,7 +169,7 @@ Navigation is a 64px operations-ink band. Links are square, full-height cells. H
 Tables use an operations-ink header, soft ruled rows, alternating bands, and green-soft hover. Managed-group rows use border-separated white bands and an inset green selection rule.
 
 ### Command Dialog
-The group command dialog is `min(92vw, 570px)` with 4px corners and high elevation. Workflow choices are `4.75rem` ruled rows.
+The group command dialog is `min(92vw, 570px)` with 4px corners and high elevation. Workflow choices are `4.75rem` ruled rows. Its deployment command names the selected group's earliest and latest poll dates and downloads that group's person-by-date workbook.
 
 ## Do's and Don'ts
 

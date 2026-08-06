@@ -115,10 +115,13 @@ test('managed workflows stay bound to the clicked group without duplicate select
   assert.match(html, /type="hidden" name="telegram_group_id"/);
   assert.match(html, /id="weekly-send-test"/);
   assert.match(html, /id="send-test-poll"/);
-  assert.equal((html.match(/class="secondary workflow-action"/g) || []).length, 3);
+  assert.equal((html.match(/class="secondary workflow-action"/g) || []).length, 4);
   assert.match(html, /data-lucide="calendar-range"/);
   assert.match(html, /data-lucide="calendar-x-2"/);
   assert.match(html, /data-lucide="square-pen"/);
+  assert.match(html, /id="group-deployment-sheet"/);
+  assert.match(html, /id="group-deployment-sheet-label"/);
+  assert.match(html, /data-lucide="file-spreadsheet"/);
   assert.match(theme, /\.group-dialog-actions\s*\{[\s\S]*?grid-template-columns:\s*1fr/);
   assert.doesNotMatch(source, /class="danger-link delete-group"/);
   assert.doesNotMatch(source, /querySelectorAll\('\.delete-group'\)/);
@@ -277,9 +280,13 @@ test('weekly default and one-off scheduling show group-specific success popups',
   assert.match(source, /actionFeedbackMessage\.textContent = message/);
 });
 
-test('deployment sheet downloads the formatted Excel workbook', () => {
-  const source = readFileSync(join(__dirname, '..', 'public', 'polls.js'), 'utf8');
-  assert.match(source, /\/api\/confirmed-slots\.xlsx/);
-  assert.match(source, /deployment-sheet-\$\{new Date\(\)\.toISOString\(\)\.slice\(0, 10\)\}\.xlsx/);
-  assert.doesNotMatch(source, /\/api\/confirmed-slots\.csv/);
+test('deployment sheet is downloaded from the selected group menu', () => {
+  const home = readFileSync(join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const polls = readFileSync(join(__dirname, '..', 'public', 'polls.html'), 'utf8');
+  const source = readFileSync(join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(home, /id="group-deployment-sheet"/);
+  assert.doesNotMatch(polls, /id="export-confirmed-btn"/);
+  assert.match(source, /\/api\/confirmed-slots\.xlsx\?telegram_group_id=/);
+  assert.match(source, /Deployment sheet for \$\{formatDeploymentDate\(dates\[0\]\)\} to /);
+  assert.match(source, /deployment-sheet-\$\{groupSlug \|\| 'telegram-group'\}-\$\{rangeSlug\}\.xlsx/);
 });
