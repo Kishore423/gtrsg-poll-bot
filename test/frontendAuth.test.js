@@ -66,7 +66,7 @@ test('every signed-in page includes the shared account actions', () => {
 test('Home and Polls expose an Admin nav item only through role-gated markup', () => {
   for (const file of ['index.html', 'polls.html']) {
     const html = readFileSync(join(__dirname, '..', 'public', file), 'utf8');
-    assert.match(html, /<li[^>]*data-admin-nav[^>]*hidden[^>]*><a href="\/admin">Admin<\/a><\/li>/);
+    assert.match(html, /<li[^>]*data-admin-nav[^>]*hidden[^>]*><a href="\/admin">[\s\S]*?<span>Admin<\/span><\/a><\/li>/);
   }
 
   const pollsSource = readFileSync(join(__dirname, '..', 'public', 'polls.js'), 'utf8');

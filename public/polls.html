@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- impeccable-disable flat-type-hierarchy -- dense monitoring rows use compact intermediate sizes; rendered heading levels remain distinct -->
 <html lang="en-GB">
 <head>
   <meta charset="utf-8" />
@@ -8,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
       --green: #128c7e;
@@ -29,7 +30,7 @@
     * { box-sizing: border-box; }
 
     body {
-      font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, system-ui, sans-serif;
+      font-family: 'Source Sans 3', -apple-system, 'Segoe UI', system-ui, sans-serif;
       margin: 0;
       padding: 0;
       color: var(--ink);
@@ -495,6 +496,14 @@
   <link rel="stylesheet" href="/theme.css" />
 </head>
 <body>
+  <!--
+  THESIS: Telegram scheduling as an airline movement roster, refusing the generic floating-card dashboard.
+  OWN-WORLD: Deep-ink navigation, cool roster paper, ruled dividers, compact status signals, and low layered elevation.
+  STORY: Managers filter the operating record, inspect poll state, and export deployments with minimal visual noise.
+  FIRST VIEWPORT: A shallow illustrated masthead leads into a dense filter ledger and an earliest-first poll movement table.
+  FORM: Balanced operations ledger, selected composition C; direction seed 0a844dda.
+  FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+  -->
 
   <!-- Auth overlay -->
   <div id="auth-overlay" class="auth-overlay" hidden>
@@ -527,9 +536,9 @@
   <nav>
     <a href="/" class="nav-brand"><span class="brand-mark" aria-hidden="true"><i data-lucide="send"></i></span>Telegram Poll Manager</a>
     <ul class="nav-links">
-      <li><a href="/">Home</a></li>
-      <li><a href="/polls.html" class="active">Polls</a></li>
-      <li data-admin-nav hidden><a href="/admin">Admin</a></li>
+      <li><a href="/"><i data-lucide="house" aria-hidden="true"></i><span>Home</span></a></li>
+      <li><a href="/polls.html" class="active"><i data-lucide="list-checks" aria-hidden="true"></i><span>Polls</span></a></li>
+      <li data-admin-nav hidden><a href="/admin"><i data-lucide="settings" aria-hidden="true"></i><span>Admin</span></a></li>
     </ul>
     <div class="nav-spacer"></div>
     <span id="nav-status"></span>

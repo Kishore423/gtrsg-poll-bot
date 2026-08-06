@@ -29,6 +29,7 @@ function renderRoleNavigation(user) {
   document.querySelectorAll('[data-admin-nav]').forEach((element) => {
     element.hidden = user?.role !== 'admin';
   });
+  window.refreshIcons?.();
 }
 
 function escapeHtml(value) {

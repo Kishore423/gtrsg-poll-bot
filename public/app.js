@@ -1777,6 +1777,7 @@ async function bootstrap() {
     document.querySelectorAll('[data-admin-nav]').forEach((element) => {
       element.hidden = false;
     });
+    window.refreshIcons?.();
     await loadAdminManagedUsers();
   }
   const releaseTimePicker = document.querySelector('[data-name="poll_release_time"]');

@@ -7,12 +7,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root { --green:#128c7e; --green-dark:#0d6b60; --green-light:#e7f7f4; --red:#c0392b; --red-light:#fdecea; --ink:#1c2230; --ink-soft:#5b6472; --border:#e3e7ed; --bg:#f4f6f8; }
     [hidden] { display:none !important; }
     * { box-sizing:border-box; }
-    body { margin:0; font-family:Inter,-apple-system,'Segoe UI',Roboto,system-ui,sans-serif; color:var(--ink); background:var(--bg); }
+    body { margin:0; font-family:'Source Sans 3',-apple-system,'Segoe UI',system-ui,sans-serif; color:var(--ink); background:var(--bg); }
     nav { position:sticky; top:0; z-index:10; height:56px; background:#fff; border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 1.5rem; gap:2rem; }
     .nav-brand { font-weight:700; color:var(--green-dark); text-decoration:none; }
     .nav-links { display:flex; gap:.25rem; list-style:none; margin:0; padding:0; }
@@ -121,6 +121,14 @@
   <link rel="stylesheet" href="/theme.css" />
 </head>
 <body>
+  <!--
+  THESIS: Telegram scheduling as an airline movement roster, refusing the generic floating-card dashboard.
+  OWN-WORLD: Deep-ink navigation, cool roster paper, ruled dividers, compact status signals, and low layered elevation.
+  STORY: Administrators approve a manager, map exactly one bot, and verify the resulting operating identity.
+  FIRST VIEWPORT: A shallow illustrated masthead leads into a compact provisioning docket and the authoritative user-to-bot roster.
+  FORM: Balanced operations ledger, selected composition C; direction seed 0a844dda.
+  FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+  -->
   <div id="auth-overlay" class="auth-overlay" hidden>
     <div class="auth-dialog" role="dialog" aria-modal="true">
       <h2>Sign in</h2>
@@ -150,9 +158,9 @@
   <nav>
     <a href="/" class="nav-brand"><span class="brand-mark" aria-hidden="true"><i data-lucide="send"></i></span>Telegram Poll Manager</a>
     <ul class="nav-links">
-      <li><a href="/">Home</a></li>
-      <li><a href="/polls.html">Polls</a></li>
-      <li><a href="/admin" class="active">Admin</a></li>
+      <li><a href="/"><i data-lucide="house" aria-hidden="true"></i><span>Home</span></a></li>
+      <li><a href="/polls.html"><i data-lucide="list-checks" aria-hidden="true"></i><span>Polls</span></a></li>
+      <li><a href="/admin" class="active"><i data-lucide="settings" aria-hidden="true"></i><span>Admin</span></a></li>
     </ul>
     <div class="nav-spacer"></div>
     <div class="nav-account">

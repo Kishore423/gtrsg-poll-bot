@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
       --green: #128c7e;
@@ -28,7 +28,7 @@
     * { box-sizing: border-box; }
 
     body {
-      font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, system-ui, sans-serif;
+      font-family: 'Source Sans 3', -apple-system, 'Segoe UI', system-ui, sans-serif;
       margin: 0;
       padding: 0;
       color: var(--ink);
@@ -387,11 +387,11 @@
     }
 
     .rule-panel {
-      border-left: 3px solid var(--green);
-      padding: 0.15rem 0 0.15rem 0.8rem;
+      border-top: 1px solid var(--green);
+      padding: 0.65rem 0 0;
     }
 
-    .rule-panel.psa { border-left-color: #3455a4; }
+    .rule-panel.psa { border-top-color: #3455a4; }
     .rule-panel strong { display: block; margin-bottom: 0.25rem; }
     .rule-panel span { color: var(--ink-soft); font-size: 0.86rem; line-height: 1.45; }
 
@@ -712,11 +712,11 @@
       font-size: 1rem;
       font-weight: 700;
       margin: 0 0 0.6rem;
-      padding-left: 0.6rem;
-      border-left: 3px solid var(--border);
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid var(--border);
     }
-    .service-heading-whcl { border-left-color: var(--green); color: var(--green-dark); }
-    .service-heading-psa { border-left-color: #3455a4; color: #3455a4; }
+    .service-heading-whcl { border-bottom-color: var(--green); color: var(--green-dark); }
+    .service-heading-psa { border-bottom-color: #3455a4; color: #3455a4; }
     .auth-overlay {
       position: fixed;
       inset: 0;
@@ -846,7 +846,15 @@
   </style>
   <link rel="stylesheet" href="/theme.css" />
 </head>
-<body>
+<body class="home-page">
+  <!--
+  THESIS: Telegram scheduling as an airline movement roster, refusing the generic floating-card dashboard.
+  OWN-WORLD: Deep-ink navigation, cool roster paper, ruled dividers, compact status signals, and low layered elevation.
+  STORY: Managers identify their group, confirm bot readiness, and open the correct scheduling workflow without losing context.
+  FIRST VIEWPORT: A shallow illustrated masthead and release ledger lead directly into managed group roster rows and their focused command docket.
+  FORM: Balanced operations ledger, selected composition C; direction seed 0a844dda.
+  FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+  -->
 
   <div id="auth-overlay" class="auth-overlay" hidden>
     <div class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title">
@@ -877,9 +885,9 @@
   <nav>
     <a href="/" class="nav-brand"><span class="brand-mark" aria-hidden="true"><i data-lucide="send"></i></span>Telegram Poll Manager</a>
     <ul class="nav-links">
-      <li><a href="/" class="active">Home</a></li>
-      <li><a href="/polls.html">Polls</a></li>
-      <li data-admin-only data-admin-nav hidden><a href="/admin">Admin</a></li>
+      <li><a href="/" class="active"><i data-lucide="house" aria-hidden="true"></i><span>Home</span></a></li>
+      <li><a href="/polls.html"><i data-lucide="list-checks" aria-hidden="true"></i><span>Polls</span></a></li>
+      <li data-admin-only data-admin-nav hidden><a href="/admin"><i data-lucide="settings" aria-hidden="true"></i><span>Admin</span></a></li>
     </ul>
     <div class="nav-spacer"></div>
     <div class="nav-account">
@@ -909,12 +917,26 @@
     <h2>Release rules</h2>
     <div class="rules-summary">
       <div class="rule-panel">
-        <strong>Wheelchair</strong>
-        <span>Each group sends one Monday–Sunday event week. Release lead time is configured with Gap weeks. Voting closes 1 day before each event at 08:00.</span>
+        <div class="rule-panel-heading">
+          <strong>Wheelchair</strong>
+          <span class="rule-status">Group controlled</span>
+        </div>
+        <dl class="rule-ledger">
+          <div><dt>Batch span</dt><dd>Mon–Sun · 7 polls max</dd></div>
+          <div><dt>Lead time</dt><dd>Set with Gap weeks</dd></div>
+          <div><dt>Voting closes</dt><dd>Day before · 08:00</dd></div>
+        </dl>
       </div>
       <div class="rule-panel psa">
-        <strong>PSA</strong>
-        <span>Each group sends one Monday–Sunday event week. Release lead time is configured with Gap weeks. Voting closes Friday before the event week at 08:00.</span>
+        <div class="rule-panel-heading">
+          <strong>PSA</strong>
+          <span class="rule-status">Group controlled</span>
+        </div>
+        <dl class="rule-ledger">
+          <div><dt>Batch span</dt><dd>Mon–Sun · 7 polls max</dd></div>
+          <div><dt>Lead time</dt><dd>Set with Gap weeks</dd></div>
+          <div><dt>Voting closes</dt><dd>Prior Friday · 08:00</dd></div>
+        </dl>
       </div>
     </div>
   </section>

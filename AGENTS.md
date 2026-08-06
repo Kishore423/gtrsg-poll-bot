@@ -531,3 +531,13 @@ as a function otherwise, causing 500s on `/`), `scripts/`, `test/` (7 suites).
 Secrets and deployment values live in ignored `.env` / Vercel env vars. Shared
 Codex defaults belong in `.codex/config.toml`; developer-specific overrides stay
 untracked.
+
+## Movement Roster UI
+
+Home, Polls, and Admin use the **Movement Roster** design system documented in
+`DESIGN.md`: deep-ink navigation, technical airport line-art, compact squared
+controls, ruled docket bands, and restrained structural depth. Home prioritizes
+release rules and managed groups before legacy tools. Skip days are specific
+calendar dates, and each Telegram group opens an editable weekly default template
+with its own timing and shifts. Preserve server-enforced tenant scoping and show
+cross-user controls only to admins.

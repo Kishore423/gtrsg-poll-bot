@@ -18,14 +18,22 @@
 
   const observer = new MutationObserver((mutations) => {
     const hasNewIcons = mutations.some((mutation) =>
-      [...mutation.addedNodes].some((node) =>
-        node.nodeType === 1 && (
-          node.matches?.('[data-lucide]:not(svg)') ||
-          node.querySelector?.('[data-lucide]:not(svg)')
+      mutation.type === 'attributes'
+        ? mutation.target.matches?.('[data-lucide]:not(svg)') ||
+          mutation.target.querySelector?.('[data-lucide]:not(svg)')
+        : [...mutation.addedNodes].some((node) =>
+          node.nodeType === 1 && (
+            node.matches?.('[data-lucide]:not(svg)') ||
+            node.querySelector?.('[data-lucide]:not(svg)')
+          )
         )
-      )
     );
     if (hasNewIcons) renderIcons();
   });
-  observer.observe(document.body, { childList: true, subtree: true });
+  observer.observe(document.body, {
+    attributes: true,
+    attributeFilter: ['hidden'],
+    childList: true,
+    subtree: true,
+  });
 })();
