@@ -276,3 +276,10 @@ test('weekly default and one-off scheduling show group-specific success popups',
   assert.match(source, /One-off poll scheduled for \$\{group\.group_name\}/);
   assert.match(source, /actionFeedbackMessage\.textContent = message/);
 });
+
+test('deployment sheet downloads the formatted Excel workbook', () => {
+  const source = readFileSync(join(__dirname, '..', 'public', 'polls.js'), 'utf8');
+  assert.match(source, /\/api\/confirmed-slots\.xlsx/);
+  assert.match(source, /deployment-sheet-\$\{new Date\(\)\.toISOString\(\)\.slice\(0, 10\)\}\.xlsx/);
+  assert.doesNotMatch(source, /\/api\/confirmed-slots\.csv/);
+});

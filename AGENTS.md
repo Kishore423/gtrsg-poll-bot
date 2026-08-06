@@ -298,15 +298,16 @@ Vercel Cron** for hosting/scheduling.
   returns the neutral **General** pill for anything other than `WHCL`/`PSA`
   (including per-user UUID bot ids); it previously defaulted every non-`PSA` value
   to green **Wheelchair**, so a PSA-bot group showed "Wheelchair".
-- **Deployment sheet (who is deployed where).** `GET /api/confirmed-slots.csv`
-  (tenant-scoped; admins may pass `?bot_id=`) streams a **pivoted roster** as
-  UTF-8 CSV (BOM for Excel): columns `Name, Telegram handle, <date>, <date>…`
-  (one column per event date, formatted `3-Aug` via `formatSheetDate`), one row
-  per person, each cell that person's confirmed shift label for that date (two
-  slots joined by ` ; `, blank when not deployed). Confirmed only; waiting-list
-  excluded. People keyed by immutable Telegram id (fallback handle/name). Polls
-  page **Deployment sheet** button (`#export-confirmed-btn`) downloads via
-  auth-wrapped `fetch` → blob; file name `deployment-sheet-<date>.csv`.
+- **Deployment sheet (who is deployed where).** The Polls page downloads
+  `GET /api/confirmed-slots.xlsx` (tenant-scoped; admins may pass `?bot_id=`) as
+  a formatted Excel roster with `Telegram handle`, `Name`, then chronological
+  event-date columns formatted `3-Aug`. Confirmed shifts are stacked as
+  `Shift: <label>` lines in bordered, wrapped cells; the header is frozen and
+  print-ready in landscape. `GET /api/confirmed-slots.csv` remains for
+  integrations. Confirmed only; waiting-list excluded. People are keyed by
+  immutable Telegram id (fallback handle/name). OFF/RD and staff-number fields
+  are not in the current data model. The button uses auth-wrapped `fetch` and
+  downloads `deployment-sheet-<date>.xlsx`.
 
 ## Bots (live)
 

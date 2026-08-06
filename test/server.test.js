@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
+const ExcelJS = require('exceljs');
 const { createMemoryDb } = require('../src/db/memory');
 const { createServer } = require('../src/server');
 
@@ -1541,6 +1542,27 @@ test('deployment sheet exports a tenant-scoped person-by-date roster', async () 
     // Waiting-list and the other bot's people are excluded.
     assert.doesNotMatch(lines.join('\n'), /Bob/);
     assert.doesNotMatch(lines.join('\n'), /Carol/);
+
+    const xlsx = await fetch(`${baseUrl}/api/confirmed-slots.xlsx`, {
+      headers: { Authorization: 'Bearer userA' },
+    });
+    assert.equal(xlsx.status, 200);
+    assert.match(xlsx.headers.get('content-type'),
+      /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/);
+    assert.match(xlsx.headers.get('content-disposition'), /\.xlsx"/);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(Buffer.from(await xlsx.arrayBuffer()));
+    const sheet = workbook.getWorksheet('Deployment');
+    assert.deepEqual(sheet.getRow(1).values.slice(1), [
+      'Telegram handle', 'Name', '20-Jul', '22-Jul',
+    ]);
+    assert.deepEqual(sheet.getRow(2).values.slice(1), [
+      '@alice', 'Alice', 'Shift: 0800-1700', 'Shift: 1030-1830',
+    ]);
+    assert.equal(sheet.views[0].xSplit, 2);
+    assert.equal(sheet.views[0].ySplit, 1);
+    assert.equal(sheet.getCell('C2').alignment.wrapText, true);
+    assert.equal(sheet.getCell('C2').border.top.style, 'thin');
 
     // Admin can scope by bot_id; CSV quoting handles a comma in the name.
     const adminCsv = (await (await fetch(`${baseUrl}/api/confirmed-slots.csv?bot_id=bot-B`, { headers: { Authorization: 'Bearer admin' } })).text()).replace(/^﻿/, '');

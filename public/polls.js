@@ -312,8 +312,8 @@ document.getElementById('export-confirmed-btn').addEventListener('click', async 
   try {
     const botFilter = filterBotInput?.value || '';
     const url = botFilter
-      ? `/api/confirmed-slots.csv?bot_id=${encodeURIComponent(botFilter)}`
-      : '/api/confirmed-slots.csv';
+      ? `/api/confirmed-slots.xlsx?bot_id=${encodeURIComponent(botFilter)}`
+      : '/api/confirmed-slots.xlsx';
     // Go through the auth-wrapped fetch so the session header is attached, then
     // download the blob (a plain <a href> would not carry the Authorization).
     const response = await fetch(url);
@@ -326,7 +326,7 @@ document.getElementById('export-confirmed-btn').addEventListener('click', async 
     const objectUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = objectUrl;
-    link.download = `deployment-sheet-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `deployment-sheet-${new Date().toISOString().slice(0, 10)}.xlsx`;
     document.body.appendChild(link);
     link.click();
     link.remove();

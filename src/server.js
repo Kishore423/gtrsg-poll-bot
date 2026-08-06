@@ -22,6 +22,7 @@ const {
 const { runScheduledPolls, runScheduledConfirmations, runScheduledClosures } = require('./productionScheduler');
 const { scopeGroups, assertGroupAccess, filterRowsByUserBot } = require('./tenancy');
 const { encryptToken, decryptToken, generateWebhookSecret } = require('./crypto');
+const { buildDeploymentWorkbook } = require('./deploymentWorkbook');
 
 const SERVICES = ['PRIMARY', 'WHCL', 'PSA', 'LOGIN'];
 const ROUTED_SERVICES = ['WHCL', 'PSA'];
@@ -42,6 +43,48 @@ function formatSheetDate(iso) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || '').slice(0, 10));
   if (!match) return String(iso || '');
   return `${Number(match[3])}-${SHEET_MONTHS[Number(match[2]) - 1]}`;
+}
+
+async function collectDeploymentRoster(db, appUser, requestedBotId = null) {
+  let rows = filterRowsByUserBot(await db.listScheduledPolls(), appUser);
+  if (requestedBotId) rows = rows.filter((row) => String(row.bot_id) === requestedBotId);
+
+  const seenEvents = new Set();
+  const events = [];
+  for (const row of rows) {
+    if (!row.event_id || seenEvents.has(row.event_id)) continue;
+    seenEvents.add(row.event_id);
+    events.push({ event_id: row.event_id, event_date: String(row.event_date || '').slice(0, 10) });
+  }
+  const dates = [...new Set(events.map((event) => event.event_date).filter(Boolean))].sort();
+
+  const people = new Map();
+  for (const event of events) {
+    const confirmed = (await db.getAllocation(event.event_id))
+      .filter((row) => row.status === 'confirmed')
+      .sort((a, b) => (a.display_order - b.display_order)
+        || ((a.confirmed_position || 0) - (b.confirmed_position || 0)));
+    for (const row of confirmed) {
+      const handle = row.telegram_username ? `@${row.telegram_username}` : '';
+      const key = row.telegram_user_id || handle || row.display_name || 'unknown';
+      if (!people.has(key)) {
+        people.set(key, {
+          name: row.display_name || handle || 'Unknown',
+          handle,
+          shifts: {},
+        });
+      }
+      const person = people.get(key);
+      person.shifts[event.event_date] = person.shifts[event.event_date]
+        ? `${person.shifts[event.event_date]} ; ${row.label || ''}`
+        : (row.label || '');
+    }
+  }
+
+  return {
+    dates,
+    people: [...people.values()].sort((a, b) => a.name.localeCompare(b.name)),
+  };
 }
 
 function safeEqual(a, b) {
@@ -745,7 +788,8 @@ function createServer(db, telegram, options = {}) {
 
   // Deployment sheet: a pivoted roster (one row per person, one column per event
   // date; each cell is that person's confirmed shift that day), tenant-scoped to
-  // the caller's bot. Downloads as CSV that opens directly in Excel.
+  // the caller's bot. CSV remains available for integrations; the UI downloads
+  // the formatted Excel workbook below.
   app.get('/api/confirmed-slots.csv', wrap(async (req, res) => {
     if (!db.listScheduledPolls || !db.getAllocation) {
       return res.status(501).json({ error: 'Supabase production database is required' });
@@ -753,48 +797,10 @@ function createServer(db, telegram, options = {}) {
     const requestedBotId = req.appUser?.role === 'admin' && req.query.bot_id
       ? String(req.query.bot_id)
       : null;
-    let rows = filterRowsByUserBot(await db.listScheduledPolls(), req.appUser);
-    if (requestedBotId) rows = rows.filter((row) => String(row.bot_id) === requestedBotId);
-
-    // One poll per event; collect the distinct event dates (columns).
-    const seenEvents = new Set();
-    const events = [];
-    for (const row of rows) {
-      if (!row.event_id || seenEvents.has(row.event_id)) continue;
-      seenEvents.add(row.event_id);
-      events.push({ event_id: row.event_id, event_date: String(row.event_date || '').slice(0, 10) });
-    }
-    const dates = [...new Set(events.map((event) => event.event_date).filter(Boolean))].sort();
-
-    // Build person rows: key by immutable Telegram id (fall back to handle/name),
-    // and record the confirmed shift label per date.
-    const people = new Map();
-    for (const event of events) {
-      const confirmed = (await db.getAllocation(event.event_id))
-        .filter((row) => row.status === 'confirmed')
-        .sort((a, b) => (a.display_order - b.display_order)
-          || ((a.confirmed_position || 0) - (b.confirmed_position || 0)));
-      for (const row of confirmed) {
-        const handle = row.telegram_username ? `@${row.telegram_username}` : '';
-        const key = row.telegram_user_id || handle || row.display_name || 'unknown';
-        if (!people.has(key)) {
-          people.set(key, {
-            name: row.display_name || handle || 'Unknown',
-            handle,
-            shifts: {},
-          });
-        }
-        const person = people.get(key);
-        // A person could hold two slots on one date; join them.
-        person.shifts[event.event_date] = person.shifts[event.event_date]
-          ? `${person.shifts[event.event_date]} ; ${row.label || ''}`
-          : (row.label || '');
-      }
-    }
-
+    const { dates, people } = await collectDeploymentRoster(db, req.appUser, requestedBotId);
     const header = ['Name', 'Telegram handle', ...dates.map(formatSheetDate)];
     const lines = [header];
-    for (const person of [...people.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const person of people) {
       lines.push([
         person.name,
         person.handle,
@@ -808,6 +814,21 @@ function createServer(db, telegram, options = {}) {
       `attachment; filename="deployment-sheet-${new Date().toISOString().slice(0, 10)}.csv"`);
     // BOM so Excel reads UTF-8 handles/names correctly.
     res.send(`﻿${csv}`);
+  }));
+
+  app.get('/api/confirmed-slots.xlsx', wrap(async (req, res) => {
+    if (!db.listScheduledPolls || !db.getAllocation) {
+      return res.status(501).json({ error: 'Supabase production database is required' });
+    }
+    const requestedBotId = req.appUser?.role === 'admin' && req.query.bot_id
+      ? String(req.query.bot_id)
+      : null;
+    const roster = await collectDeploymentRoster(db, req.appUser, requestedBotId);
+    const workbook = await buildDeploymentWorkbook({ ...roster, formatDate: formatSheetDate });
+    res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.set('Content-Disposition',
+      `attachment; filename="deployment-sheet-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    res.send(workbook);
   }));
 
   const requireClearPollsPassword = (req, res) => {
