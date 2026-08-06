@@ -592,4 +592,7 @@ managed groups before legacy tools and does not show a separate release-rules
 summary. Skip days are specific
 calendar dates, and each Telegram group opens an editable weekly default template
 with its own timing and shifts. Preserve server-enforced tenant scoping and show
-cross-user controls only to admins.
+cross-user controls only to admins. The shared readability floor is approximately
+17px for body and control text, 14-15px for compact labels and table headers, and
+larger proportional headings; mobile navigation remains compact without dropping
+back to the former small-text scale.

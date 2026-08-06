@@ -1382,3 +1382,115 @@ dialog {
     max-width: 100% !important;
   }
 }
+
+/* Readability scale: keep dense operations layouts legible at normal zoom. */
+body {
+  font-size: 1.0625rem !important;
+  line-height: 1.5;
+}
+
+.nav-brand {
+  font-size: 1.15rem !important;
+}
+
+.nav-links a,
+.nav-user {
+  font-size: 1rem !important;
+}
+
+.nav-user-avatar,
+.nav-account-status {
+  font-size: 0.9rem !important;
+}
+
+main > header h1,
+.page-header h1 {
+  font-size: clamp(2rem, 3vw, 2.35rem) !important;
+}
+
+main > header p,
+.page-header p {
+  font-size: 1.1rem !important;
+  line-height: 1.55;
+}
+
+.card h2 {
+  font-size: 1.35rem !important;
+}
+
+h3,
+.dialog-header h2,
+.modal-header h2,
+.group-dialog h2 {
+  font-size: 1.2rem !important;
+}
+
+p,
+.hint,
+.muted,
+.empty-state,
+.no-votes,
+.details-muted,
+.telegram-setup,
+.poll-meta,
+.timing-preview,
+.template-poll-preview,
+.nav-account-menu button,
+.schedule-row,
+.managed-group-row,
+td,
+.batch-table {
+  font-size: 1rem !important;
+}
+
+label,
+.filter-bar label,
+.shift-row label,
+th,
+.batch-table th,
+.pill,
+.status,
+.btn-sm {
+  font-size: 0.9rem !important;
+}
+
+input,
+select,
+textarea,
+button {
+  font-size: 1rem !important;
+}
+
+.workflow-label {
+  font-size: 1.15rem !important;
+}
+
+.workflow-copy,
+.dialog-header p {
+  font-size: 1rem !important;
+}
+
+.otp-code-input {
+  font-size: 1.35rem !important;
+}
+
+@media (max-width: 520px) {
+  body {
+    font-size: 1rem !important;
+  }
+
+  .nav-links a,
+  .nav-user {
+    font-size: 0.92rem !important;
+  }
+
+  main > header h1,
+  .page-header h1 {
+    font-size: 1.75rem !important;
+  }
+
+  main > header p,
+  .page-header p {
+    font-size: 1rem !important;
+  }
+}

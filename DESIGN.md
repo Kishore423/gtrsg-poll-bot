@@ -19,21 +19,23 @@ colors:
 typography:
   display:
     fontFamily: "Barlow Condensed, Arial Narrow, sans-serif"
-    fontSize: "clamp(1.55rem, 3vw, 2rem)"
+    fontSize: "clamp(2rem, 3vw, 2.35rem)"
     fontWeight: 700
     lineHeight: 1.2
     letterSpacing: "0"
   title:
     fontFamily: "Barlow Condensed, Arial Narrow, sans-serif"
-    fontSize: "1.1rem"
+    fontSize: "1.35rem"
     fontWeight: 700
     letterSpacing: "0"
   body:
     fontFamily: "Source Sans 3, Segoe UI, sans-serif"
+    fontSize: "1.0625rem"
+    lineHeight: 1.5
     letterSpacing: "0"
   label:
     fontFamily: "Barlow Condensed, Arial Narrow, sans-serif"
-    fontSize: "0.76rem"
+    fontSize: "0.9rem"
     fontWeight: 700
     letterSpacing: "0"
 rounded:
@@ -117,11 +119,11 @@ The palette resembles cool roster paper marked with dark ink and restrained oper
 
 Condensed headings and labels evoke manifests, movement boards, and printed operating forms. Source Sans 3 keeps dense instructions and records readable.
 
-- **Display** (700, `clamp(1.55rem, 3vw, 2rem)`, 1.2): Page mastheads.
-- **Title** (700, `1.1rem`): Docket and workflow headings.
-- **Body** (Source Sans 3): Instructions, values, records, and supporting copy.
-- **Label** (700, `0.76rem`, zero tracking): Form labels and operating metadata.
-- **Ledger Metadata** (700, `0.66rem`): Uppercase compact operating terms.
+- **Display** (700, `clamp(2rem, 3vw, 2.35rem)`, 1.2): Page mastheads.
+- **Title** (700, `1.35rem`): Docket and workflow headings.
+- **Body** (Source Sans 3, `1.0625rem`, 1.5): Instructions, values, records, and supporting copy.
+- **Label** (700, `0.9rem`, zero tracking): Form labels, table headers, and operating metadata.
+- **Compact Metadata** (700, `0.9rem`): Status pills and secondary operating terms.
 
 **The Condensed Command Rule.** Use Barlow Condensed for commands and hierarchy, not for long explanatory passages.
 
