@@ -165,11 +165,14 @@ Inputs and selects use white fill, `#afbec2` 1px borders, 3px corners, and `inse
 ### Navigation
 Navigation is a 64px operations-ink band. Links are square, full-height cells. Hover and active states use `#1d3843`; the active route adds a 3px `#31bd92` bottom rule.
 
-The optional **Deployment sheets** route is controlled by a compact switch in
-the account menu. It is hidden by default and uses the same active-route
-treatment when enabled. The switch is a user-level visibility preference; sheet
-readiness, grouping, and downloads remain scoped to one Telegram group and one
-confirmed event week.
+For normal users, the optional **Deployment sheets** route is controlled by a
+compact switch in the account menu and hidden by default. Admins always see the
+route and its switch is locked on. The switch remains a normal-user visibility
+preference; sheet readiness, grouping, and downloads remain scoped to one
+Telegram group and one confirmed event week.
+
+The shared account menu uses a fully opaque white surface on every route; page
+content must never show through it.
 
 ### Tables and Rosters
 Tables use an operations-ink header, soft ruled rows, alternating bands, and green-soft hover. Managed-group rows use border-separated white bands and an inset green selection rule.
@@ -178,7 +181,7 @@ The deployment archive groups ruled download rows beneath week headers. Each
 row represents one Telegram group and one confirmed event week.
 
 ### Command Dialog
-The group command dialog is `min(92vw, 570px)` with 4px corners and high elevation. Workflow choices are `4.75rem` ruled rows. Its deployment command names the selected group's earliest and latest poll dates and downloads that group's person-by-date workbook.
+The group command dialog is `min(92vw, 570px)` with 4px corners and high elevation. Its three `4.75rem` ruled rows open the weekly template, skip dates, and custom poll workflows. Deployment downloads live only on the dedicated navbar page.
 
 ## Do's and Don'ts
 

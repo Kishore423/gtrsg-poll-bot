@@ -121,6 +121,10 @@ nav {
 }
 
 .nav-account-menu {
+  background: #fff !important;
+  color: var(--ink) !important;
+  opacity: 1 !important;
+  backdrop-filter: none !important;
   border-color: #d4dce1 !important;
   box-shadow: var(--shadow-mid) !important;
   transform-origin: top right;

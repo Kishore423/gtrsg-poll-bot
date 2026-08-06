@@ -149,7 +149,7 @@ async function bootstrap() {
   document.querySelectorAll('[data-admin-nav]').forEach((item) => {
     item.hidden = user.role !== 'admin';
   });
-  if (!user.deployment_sheets_enabled) {
+  if (user.role !== 'admin' && !user.deployment_sheets_enabled) {
     window.location.replace('/');
     return;
   }

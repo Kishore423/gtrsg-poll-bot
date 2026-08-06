@@ -768,7 +768,12 @@ test('admin group refresh scopes to one bot and disables stale memberships', asy
       assert.equal(method, 'getChatMember');
       assert.equal(params.user_id, 7001);
       checkedChats.push(String(params.chat_id));
-      return { status: String(params.chat_id) === '-1002' ? 'left' : 'administrator' };
+      if (String(params.chat_id) === '-1002') {
+        const error = new Error('Telegram getChatMember failed: 403 Forbidden: bot was kicked from the supergroup chat');
+        error.telegramCode = 403;
+        throw error;
+      }
+      return { status: 'administrator' };
     },
   };
   const server = createServer(db, telegram, {
@@ -1675,23 +1680,30 @@ test('deployment panel retains only the latest four fully confirmed event weeks'
   const server = createServer(db, makeTelegram(), {
     enableLegacyWorkflow: false,
     requireAdminAuth: true,
-    verifyUser: async (req) => req.headers.authorization === 'Bearer enabled'
-      ? {
+    verifyUser: async (req) => {
+      if (req.headers.authorization === 'Bearer enabled') return {
           id: 'user-A',
           telegram_user_id: '1',
           role: 'user',
           bot_id: 'bot-A',
           deployment_sheets_enabled: true,
-        }
-      : req.headers.authorization === 'Bearer disabled'
-        ? {
+        };
+      if (req.headers.authorization === 'Bearer disabled') return {
             id: 'user-B',
             telegram_user_id: '2',
             role: 'user',
             bot_id: 'bot-A',
             deployment_sheets_enabled: false,
-          }
-        : null,
+          };
+      if (req.headers.authorization === 'Bearer admin') return {
+        id: 'user-admin',
+        telegram_user_id: '3',
+        role: 'admin',
+        bot_id: null,
+        deployment_sheets_enabled: false,
+      };
+      return null;
+    },
   }).listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -1706,6 +1718,13 @@ test('deployment panel retains only the latest four fully confirmed event weeks'
     assert.equal((await fetch(`${baseUrl}/api/deployment-sheets`, {
       headers: { Authorization: 'Bearer disabled' },
     })).status, 403);
+    const adminResponse = await fetch(`${baseUrl}/api/deployment-sheets`, {
+      headers: { Authorization: 'Bearer admin' },
+    });
+    assert.equal(adminResponse.status, 200);
+    assert.deepEqual((await adminResponse.json()).map((sheet) => sheet.start_date), [
+      '2026-07-27', '2026-07-20', '2026-07-13', '2026-07-06',
+    ]);
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   }

@@ -322,7 +322,8 @@ function createServer(db, telegram, options = {}) {
   }));
 
   app.get('/api/deployment-sheets', wrap(async (req, res) => {
-    if (options.requireAdminAuth && !req.appUser?.deployment_sheets_enabled) {
+    if (options.requireAdminAuth && req.appUser?.role !== 'admin' &&
+        !req.appUser?.deployment_sheets_enabled) {
       return res.status(403).json({ error: 'Enable Deployment sheets from your account menu first' });
     }
     if (!db.listScheduledPolls) {
@@ -1010,10 +1011,21 @@ function createServer(db, telegram, options = {}) {
     if (requestedBotId && req.query.refresh === '1' && db.setTelegramGroupEnabledByChatAndBot) {
       const me = await telegram.getMe(requestedBotId);
       const membershipRows = await Promise.all(groups.map(async (group) => {
-        const membership = await telegram.call(requestedBotId, 'getChatMember', {
-          chat_id: group.telegram_chat_id,
-          user_id: me.id,
-        });
+        let membership;
+        try {
+          membership = await telegram.call(requestedBotId, 'getChatMember', {
+            chat_id: group.telegram_chat_id,
+            user_id: me.id,
+          });
+        } catch (error) {
+          if (Number(error?.telegramCode) !== 403) throw error;
+          await db.setTelegramGroupEnabledByChatAndBot(
+            group.telegram_chat_id,
+            requestedBotId,
+            false,
+          );
+          return null;
+        }
         const active = !['left', 'kicked'].includes(membership.status);
         if (!active) {
           await db.setTelegramGroupEnabledByChatAndBot(

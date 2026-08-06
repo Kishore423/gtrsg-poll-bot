@@ -12,7 +12,12 @@ function loadAuthClient(nodes) {
   };
   const context = {
     Headers,
-    document: { getElementById: (id) => nodes[id] || null },
+    document: {
+      getElementById: (id) => nodes[id] || null,
+      querySelectorAll: (selector) => selector === '[data-deployment-nav]'
+        ? (nodes.deploymentNavItems || [])
+        : [],
+    },
     sessionStorage: {
       getItem: (key) => storage.get(key) || null,
       removeItem: (key) => storage.delete(key),
@@ -55,6 +60,7 @@ test('navbar renders the admin-managed Telegram display name', () => {
 });
 
 test('every signed-in page includes the shared account actions', () => {
+  const theme = readFileSync(join(__dirname, '..', 'public', 'theme.css'), 'utf8');
   for (const file of ['index.html', 'polls.html', 'admin.html', 'deployments.html']) {
     const html = readFileSync(join(__dirname, '..', 'public', file), 'utf8');
     assert.match(html, /id="nav-upload-photo"/);
@@ -62,9 +68,11 @@ test('every signed-in page includes the shared account actions', () => {
     assert.match(html, /id="nav-deployment-sheets-toggle"/);
     assert.match(html, /id="nav-sign-out"/);
   }
+  assert.match(theme, /\.nav-account-menu\s*\{[\s\S]*?background:\s*#fff\s*!important/);
+  assert.match(theme, /\.nav-account-menu\s*\{[\s\S]*?opacity:\s*1\s*!important/);
 });
 
-test('deployment sheets navigation is user-controlled and defaults hidden', () => {
+test('deployment sheets navigation is user-controlled for users and always available to admins', () => {
   for (const file of ['index.html', 'polls.html', 'admin.html', 'deployments.html']) {
     const html = readFileSync(join(__dirname, '..', 'public', file), 'utf8');
     assert.match(html, /<li data-deployment-nav hidden>/);
@@ -72,10 +80,34 @@ test('deployment sheets navigation is user-controlled and defaults hidden', () =
   const authSource = readFileSync(join(__dirname, '..', 'public', 'telegram-auth.js'), 'utf8');
   const pageSource = readFileSync(join(__dirname, '..', 'public', 'deployments.js'), 'utf8');
   assert.match(authSource, /\/api\/me\/deployment-sheets/);
-  assert.match(authSource, /item\.hidden = !renderedUser\.deployment_sheets_enabled/);
+  assert.match(authSource, /renderedUser\.role === 'admin'/);
+  assert.match(authSource, /deploymentSheetsToggle\.disabled = renderedUser\.role === 'admin'/);
+  assert.match(pageSource, /user\.role !== 'admin' && !user\.deployment_sheets_enabled/);
   assert.match(pageSource, /\/api\/deployment-sheets/);
   assert.match(pageSource, /start_date: button\.dataset\.startDate/);
   assert.match(pageSource, /end_date: button\.dataset\.endDate/);
+
+  const adminNavItem = { hidden: true };
+  const toggle = { checked: false, disabled: false, title: '' };
+  const auth = loadAuthClient({
+    'nav-user': { hidden: true },
+    'nav-user-name': { textContent: '', title: '' },
+    'nav-user-avatar': {
+      textContent: '',
+      style: {},
+      classList: { toggle() {} },
+    },
+    'nav-deployment-sheets-toggle': toggle,
+    deploymentNavItems: [adminNavItem],
+  });
+  auth.renderUser({
+    role: 'admin',
+    telegram_display_name: 'Admin',
+    deployment_sheets_enabled: false,
+  });
+  assert.equal(adminNavItem.hidden, false);
+  assert.equal(toggle.checked, true);
+  assert.equal(toggle.disabled, true);
 });
 
 test('Home and Polls expose an Admin nav item only through role-gated markup', () => {
@@ -130,13 +162,11 @@ test('managed workflows stay bound to the clicked group without duplicate select
   assert.match(html, /type="hidden" name="telegram_group_id"/);
   assert.match(html, /id="weekly-send-test"/);
   assert.match(html, /id="send-test-poll"/);
-  assert.equal((html.match(/class="secondary workflow-action"/g) || []).length, 4);
+  assert.equal((html.match(/class="secondary workflow-action"/g) || []).length, 3);
   assert.match(html, /data-lucide="calendar-range"/);
   assert.match(html, /data-lucide="calendar-x-2"/);
   assert.match(html, /data-lucide="square-pen"/);
-  assert.match(html, /id="group-deployment-sheet"/);
-  assert.match(html, /id="group-deployment-sheet-label"/);
-  assert.match(html, /data-lucide="file-spreadsheet"/);
+  assert.doesNotMatch(html, /id="group-deployment-sheet"/);
   assert.match(theme, /\.group-dialog-actions\s*\{[\s\S]*?grid-template-columns:\s*1fr/);
   assert.doesNotMatch(source, /class="danger-link delete-group"/);
   assert.doesNotMatch(source, /querySelectorAll\('\.delete-group'\)/);
@@ -298,13 +328,13 @@ test('weekly default and one-off scheduling show group-specific success popups',
   assert.match(source, /actionFeedbackMessage\.textContent = message/);
 });
 
-test('deployment sheet is downloaded from the selected group menu', () => {
+test('deployment sheets are downloaded only from the dedicated navbar page', () => {
   const home = readFileSync(join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const polls = readFileSync(join(__dirname, '..', 'public', 'polls.html'), 'utf8');
   const source = readFileSync(join(__dirname, '..', 'public', 'app.js'), 'utf8');
-  assert.match(home, /id="group-deployment-sheet"/);
+  const deploymentSource = readFileSync(join(__dirname, '..', 'public', 'deployments.js'), 'utf8');
+  assert.doesNotMatch(home, /id="group-deployment-sheet"/);
   assert.doesNotMatch(polls, /id="export-confirmed-btn"/);
-  assert.match(source, /\/api\/confirmed-slots\.xlsx\?telegram_group_id=/);
-  assert.match(source, /Deployment sheet for \$\{formatDeploymentDate\(dates\[0\]\)\} to /);
-  assert.match(source, /deployment-sheet-\$\{groupSlug \|\| 'telegram-group'\}-\$\{rangeSlug\}\.xlsx/);
+  assert.doesNotMatch(source, /\/api\/confirmed-slots\.xlsx\?telegram_group_id=/);
+  assert.match(deploymentSource, /\/api\/confirmed-slots\.xlsx\?\$\{params\}/);
 });

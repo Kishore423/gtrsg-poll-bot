@@ -63,7 +63,8 @@ Test polls do not affect your real template or scheduled polls.
 ## Download the deployment sheet
 
 1. Open your account menu from your name in the navigation bar.
-2. Turn on **Deployment sheets**. This switch is off by default.
+2. If you are a normal user, turn on **Deployment sheets**. Admins have it
+   enabled automatically.
 3. Open **Deployment sheets** from the navigation bar.
 4. Find the confirmed week and Telegram group you need.
 5. Click **Download Excel**.
@@ -74,7 +75,8 @@ blank if they are not deployed. The header stays visible while you scroll. Only
 confirmed people are included. A sheet appears only after every poll currently
 in that group's Monday-Sunday batch has had its confirmation sent. The panel
 shows the latest four confirmed event weeks across all groups available to your
-account.
+account. Admins see groups across all users; normal users see only groups
+belonging to their assigned bot.
 
 ## View a poll's details
 

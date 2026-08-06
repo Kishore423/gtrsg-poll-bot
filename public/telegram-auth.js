@@ -178,12 +178,18 @@
       avatar.title = renderedUser.profile_photo_data ? 'View profile picture' : '';
     }
     container.hidden = false;
+    const hasDeploymentAccess = renderedUser.role === 'admin'
+      || Boolean(renderedUser.deployment_sheets_enabled);
     document.querySelectorAll?.('[data-deployment-nav]').forEach((item) => {
-      item.hidden = !renderedUser.deployment_sheets_enabled;
+      item.hidden = !hasDeploymentAccess;
     });
     const { deploymentSheetsToggle } = elements();
     if (deploymentSheetsToggle) {
-      deploymentSheetsToggle.checked = Boolean(renderedUser.deployment_sheets_enabled);
+      deploymentSheetsToggle.checked = hasDeploymentAccess;
+      deploymentSheetsToggle.disabled = renderedUser.role === 'admin';
+      deploymentSheetsToggle.title = renderedUser.role === 'admin'
+        ? 'Deployment sheets are always available to admins'
+        : '';
     }
     window.refreshIcons?.();
   }

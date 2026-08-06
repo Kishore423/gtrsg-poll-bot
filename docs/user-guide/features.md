@@ -76,10 +76,12 @@ on the Home page instead.
 
 ## Deployment sheets page
 
-The account-level **Deployment sheets** switch is off by default. When enabled,
-the page appears in the navigation bar and lists the latest four fully confirmed
-event weeks. Each Telegram group has its own Excel download for each week. See
-[Common workflows](common-workflows.md#download-the-deployment-sheet).
+For normal users, the account-level **Deployment sheets** switch is off by
+default. When enabled, the page appears in the navigation bar. Admins always see
+the page and can access deployment sheets across all users' Telegram groups.
+The page lists the latest four fully confirmed event weeks, with one Excel
+download per Telegram group and week. Deployment downloads do not appear in the
+Home group menu. See [Common workflows](common-workflows.md#download-the-deployment-sheet).
 
 ## Admin page (admins only)
 

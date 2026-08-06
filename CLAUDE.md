@@ -145,7 +145,8 @@ Telegram bot OTP and a signed application session; roles are **admin | user**.
   `(Telegram chat, bot)` row, so managed lists contain current memberships only;
   a later add or group message re-enables the same row. Admin user selection also
   refreshes that bot's saved memberships against Telegram to retire stale rows
-  whose removal webhook predates this behavior.
+  whose removal webhook predates this behavior. Telegram's 403 "bot was kicked"
+  reply disables that stale group and does not fail the rest of the list.
 - Task 8 migration: `npm run migrate:multi-tenant` creates/reuses WHCL and PSA
   bot records from `TELEGRAM_TOKEN_WHCL` / `TELEGRAM_TOKEN_PSA`, assigns legacy
   `telegram_groups.bot_id` service rows to `bot_ref`, and upserts the seed
@@ -383,22 +384,22 @@ The app currently ships BOTH, selected at runtime:
   returns the neutral **General** pill for anything other than `WHCL`/`PSA`
   (including per-user UUID bot ids); it previously defaulted every non-`PSA` value
   to green **Wheelchair**, so a PSA-bot group showed "Wheelchair".
-- **Deployment sheet (who is deployed where).** The Home page group command
-  menu downloads `GET /api/confirmed-slots.xlsx?telegram_group_id=<id>` as
-  a formatted Excel roster with `Telegram handle`, `Name`, then chronological
+- **Deployment sheet (who is deployed where).** The dedicated **Deployment
+  sheets** navbar page downloads
+  `GET /api/confirmed-slots.xlsx?telegram_group_id=<id>` as a formatted Excel
+  roster with `Telegram handle`, `Name`, then chronological
   event-date columns formatted `3-Aug`. Confirmed shifts are stacked as
   `Shift: <label>` lines in bordered, wrapped cells; the header is frozen and
   print-ready in landscape. `GET /api/confirmed-slots.csv` remains for
   integrations. Confirmed only; waiting-list excluded. People are keyed by
   immutable Telegram id (fallback handle/name). OFF/RD and staff-number fields
-  are not in the current data model. The command label shows the selected
-  group's earliest and latest poll dates, and remains disabled when that group
-  has no poll dates. Both export endpoints assert access to the requested group;
-  the Polls page no longer exposes a bot-wide deployment button. The command
-  uses auth-wrapped `fetch` and downloads
+  are not in the current data model. Both export endpoints assert access to the
+  requested group. The Home group command dialog and Polls page expose no
+  deployment download. The navbar page uses auth-wrapped `fetch` and downloads
   `deployment-sheet-<group>-<start>-to-<end>.xlsx`.
-  Users may also enable the account-level **Deployment sheets** panel from their
-  navbar account menu. The panel lists one download per Telegram group and
+  Normal users enable the account-level panel from their navbar account menu;
+  admins receive it by default and see groups across every user/bot. The panel
+  lists one download per Telegram group and
   Monday-Sunday event batch only after every existing poll in that batch has a
   `sent` or `updated` confirmation. It retains the latest four distinct confirmed
   event weeks dynamically; older sheets disappear without deleting poll history.
@@ -556,8 +557,9 @@ live only in Vercel env + the local (gitignored) `.env`.
   handle as a fallback when no display name is set. Clicking that identity opens
   the shared account menu for profile-picture upload, the per-user
   **Deployment sheets** navbar toggle, and Sign out. The toggle is stored in
-  `app_users.deployment_sheets_enabled`, defaults false, and affects only that
-  user's navigation. Profile pictures are resized to 256x256 WebP in the browser, capped at 200 KB by the
+  `app_users.deployment_sheets_enabled` and defaults false for normal users.
+  Admins always see the page and their switch is locked on. The shared account
+  menu is opaque white on every route. Profile pictures are resized to 256x256 WebP in the browser, capped at 200 KB by the
   API, and stored in `app_users.profile_photo_data`; users can update only their
   own picture. Admin user rows expose an Edit dialog with a read-only Telegram
   handle plus editable display name, role, enabled status, and dedicated bot

@@ -26,8 +26,6 @@ const groupActionDialog = document.getElementById('group-action-dialog');
 const groupActionTitle = document.getElementById('group-action-title');
 const groupActionSubtitle = document.getElementById('group-action-subtitle');
 const groupActionClose = document.getElementById('group-action-close');
-const groupDeploymentSheetBtn = document.getElementById('group-deployment-sheet');
-const groupDeploymentSheetLabel = document.getElementById('group-deployment-sheet-label');
 const actionFeedbackDialog = document.getElementById('action-feedback-dialog');
 const actionFeedbackMessage = document.getElementById('action-feedback-message');
 const actionFeedbackClose = document.getElementById('action-feedback-close');
@@ -57,7 +55,6 @@ let selectedManagedGroupId = '';
 let adminManagedUsers = [];
 let selectedAdminManagedUserId = '';
 let adminManagedContextRefreshPromise = null;
-let selectedGroupDeploymentRange = null;
 
 const managedWorkflowSections = [managedScheduleSection, skipDaysSection, advancePollSection].filter(Boolean);
 
@@ -98,7 +95,6 @@ async function openGroupActionDialog(telegramGroupId) {
   groupActionTitle.textContent = managedGroupOptionLabel(group);
   groupActionSubtitle.textContent = group.telegram_chat_id;
   groupActionDialog.hidden = false;
-  void updateGroupDeploymentSheetLabel(telegramGroupId);
 }
 
 function closeGroupActionDialog() {
@@ -110,82 +106,6 @@ function showActionFeedback(message) {
   actionFeedbackMessage.textContent = message;
   actionFeedbackDialog.hidden = false;
   actionFeedbackClose?.focus();
-}
-
-function formatDeploymentDate(isoDate) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(isoDate || '').slice(0, 10));
-  if (!match) return String(isoDate || '');
-  const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(match[2]) - 1];
-  return `${Number(match[3])} ${month} ${match[1]}`;
-}
-
-async function updateGroupDeploymentSheetLabel(telegramGroupId) {
-  if (!groupDeploymentSheetBtn || !groupDeploymentSheetLabel) return;
-  selectedGroupDeploymentRange = null;
-  groupDeploymentSheetBtn.disabled = true;
-  groupDeploymentSheetLabel.textContent = 'Checking deployment sheet dates...';
-  try {
-    const response = await fetch('/api/scheduled-polls');
-    if (!response.ok) throw new Error('Unable to load poll dates');
-    const dates = [...new Set((await response.json())
-      .filter((poll) => String(poll.telegram_group_id) === String(telegramGroupId))
-      .map((poll) => String(poll.event_date || '').slice(0, 10))
-      .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)))]
-      .sort();
-    if (String(selectedManagedGroupId) !== String(telegramGroupId)) return;
-    if (dates.length === 0) {
-      groupDeploymentSheetLabel.textContent = 'Deployment sheet (no poll dates yet)';
-      groupDeploymentSheetBtn.title = 'Create polls for this group before exporting a deployment sheet';
-      return;
-    }
-    selectedGroupDeploymentRange = { start: dates[0], end: dates[dates.length - 1] };
-    groupDeploymentSheetLabel.textContent =
-      `Deployment sheet for ${formatDeploymentDate(dates[0])} to ${formatDeploymentDate(dates[dates.length - 1])}`;
-    groupDeploymentSheetBtn.title = 'Download this group\'s person-by-date deployment sheet';
-    groupDeploymentSheetBtn.disabled = false;
-  } catch {
-    if (String(selectedManagedGroupId) !== String(telegramGroupId)) return;
-    groupDeploymentSheetLabel.textContent = 'Deployment sheet for this group';
-    groupDeploymentSheetBtn.title = 'Download this group\'s person-by-date deployment sheet';
-    groupDeploymentSheetBtn.disabled = false;
-  }
-}
-
-async function downloadGroupDeploymentSheet() {
-  const telegramGroupId = selectedManagedGroupId;
-  const group = groupById(telegramGroupId);
-  if (!telegramGroupId || !group || !groupDeploymentSheetBtn || groupDeploymentSheetBtn.disabled) return;
-  setStatus(`Building deployment sheet for ${group.group_name}...`, 'pending');
-  try {
-    const response = await fetch(
-      `/api/confirmed-slots.xlsx?telegram_group_id=${encodeURIComponent(telegramGroupId)}`
-    );
-    if (!response.ok) {
-      const result = await response.json().catch(() => ({}));
-      throw new Error(result.error || 'Unable to export confirmed slots');
-    }
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const groupSlug = String(group.group_name || 'telegram-group')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
-    const rangeSlug = selectedGroupDeploymentRange
-      ? `${selectedGroupDeploymentRange.start}-to-${selectedGroupDeploymentRange.end}`
-      : new Date().toISOString().slice(0, 10);
-    link.href = objectUrl;
-    link.download = `deployment-sheet-${groupSlug || 'telegram-group'}-${rangeSlug}.xlsx`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(objectUrl);
-    closeGroupActionDialog();
-    showActionFeedback(`Deployment sheet downloaded for ${group.group_name}.`);
-    setStatus(`Deployment sheet downloaded for ${group.group_name}.`, 'success');
-  } catch (error) {
-    setStatus(`Error: ${error.message}`, 'error');
-  }
 }
 
 function closeActionFeedback() {
@@ -1150,7 +1070,6 @@ document.addEventListener('keydown', (event) => {
 groupActionDialog?.querySelectorAll('[data-group-workflow]').forEach((button) => {
   button.addEventListener('click', () => showManagedWorkflow(button.dataset.groupWorkflow));
 });
-groupDeploymentSheetBtn?.addEventListener('click', downloadGroupDeploymentSheet);
 templateAddSkipDateBtn?.addEventListener('click', addPollExclusion);
 managedScheduleForm.elements.poll_release_day_of_week.addEventListener('change', () => {
   updateTemplateTimingPreview();

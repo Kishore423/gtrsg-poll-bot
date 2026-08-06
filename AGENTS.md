@@ -73,6 +73,8 @@
 > Telegram can only refresh a private user's handle after that user opens
 > Login_bot. A `chat not found` refresh retains cached data and prompts the user
 > to press Start; genuine Telegram API failures remain errors.
+> Managed-group membership refresh treats Telegram's 403 "bot was kicked" reply
+> as a stale membership, disables that group, and continues loading other groups.
 > `app_users.login_bot_verified_at`, not a prefilled `telegram_user_id`, proves
 > Login_bot enrollment. Poll-bot-observed migration IDs remain unverified until
 > a matching private Login_bot `/start`; OTP and sessions must fail closed until
@@ -221,8 +223,9 @@ Vercel Cron** for hosting/scheduling.
   authentication, falling back to the Telegram handle when needed. Clicking the
   identity opens a shared account menu with profile-picture upload, a per-user
   **Deployment sheets** navbar toggle, and Sign out. The deployment toggle is
-  stored as `app_users.deployment_sheets_enabled`, defaults false, and affects
-  only the signed-in user's navigation.
+  stored as `app_users.deployment_sheets_enabled` and defaults false for normal
+  users. Admins always see Deployment sheets and their switch is locked on. The
+  shared account menu is an opaque white surface on every page.
   Uploads are resized to 256x256 WebP client-side, capped at 200 KB server-side,
   and saved to the caller's own `app_users.profile_photo_data`. Admin user rows
   have an Edit dialog with a read-only Telegram handle plus editable display
@@ -301,22 +304,22 @@ Vercel Cron** for hosting/scheduling.
   returns the neutral **General** pill for anything other than `WHCL`/`PSA`
   (including per-user UUID bot ids); it previously defaulted every non-`PSA` value
   to green **Wheelchair**, so a PSA-bot group showed "Wheelchair".
-- **Deployment sheet (who is deployed where).** The Home page group command
-  menu downloads `GET /api/confirmed-slots.xlsx?telegram_group_id=<id>` as
-  a formatted Excel roster with `Telegram handle`, `Name`, then chronological
+- **Deployment sheet (who is deployed where).** The dedicated **Deployment
+  sheets** navbar page downloads
+  `GET /api/confirmed-slots.xlsx?telegram_group_id=<id>` as a formatted Excel
+  roster with `Telegram handle`, `Name`, then chronological
   event-date columns formatted `3-Aug`. Confirmed shifts are stacked as
   `Shift: <label>` lines in bordered, wrapped cells; the header is frozen and
   print-ready in landscape. `GET /api/confirmed-slots.csv` remains for
   integrations. Confirmed only; waiting-list excluded. People are keyed by
   immutable Telegram id (fallback handle/name). OFF/RD and staff-number fields
-  are not in the current data model. The command label shows the selected
-  group's earliest and latest poll dates, and remains disabled when that group
-  has no poll dates. Both export endpoints assert access to the requested group;
-  the Polls page no longer exposes a bot-wide deployment button. The command
-  uses auth-wrapped `fetch` and downloads
+  are not in the current data model. Both export endpoints assert access to the
+  requested group. The Home group command dialog and Polls page expose no
+  deployment download. The navbar page uses auth-wrapped `fetch` and downloads
   `deployment-sheet-<group>-<start>-to-<end>.xlsx`.
-  Users may also enable the account-level **Deployment sheets** panel from their
-  navbar account menu. The panel lists one download per Telegram group and
+  Normal users enable the account-level panel from their navbar account menu;
+  admins receive it by default and see groups across every user/bot. The panel
+  lists one download per Telegram group and
   Monday-Sunday event batch only after every existing poll in that batch has a
   `sent` or `updated` confirmation. It retains the latest four distinct confirmed
   event weeks dynamically; older sheets disappear without deleting poll history.
