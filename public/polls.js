@@ -133,6 +133,21 @@ function populateBotFilter() {
     : '';
 }
 
+function groupFilterKey(group) {
+  const chatId = String(group?.telegram_chat_id || '').trim();
+  return chatId ? `chat:${chatId}` : `group:${String(group?.id || '')}`;
+}
+
+function uniqueGroupsByTelegramChat(groups) {
+  const seen = new Set();
+  return groups.filter((group) => {
+    const key = groupFilterKey(group);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function populateGroupFilter() {
   if (!filterGroupInput) return;
   const currentVal = filterGroupInput.value;
@@ -140,12 +155,14 @@ function populateGroupFilter() {
   const availableGroups = botFilter
     ? managedGroups.filter((group) => String(group.bot_id) === botFilter)
     : managedGroups;
+  const uniqueGroups = uniqueGroupsByTelegramChat(availableGroups);
   const optionsHtml = [
     '<option value="">All groups</option>',
-    ...availableGroups.map(g => `<option value="${g.id}">${escapeHtml(g.group_name)}</option>`),
+    ...uniqueGroups.map((group) =>
+      `<option value="${escapeHtml(groupFilterKey(group))}">${escapeHtml(group.group_name)}</option>`),
   ].join('\n');
   filterGroupInput.innerHTML = optionsHtml;
-  filterGroupInput.value = availableGroups.some((group) => String(group.id) === currentVal)
+  filterGroupInput.value = uniqueGroups.some((group) => groupFilterKey(group) === currentVal)
     ? currentVal
     : '';
 }
@@ -159,10 +176,13 @@ function applyFilters() {
 
   const filtered = scheduledPolls.filter((poll) => {
     const pollDate = String(poll.event_date).slice(0, 10);
+    const pollGroup = groupFilter
+      ? managedGroups.find((group) => String(group.id) === String(poll.telegram_group_id))
+      : null;
 
     if (dateFilter    && pollDate               !== dateFilter)    return false;
     if (botFilter     && String(poll.bot_id)     !== botFilter)     return false;
-    if (groupFilter   && poll.telegram_group_id !== groupFilter)   return false;
+    if (groupFilter   && groupFilterKey(pollGroup) !== groupFilter) return false;
     if (typeFilter    && pollTypeValue(poll)    !== typeFilter)    return false;
     return true;
   });

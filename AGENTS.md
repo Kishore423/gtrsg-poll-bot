@@ -429,6 +429,10 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   from the Admin roster; selecting a bot narrows both poll rows and the Telegram
   group choices. Normal users do not see that control and remain scoped
   server-side to their assigned bot.
+  Group filter options are keyed and deduplicated by immutable Telegram chat ID,
+  not by bot-specific `telegram_groups.id`. When multiple managed bots share one
+  chat, admins see one group option and selecting it includes matching poll rows
+  from every bot still allowed by the bot filter.
   The Polls page is a monitoring surface and intentionally exposes no bulk
   **Clear all polls** or individual **Remove** controls. Default polls are
   omitted through the template's persistent **Skip event dates** mechanism,

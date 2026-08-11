@@ -215,6 +215,15 @@ test('Polls date order is selectable for both users and admins', () => {
   assert.match(source, /filterDateOrderInput\.addEventListener\('change', applyFilters\)/);
 });
 
+test('Polls group filter deduplicates bot-specific rows for the same Telegram chat', () => {
+  const source = readFileSync(join(__dirname, '..', 'public', 'polls.js'), 'utf8');
+  assert.match(source, /function groupFilterKey\(group\)/);
+  assert.match(source, /`chat:\$\{chatId\}`/);
+  assert.match(source, /function uniqueGroupsByTelegramChat\(groups\)/);
+  assert.match(source, /const uniqueGroups = uniqueGroupsByTelegramChat\(availableGroups\)/);
+  assert.match(source, /groupFilterKey\(pollGroup\) !== groupFilter/);
+});
+
 test('admin provisioning and sign-in require only a Telegram handle', () => {
   const admin = readFileSync(join(__dirname, '..', 'public', 'admin.html'), 'utf8');
   for (const page of ['index.html', 'polls.html', 'admin.html']) {

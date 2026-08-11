@@ -68,7 +68,9 @@ The Polls page is a **read-only monitoring view** of scheduled polls. Use
 (latest first) order. The control is available to both users and admins.
 
 - **Filters:** filter by event date, Telegram group, and poll type (test, custom,
-  or batch default). Admins also get a bot filter.
+  or batch default). Admins also get a bot filter. A Telegram group appears only
+  once in the group menu even when more than one managed bot is registered in
+  that same group.
 - **Details:** each poll has a **Details** button that opens an in-page view of
   that poll.
 The Polls page intentionally has no bulk "clear all" or per-poll delete controls —
