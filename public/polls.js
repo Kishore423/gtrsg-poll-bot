@@ -85,13 +85,14 @@ function pollSortKey(poll) {
   ];
 }
 
-function sortPollsEarliestFirst(polls) {
+function sortPollsByDate(polls, direction = 'asc') {
+  const dateDirection = direction === 'desc' ? -1 : 1;
   return [...polls].sort((a, b) => {
     const left = pollSortKey(a);
     const right = pollSortKey(b);
     for (let index = 0; index < left.length; index += 1) {
       const comparison = String(left[index]).localeCompare(String(right[index]));
-      if (comparison !== 0) return comparison;
+      if (comparison !== 0) return index === 0 ? comparison * dateDirection : comparison;
     }
     return 0;
   });
@@ -103,6 +104,7 @@ const filterBotField     = document.getElementById('filter-bot-field');
 const filterBotInput     = document.getElementById('filter-bot');
 const filterGroupInput   = document.getElementById('filter-group');
 const filterTypeInput    = document.getElementById('filter-type');
+const filterDateOrderInput = document.getElementById('filter-date-order');
 const clearFiltersBtn    = document.getElementById('clear-filters-btn');
 
 function botFilterLabel(user) {
@@ -153,6 +155,7 @@ function applyFilters() {
   const botFilter     = filterBotInput?.value || '';
   const groupFilter   = filterGroupInput.value;
   const typeFilter    = filterTypeInput.value;
+  const dateOrder     = filterDateOrderInput.value;
 
   const filtered = scheduledPolls.filter((poll) => {
     const pollDate = String(poll.event_date).slice(0, 10);
@@ -163,7 +166,7 @@ function applyFilters() {
     if (typeFilter    && pollTypeValue(poll)    !== typeFilter)    return false;
     return true;
   });
-  visiblePolls = sortPollsEarliestFirst(filtered);
+  visiblePolls = sortPollsByDate(filtered, dateOrder);
   renderPollsTable(visiblePolls);
 }
 
@@ -175,14 +178,16 @@ filterBotInput?.addEventListener('change', () => {
 });
 filterGroupInput.addEventListener('change', applyFilters);
 filterTypeInput.addEventListener('change', applyFilters);
+filterDateOrderInput.addEventListener('change', applyFilters);
 
 clearFiltersBtn.addEventListener('click', () => {
   filterDateInput.value    = '';
   if (filterBotInput) filterBotInput.value = '';
   filterGroupInput.value   = '';
   filterTypeInput.value    = '';
+  filterDateOrderInput.value = 'asc';
   populateGroupFilter();
-  visiblePolls = sortPollsEarliestFirst(scheduledPolls);
+  visiblePolls = sortPollsByDate(scheduledPolls, 'asc');
   renderPollsTable(visiblePolls);
 });
 
@@ -302,7 +307,7 @@ function renderPollsTable(polls) {
 async function loadScheduledPolls() {
   const response = await fetch('/api/scheduled-polls');
   if (response.status === 501) return;
-  scheduledPolls = sortPollsEarliestFirst(await response.json());
+  scheduledPolls = sortPollsByDate(await response.json());
   applyFilters(); // re-render with current filter
 }
 

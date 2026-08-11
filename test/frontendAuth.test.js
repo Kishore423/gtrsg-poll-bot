@@ -204,6 +204,17 @@ test('Polls page gives admins a bot filter backed by the Admin roster', () => {
   assert.match(source, /managedGroups\.filter\(\(group\) => String\(group\.bot_id\) === botFilter\)/);
 });
 
+test('Polls date order is selectable for both users and admins', () => {
+  const html = readFileSync(join(__dirname, '..', 'public', 'polls.html'), 'utf8');
+  const source = readFileSync(join(__dirname, '..', 'public', 'polls.js'), 'utf8');
+  assert.match(html, /id="filter-date-order"/);
+  assert.match(html, /value="asc">Ascending \(earliest first\)/);
+  assert.match(html, /value="desc">Descending \(latest first\)/);
+  assert.match(source, /function sortPollsByDate\(polls, direction = 'asc'\)/);
+  assert.match(source, /sortPollsByDate\(filtered, dateOrder\)/);
+  assert.match(source, /filterDateOrderInput\.addEventListener\('change', applyFilters\)/);
+});
+
 test('admin provisioning and sign-in require only a Telegram handle', () => {
   const admin = readFileSync(join(__dirname, '..', 'public', 'admin.html'), 'utf8');
   for (const page of ['index.html', 'polls.html', 'admin.html']) {

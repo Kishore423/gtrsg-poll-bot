@@ -63,8 +63,9 @@ before the real thing:
 
 ## Polls page
 
-The Polls page is a **read-only monitoring view** of scheduled polls, ordered by
-event date (earliest first).
+The Polls page is a **read-only monitoring view** of scheduled polls. Use
+**Date order** to show event dates in ascending (earliest first) or descending
+(latest first) order. The control is available to both users and admins.
 
 - **Filters:** filter by event date, Telegram group, and poll type (test, custom,
   or batch default). Admins also get a bot filter.

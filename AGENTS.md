@@ -407,9 +407,10 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   test poll actions show visible feedback in production.
   The Polls page **Details** action uses an in-page modal instead of a browser alert,
   and generated poll action buttons are explicit `type="button"` to prevent accidental reloads.
-  The Polls page table is intentionally ordered by event date ascending
-  (earliest first, latest last), both from `listScheduledPolls()` and in the
-  frontend before rendering/filtering.
+  The Polls page defaults to event date ascending (earliest first), while a
+  shared **Date order** control lets both users and admins switch the visible
+  rows to descending (latest first). The frontend reapplies the selected order
+  after filtering and refreshing; tenant access remains server-scoped.
   Home and Polls both keep a role-gated **Admin** navbar item: `/api/me` reveals
   it for admins on every page load, while normal users never see it. Normal-user
   managed groups, weekly templates, and custom replacement polls remain scoped
@@ -423,7 +424,8 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   `public/theme.css`. The header artwork lives at
   `public/assets/poll-operations-header.png`.
   The filter bar filters by event date, Telegram group, and poll type (`test`,
-  `custom`, `batch_default`). Admins additionally get a bot filter populated
+  `custom`, `batch_default`) and sorts by date order. Admins additionally get a
+  bot filter populated
   from the Admin roster; selecting a bot narrows both poll rows and the Telegram
   group choices. Normal users do not see that control and remain scoped
   server-side to their assigned bot.
