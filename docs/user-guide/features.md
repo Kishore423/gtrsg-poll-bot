@@ -49,19 +49,19 @@ Use **Custom poll** to create a poll for a special date that isn't part of the
 weekly template. It starts from your saved template's shifts so you only edit the
 exceptions.
 
-### Test poll
+### Batch rehearsal
 
-The Home page can send **test polls** so you can check the message in Telegram
-before the real thing:
+Use **Rehearse actual batch** to check an upcoming weekly batch in Telegram
+before its real send time:
 
-- **Test template poll** sends the whole current release batch for the selected
-  group's saved template.
-- Test polls are clearly separate from real scheduled polls: they don't overwrite
-  your weekly template, don't delete existing scheduled polls, and don't block
-  automatic generation for that date.
-- There's an optional short delay for the test confirmation message so you can
-  smoke-test the confirmation text shortly after the poll.
-- After a successful send you'll see an alert: "poll sent, please check telegram".
+- The rehearsal uses the actual batch-default poll records and normal poll text;
+  it does not create a second test-labelled copy.
+- Choose the future release date for the batch and a short rehearsal confirmation
+  delay. Skipped event dates stay excluded.
+- After the rehearsal confirmation is sent, the rehearsal polls are closed,
+  rehearsal votes and allocations are cleared, and the same batch is restored to
+  its real release, cutoff, and confirmation times.
+- The Polls page continues to show these rows as **Batch default**.
 
 ## Polls page
 
@@ -69,8 +69,8 @@ The Polls page is a **read-only monitoring view** of scheduled polls. Use
 **Date order** to show event dates in ascending (earliest first) or descending
 (latest first) order. The control is available to both users and admins.
 
-- **Filters:** filter by event date, Telegram group, and poll type (test, custom,
-  or batch default). Admins also get a bot filter. A Telegram group appears only
+- **Filters:** filter by event date, Telegram group, and poll type (custom or
+  batch default). Admins also get a bot filter. A Telegram group appears only
   once in the group menu even when more than one managed bot is registered in
   that same group.
 - **Details:** each poll has a **Details** button that opens an in-page view of

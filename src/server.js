@@ -19,7 +19,13 @@ const {
   eventDatesForReleaseDate,
   managedTimingForEvent,
 } = require('./scheduleRules');
-const { runScheduledPolls, runScheduledConfirmations, runScheduledClosures } = require('./productionScheduler');
+const {
+  runScheduledPolls,
+  runScheduledConfirmations,
+  runScheduledClosures,
+  startTemplateRehearsal,
+  sendTemplateRehearsalConfirmation,
+} = require('./productionScheduler');
 const { scopeGroups, assertGroupAccess, filterRowsByUserBot } = require('./tenancy');
 const { encryptToken, decryptToken, generateWebhookSecret } = require('./crypto');
 const { buildDeploymentWorkbook } = require('./deploymentWorkbook');
@@ -1251,6 +1257,37 @@ function createServer(db, telegram, options = {}) {
     const row = await db.deletePollExclusion(req.params.id);
     if (!row) return res.status(404).json({ error: 'Skipped event date not found' });
     res.json({ deleted: row.id });
+  }));
+
+  app.post('/api/template-rehearsals', wrap(async (req, res) => {
+    const body = req.body || {};
+    if (!body.telegram_group_id || !body.weekly_schedule_id ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(body.release_date || '')) {
+      return res.status(400).json({ error: 'Group, weekly template, and release date are required' });
+    }
+    const group = await assertGroupAccess(db, req.appUser, body.telegram_group_id);
+    const schedule = db.getWeeklySchedule && await db.getWeeklySchedule(body.weekly_schedule_id);
+    if (!schedule || String(schedule.telegram_group_id) !== String(body.telegram_group_id)) {
+      return res.status(404).json({ error: 'Weekly schedule not found' });
+    }
+    const result = await startTemplateRehearsal(db, telegram, {
+      group,
+      schedule,
+      releaseDate: body.release_date,
+      confirmationDelayMinutes: body.confirmation_delay_minutes,
+      createdBy: req.adminUser?.id || req.appUser?.id || null,
+    });
+    res.status(201).json(result);
+  }));
+
+  app.post('/api/template-rehearsals/:batchId/confirm', wrap(async (req, res) => {
+    const rows = db.listTemplateRehearsalPolls &&
+      await db.listTemplateRehearsalPolls(req.params.batchId);
+    if (!rows?.length) return res.status(404).json({ error: 'Template rehearsal not found' });
+    await assertGroupAccess(db, req.appUser, rows[0].telegram_group_id);
+    const result = await sendTemplateRehearsalConfirmation(db, telegram, req.params.batchId);
+    if (!result) return res.status(409).json({ error: 'No due rehearsal confirmation found' });
+    res.json(result);
   }));
 
   app.post('/api/scheduled-polls', wrap(async (req, res) => {

@@ -34,11 +34,12 @@ and it refreshes on the website the next time you interact with the login bot.
 First-come, first-served by the time each person votes, up to each shift's
 capacity. Voting earlier improves your chances for a limited shift.
 
-## What's the difference between a test poll and a real poll?
+## Does rehearsing a batch create duplicate test polls?
 
-A test poll is for checking the message looks right. It doesn't change your saved
-template, doesn't delete scheduled polls, and doesn't block automatic sending.
-Real polls are generated automatically from your saved weekly template.
+No. A weekly batch rehearsal temporarily sends the actual upcoming batch. After
+its confirmation is sent, rehearsal votes are cleared and the same records are
+restored to their real release, cutoff, and confirmation times. They remain
+**Batch default** on the Polls page.
 
 ## What is the deployment sheet?
 

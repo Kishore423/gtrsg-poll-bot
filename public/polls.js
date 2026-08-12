@@ -45,15 +45,13 @@ function servicePill(service) {
     : '<span class="pill pill-whcl">Wheelchair</span>';
 }
 
-function typePill(isCustom, isTest) {
-  if (isTest) return '<span class="pill pill-test">Test</span>';
+function typePill(isCustom) {
   return isCustom
     ? '<span class="pill pill-custom">Custom</span>'
     : '<span class="pill pill-muted">Batch default</span>';
 }
 
 function pollTypeValue(poll) {
-  if (Array.isArray(poll.operational_tags) && poll.operational_tags.includes('test')) return 'test';
   if (poll.is_custom) return 'custom';
   return 'batch_default';
 }
@@ -271,7 +269,7 @@ function renderPollsTable(polls) {
         <td>${servicePill(service)}</td>
         <td>${formatLocalDate(String(poll.event_date).slice(0, 10))}</td>
         <td>${statusPill(poll.status)}</td>
-        <td>${typePill(poll.is_custom, Array.isArray(poll.operational_tags) && poll.operational_tags.includes('test'))}</td>
+        <td>${typePill(poll.is_custom)}</td>
         <td>
           <div class="poll-meta">Release ${formatLocalDateTime(poll.resolved_release_at)}</div>
           <div class="poll-meta">Cutoff ${formatLocalDateTime(poll.close_at)}</div>

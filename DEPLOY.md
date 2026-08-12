@@ -130,7 +130,7 @@ DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres npm run ver
 ```
 
 After deploy, sign in, create the managed Telegram group using its numeric chat
-ID, create a weekly default, schedule a test poll, and verify webhook delivery,
+ID, create a weekly default, rehearse its actual upcoming batch, and verify webhook delivery,
 poll closure, allocation, confirmation send, withdrawal promotion, and message
 editing in a non-production Telegram group before enabling operational use.
 

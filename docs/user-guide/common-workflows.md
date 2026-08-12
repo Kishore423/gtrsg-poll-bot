@@ -50,15 +50,17 @@ been sent to Telegram, skipping cannot recall it.
 2. Adjust the shifts (they start from your saved template).
 3. Set the date and timing, review the preview, and create the poll.
 
-## Send a test poll
+## Rehearse an upcoming weekly batch
 
-1. On **Home**, in the template section, use **Test template poll**.
-2. Optionally set a release date and a short confirmation delay to smoke-test the
-   confirmation message.
-3. Send. You'll see "poll sent, please check telegram", then check the group in
-   Telegram.
+1. On **Home**, open the group and choose **Weekly default template**.
+2. Under **Rehearse actual batch**, choose the actual future release date and a
+   short confirmation delay.
+3. Click **Start batch rehearsal**, confirm the summary, then vote in Telegram.
+4. After the rehearsal confirmation arrives, return to Polls if needed and
+   verify the same batch-default rows show their real future timings again.
 
-Test polls do not affect your real template or scheduled polls.
+The rehearsal uses the actual batch rows. Once confirmation completes, rehearsal
+votes are cleared and those rows are restored for the real scheduled send.
 
 ## Download the deployment sheet
 

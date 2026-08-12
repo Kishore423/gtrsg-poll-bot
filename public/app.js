@@ -376,32 +376,15 @@ function addDays(dateText, days) {
 
 function nextReleaseDateForSchedule(schedule, from = new Date()) {
   const day = Number(schedule?.poll_release_day_of_week ?? DEFAULT_RELEASE_DAY);
+  const releaseTime = String(schedule?.poll_release_time || DEFAULT_RELEASE_TIME).slice(0, 5);
   const today = new Date(from);
   today.setHours(0, 0, 0, 0);
   const todayText = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const delta = (day - weekday(todayText) + 7) % 7;
-  return addDays(todayText, delta);
-}
-
-function singaporeDateText(from = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-SG', {
-    timeZone: 'Asia/Singapore',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(from);
-  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${map.year}-${map.month}-${map.day}`;
-}
-
-function latestReleaseDateForSchedule(schedule, from = new Date()) {
-  const day = Number(schedule?.poll_release_day_of_week ?? DEFAULT_RELEASE_DAY);
-  const releaseTime = String(schedule?.poll_release_time || DEFAULT_RELEASE_TIME).slice(0, 5);
-  const todayText = singaporeDateText(from);
-  const diff = (weekday(todayText) - day + 7) % 7;
-  let releaseDate = addDays(todayText, -diff);
-  const releaseAt = (dateText) => new Date(`${dateText}T${releaseTime}:00+08:00`);
-  if (releaseAt(releaseDate) > from) releaseDate = addDays(releaseDate, -7);
+  let releaseDate = addDays(todayText, delta);
+  if (new Date(`${releaseDate}T${releaseTime}:00+08:00`) <= from) {
+    releaseDate = addDays(releaseDate, 7);
+  }
   return releaseDate;
 }
 
@@ -409,10 +392,6 @@ function batchRangeForReleaseDate(releaseDate, gapWeeks = 0) {
   const daysUntilMonday = ((1 - weekday(releaseDate) + 7) % 7) || 7;
   const start = addDays(releaseDate, daysUntilMonday + Number(gapWeeks || 0) * 7);
   return Array.from({ length: 7 }, (_, index) => addDays(start, index));
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function generatedShiftLabel(start, end) {
@@ -1097,7 +1076,7 @@ advancePollForm.addEventListener('submit', async (event) => {
   await submitOneOffPoll(false);
 });
 document.getElementById('send-test-poll').addEventListener('click', () => submitOneOffPoll(true));
-document.getElementById('weekly-send-test').addEventListener('click', submitWeeklyTestPoll);
+document.getElementById('weekly-start-rehearsal').addEventListener('click', submitWeeklyTemplateRehearsal);
 
 async function submitOneOffPoll(isTest = false) {
   const telegramGroupId = advancePollForm.elements.telegram_group_id.value;
@@ -1158,15 +1137,16 @@ async function submitOneOffPoll(isTest = false) {
   syncOneOffPollFormFromSavedSchedule(selectedGroupId);
 }
 
-async function submitWeeklyTestPoll() {
+async function submitWeeklyTemplateRehearsal() {
   const telegramGroupId = document.getElementById('weekly-send-group').value;
   const releaseDateOverride = document.getElementById('weekly-send-event-date').value;
   const delayInput = document.getElementById('weekly-send-confirmation-delay');
+  const submitButton = document.getElementById('weekly-start-rehearsal');
   const confirmationDelayMinutes = Number(delayInput?.value || 5);
 
   if (!telegramGroupId) return setStatus('Error: Please select a Telegram group first.', 'error');
-  if (!Number.isInteger(confirmationDelayMinutes) || confirmationDelayMinutes < 1) {
-    return setStatus('Error: Confirmation delay must be at least 1 minute.', 'error');
+  if (!Number.isInteger(confirmationDelayMinutes) || confirmationDelayMinutes < 1 || confirmationDelayMinutes > 60) {
+    return setStatus('Error: Confirmation delay must be between 1 and 60 minutes.', 'error');
   }
 
   const schedule = managedSchedules.find((s) => s.telegram_group_id === telegramGroupId && s.enabled);
@@ -1182,74 +1162,55 @@ async function submitWeeklyTestPoll() {
     return setStatus('Error: The template for this group has no shifts saved.', 'error');
   }
 
-  const releaseDate = releaseDateOverride || latestReleaseDateForSchedule(schedule);
+  const releaseDate = releaseDateOverride || nextReleaseDateForSchedule(schedule);
   const eventDates = batchRangeForReleaseDate(releaseDate, schedule.gap_weeks).sort();
-  const confirmationAt = new Date(Date.now() + confirmationDelayMinutes * 60 * 1000);
   const preview = [
     `${managedGroupOptionLabel(group)}`,
-    `Release date: ${formatLocalDate(releaseDate)}`,
-    `Test polls to send now: ${eventDates.length}`,
+    `Actual release date: ${formatLocalDate(releaseDate)}`,
+    `Actual batch polls to rehearse now: ${eventDates.length}`,
     `Event range: ${formatLocalDate(eventDates[0])} to ${formatLocalDate(eventDates[eventDates.length - 1])}`,
     `Confirmation: ${confirmationDelayMinutes} minute${confirmationDelayMinutes === 1 ? '' : 's'} after send`,
+    'After confirmation, rehearsal votes are cleared and this same batch returns to its actual schedule.',
     '',
     eventDates.map((dateText) => `- ${formatLocalDate(dateText)}`).join('\n'),
   ].join('\n');
-  if (!window.confirm(`Send this week's template test polls immediately?\n\n${preview}`)) return;
+  if (!window.confirm(`Rehearse the actual weekly batch now?\n\n${preview}`)) return;
 
-  setStatus(`Sending ${eventDates.length} test poll${eventDates.length === 1 ? '' : 's'}...`, 'pending');
-  const sentIds = [];
-  const failures = [];
-  for (const [index, eventDateVal] of eventDates.entries()) {
-    setStatus(`Sending test poll ${index + 1} of ${eventDates.length}: ${formatLocalDate(eventDateVal)}...`, 'pending');
-    const payload = buildScheduledPollPayload({ telegramGroupId, eventDateVal, schedule, shifts, isCustom: false, sendImmediately: true, isTest: true });
-    payload.confirmation_at = confirmationAt.toISOString();
-    try {
-      const response = await fetch('/api/scheduled-polls', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Creation failed');
-
-      const triggerRes = await fetch(`/api/scheduled-polls/${result.id}/send-now`, { method: 'POST' });
-      if (!triggerRes.ok) {
-        const triggerResult = await triggerRes.json().catch(() => ({}));
-        throw new Error(triggerResult.error || 'Send failed');
-      }
-      sentIds.push(result.id);
-    } catch (error) {
-      failures.push(`${formatLocalDate(eventDateVal)}: ${error.message}`);
-    }
-    if (index < eventDates.length - 1) await sleep(1200);
-  }
-
-  if (!sentIds.length) {
-    setStatus(`Template test polls failed. ${failures.join(' | ')}`, 'error');
-    return;
-  }
-  setStatus(`${sentIds.length} of ${eventDates.length} template test poll${eventDates.length === 1 ? '' : 's'} sent to Telegram in event-date order. Confirmation will be checked in ${confirmationDelayMinutes} minute${confirmationDelayMinutes === 1 ? '' : 's'} while this page stays open.${failures.length ? ` Failed: ${failures.join(' | ')}` : ''}`, failures.length ? 'error' : 'success');
-  window.alert('poll sent, please check telegram');
-  window.setTimeout(async () => {
-    let sentCount = 0;
-    let failedCount = 0;
-    try {
-      const confirmationPollIds = service === 'PSA' ? sentIds.slice(0, 1) : sentIds;
-      for (const pollId of confirmationPollIds) {
-        const confirmationRes = await fetch(`/api/scheduled-polls/${pollId}/send-confirmation-now`, { method: 'POST' });
+  submitButton.disabled = true;
+  setStatus(`Starting rehearsal for ${eventDates.length} actual batch poll${eventDates.length === 1 ? '' : 's'}...`, 'pending');
+  try {
+    const response = await fetch('/api/template-rehearsals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        telegram_group_id: telegramGroupId,
+        weekly_schedule_id: schedule.id,
+        release_date: releaseDate,
+        confirmation_delay_minutes: confirmationDelayMinutes,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Rehearsal could not be started');
+    setStatus(`${result.poll_count} actual batch poll${result.poll_count === 1 ? '' : 's'} sent for rehearsal. Confirmation will run in ${confirmationDelayMinutes} minute${confirmationDelayMinutes === 1 ? '' : 's'}, then the batch will reset to ${formatLocalDateTime(result.actual_release_at)}.`, 'success');
+    window.alert('Actual batch rehearsal sent. Please check Telegram.');
+    window.setTimeout(async () => {
+      try {
+        const confirmationRes = await fetch(`/api/template-rehearsals/${result.batch_id}/confirm`, { method: 'POST' });
         const confirmationResult = await confirmationRes.json().catch(() => ({}));
-        if (confirmationRes.ok) sentCount += Number(confirmationResult.confirmations || 0);
-        else failedCount += 1;
+        if (!confirmationRes.ok) throw new Error(confirmationResult.error || 'Confirmation failed');
+        setStatus(`Rehearsal confirmation sent (${confirmationResult.confirmations}). Votes were cleared and the actual batch was restored to its scheduled send time.`, 'success');
+        await loadScheduledPolls();
+      } catch (error) {
+        setStatus(`Rehearsal confirmation check failed: ${error.message}. The scheduler will retry automatically.`, 'error');
       }
-      setStatus(sentCount > 0
-        ? `Test confirmation sent (${sentCount}).`
-        : 'Confirmation check ran for these test polls, but no confirmation was due or sent. Check Polls > Details for the test poll status.',
-      sentCount > 0 && !failedCount ? 'success' : 'error');
-    } catch (error) {
-      setStatus(`Confirmation check failed: ${error.message}`, 'error');
-    }
-  }, confirmationDelayMinutes * 60 * 1000);
-  document.getElementById('weekly-send-event-date').value = '';
+    }, confirmationDelayMinutes * 60 * 1000);
+    document.getElementById('weekly-send-event-date').value = '';
+    await loadScheduledPolls();
+  } catch (error) {
+    setStatus(`Template rehearsal failed: ${error.message}`, 'error');
+  } finally {
+    submitButton.disabled = false;
+  }
 }
 
 async function loadManagedGroups() {

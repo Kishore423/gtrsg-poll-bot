@@ -5,7 +5,116 @@ const {
   runScheduledConfirmations,
   sendScheduledConfirmationImmediately,
   generateScheduledPollsFromTemplates,
+  startTemplateRehearsal,
+  finalizeReadyTemplateRehearsals,
 } = require('../src/productionScheduler');
+
+test('weekly rehearsal sends the actual future batch without creating test-labelled polls', async () => {
+  const created = [];
+  const prepared = [];
+  const claimed = new Map();
+  const sent = [];
+  const db = {
+    async isPollDateExcluded() { return false; },
+    async getActivePollForDate() { return null; },
+    async createScheduledEvent(payload) {
+      created.push(payload);
+      const id = `poll-${created.length}`;
+      claimed.set(id, {
+        id,
+        event_id: `event-${created.length}`,
+        claim_token: `claim-${created.length}`,
+        service: 'PSA',
+        telegram_chat_id: '-1001',
+        poll_question: payload.poll_question,
+        poll_options: payload.shifts.map((shift) => shift.label),
+      });
+      return id;
+    },
+    async prepareTemplateRehearsal(value) { prepared.push(value); },
+    async claimSpecificPoll(id) { return claimed.get(id); },
+    async completePollSend() { return true; },
+    async failPollSend() { throw new Error('unexpected send failure'); },
+    async listTemplateRehearsalPolls() { return []; },
+    async resetTemplateRehearsal() { throw new Error('unexpected reset'); },
+  };
+  const telegram = {
+    async sendPoll(service, chatId, question) {
+      sent.push({ service, chatId, question });
+      return { poll_id: `tg-${sent.length}`, message_id: sent.length };
+    },
+  };
+  const schedule = {
+    id: 'schedule-1',
+    telegram_group_id: 'group-1',
+    poll_release_day_of_week: 3,
+    poll_release_time: '17:00',
+    confirmation_day_of_week: 5,
+    confirmation_time: '12:00',
+    gap_weeks: 0,
+    timezone: 'Asia/Singapore',
+    shifts: [{ label: '0730-1500', start_time: '07:30', end_time: '15:00', capacity: 2 }],
+  };
+  const result = await startTemplateRehearsal(db, telegram, {
+    group: { id: 'group-1', group_name: 'PSA group', service: 'PSA', bot_id: 'bot-1' },
+    schedule,
+    releaseDate: '2099-01-07',
+    confirmationDelayMinutes: 5,
+    now: new Date('2099-01-01T00:00:00Z'),
+  });
+
+  assert.equal(result.poll_count, 7);
+  assert.equal(created.length, 7);
+  assert.equal(sent.length, 7);
+  assert.equal(prepared.length, 1);
+  assert.equal(prepared[0].pollIds.length, 7);
+  assert.ok(created.every((payload) => payload.is_custom === false));
+  assert.ok(created.every((payload) => payload.operational_tags.length === 0));
+  assert.ok(created.every((payload) => !payload.title.includes('[TEST]') && !payload.poll_question.includes('[TEST]')));
+  assert.deepEqual(created.map((payload) => payload.event_date), [
+    '2099-01-12', '2099-01-13', '2099-01-14', '2099-01-15',
+    '2099-01-16', '2099-01-17', '2099-01-18',
+  ]);
+  assert.equal(result.actual_release_at, '2099-01-07T09:00:00.000Z');
+});
+
+test('completed rehearsal closes Telegram polls and restores actual release timings', async () => {
+  const stopped = [];
+  let reset;
+  const db = {
+    async listReadyTemplateRehearsals() {
+      return [{
+        batch_id: 'batch-1',
+        poll_id: 'poll-1',
+        event_id: 'event-1',
+        event_date: '2099-01-12',
+        telegram_message_id: 77,
+        telegram_chat_id: '-1001',
+        service: 'PSA',
+        timezone: 'Asia/Singapore',
+        gap_weeks: 0,
+        poll_release_day_of_week: 3,
+        poll_release_time: '17:00',
+        confirmation_day_of_week: 5,
+        confirmation_time: '12:00',
+      }];
+    },
+    async resetTemplateRehearsal(batchId, timings) { reset = { batchId, timings }; },
+  };
+  const telegram = { async stopPoll(...args) { stopped.push(args); } };
+
+  const result = await finalizeReadyTemplateRehearsals(db, telegram);
+  assert.deepEqual(stopped, [['PSA', '-1001', 77]]);
+  assert.equal(reset.batchId, 'batch-1');
+  assert.deepEqual(reset.timings[0], {
+    poll_id: 'poll-1',
+    event_id: 'event-1',
+    release_at: '2099-01-07T09:00:00.000Z',
+    close_at: '2099-01-09T00:00:00.000Z',
+    confirmation_at: '2099-01-09T04:00:00.000Z',
+  });
+  assert.equal(result[0].actual_release_at, '2099-01-07T09:00:00.000Z');
+});
 
 test('scheduled poll completion stores Telegram identifiers through its claim', async () => {
   const completed = [];

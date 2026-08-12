@@ -5,6 +5,7 @@ const { zonedDateTimeToUtc } = require('./scheduleResolver');
 const SERVICE_LABELS = { WHCL: 'Wheelchair', PSA: 'PSA', PRIMARY: 'General' };
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const REHEARSAL_TAG_PREFIX = 'rehearsal:';
 
 function localDateAt(date, timeZone) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -50,6 +51,56 @@ function pollTextForEvent({ groupName, eventDate, shifts }) {
   return {
     title: `${groupName} - ${datePrefix} Slots`,
     question: `${datePrefix} - ${shiftSummaries.join(', ')}`,
+  };
+}
+
+function utcIso(localDateTime, timeZone) {
+  return zonedDateTimeToUtc(
+    localDateTime.slice(0, 10),
+    localDateTime.slice(11, 16),
+    timeZone
+  ).toISOString();
+}
+
+function templatePayloadForEvent(schedule, eventDate, releaseDate = null) {
+  const shifts = normalizeShifts(schedule.shifts);
+  const service = schedule.service || schedule.bot_id || 'WHCL';
+  const timezone = schedule.timezone || 'Asia/Singapore';
+  const releaseTime = String(schedule.poll_release_time || '17:00').slice(0, 5);
+  const timing = managedTimingForEvent({
+    service,
+    eventDate,
+    releaseDate,
+    gapWeeks: schedule.gap_weeks,
+    releaseDay: schedule.poll_release_day_of_week,
+    releaseTime,
+    confirmationDay: schedule.confirmation_day_of_week,
+    confirmationTime: String(schedule.confirmation_time || '').slice(0, 5),
+  });
+  const { title, question } = pollTextForEvent({
+    groupName: schedule.group_name || 'GTRSG',
+    eventDate,
+    shifts,
+  });
+  return {
+    telegram_group_id: schedule.telegram_group_id,
+    weekly_schedule_id: schedule.id,
+    event_date: eventDate,
+    title,
+    poll_title: title,
+    poll_question: question,
+    specific_release_at: utcIso(timing.releaseAt, timezone),
+    close_at: utcIso(timing.closeAt, timezone),
+    resolved_release_at: utcIso(timing.releaseAt, timezone),
+    resolved_confirmation_at: utcIso(timing.confirmationAt, timezone),
+    timezone,
+    confirmation_header: 'Confirmed slots',
+    confirmation_footer: 'take note pls',
+    show_waiting_list: false,
+    show_empty_shifts: false,
+    is_custom: false,
+    operational_tags: [],
+    shifts,
   };
 }
 
@@ -157,41 +208,7 @@ async function generateScheduledPollsFromTemplates(db, now = new Date()) {
         await db.getActivePollForDate(schedule.telegram_group_id, eventDate);
       if (existing) continue;
 
-      const timing = managedTimingForEvent({
-        service,
-        eventDate,
-        releaseDate,
-        gapWeeks: schedule.gap_weeks,
-        releaseDay: schedule.poll_release_day_of_week,
-        releaseTime,
-        confirmationDay: schedule.confirmation_day_of_week,
-        confirmationTime: String(schedule.confirmation_time || '').slice(0, 5),
-      });
-      const { title, question } = pollTextForEvent({
-        groupName: schedule.group_name || 'GTRSG',
-        eventDate,
-        shifts,
-      });
-      const payload = {
-        telegram_group_id: schedule.telegram_group_id,
-        weekly_schedule_id: schedule.id,
-        event_date: eventDate,
-        title,
-        poll_title: title,
-        poll_question: question,
-        specific_release_at: timing.releaseAt,
-        close_at: zonedDateTimeToUtc(timing.closeAt.slice(0, 10), timing.closeAt.slice(11, 16), timezone).toISOString(),
-        resolved_release_at: zonedDateTimeToUtc(timing.releaseAt.slice(0, 10), timing.releaseAt.slice(11, 16), timezone).toISOString(),
-        resolved_confirmation_at: zonedDateTimeToUtc(timing.confirmationAt.slice(0, 10), timing.confirmationAt.slice(11, 16), timezone).toISOString(),
-        timezone,
-        confirmation_header: 'Confirmed slots',
-        confirmation_footer: 'take note pls',
-        show_waiting_list: false,
-        show_empty_shifts: false,
-        is_custom: false,
-        operational_tags: [],
-        shifts,
-      };
+      const payload = templatePayloadForEvent(schedule, eventDate, releaseDate);
       const id = await db.createScheduledEvent(payload, null);
       created.push({ id, telegram_group_id: schedule.telegram_group_id, event_date: eventDate });
     }
@@ -345,6 +362,9 @@ async function runScheduledConfirmations(db, telegram, limit = 50) {
       }
     }
   }
+  if (db.listReadyTemplateRehearsals && db.resetTemplateRehearsal) {
+    await finalizeReadyTemplateRehearsals(db, telegram);
+  }
   return completed;
 }
 
@@ -399,6 +419,201 @@ async function sendScheduledConfirmationImmediately(db, telegram, pollId) {
   }
 }
 
+function rehearsalBatchIdFromTag(tag) {
+  return String(tag || '').startsWith(REHEARSAL_TAG_PREFIX)
+    ? String(tag).slice(REHEARSAL_TAG_PREFIX.length)
+    : null;
+}
+
+function actualTimingForRehearsalRow(row) {
+  const timezone = row.timezone || 'Asia/Singapore';
+  const timing = managedTimingForEvent({
+    service: row.service || row.bot_id || 'WHCL',
+    eventDate: String(row.event_date).slice(0, 10),
+    gapWeeks: row.gap_weeks,
+    releaseDay: row.poll_release_day_of_week,
+    releaseTime: String(row.poll_release_time || '17:00').slice(0, 5),
+    confirmationDay: row.confirmation_day_of_week,
+    confirmationTime: String(row.confirmation_time || '').slice(0, 5),
+  });
+  return {
+    poll_id: row.poll_id,
+    event_id: row.event_id,
+    release_at: utcIso(timing.releaseAt, timezone),
+    close_at: utcIso(timing.closeAt, timezone),
+    confirmation_at: utcIso(timing.confirmationAt, timezone),
+  };
+}
+
+async function resetTemplateRehearsalBatch(db, telegram, batchId, rows = null) {
+  const polls = rows || await db.listTemplateRehearsalPolls(batchId);
+  if (!polls.length) return null;
+  for (const poll of polls) {
+    if (!poll.telegram_message_id) continue;
+    try {
+      await telegram.stopPoll(poll.service, poll.telegram_chat_id, poll.telegram_message_id);
+    } catch {
+      // The closure job may already have stopped the Telegram poll. The database
+      // still has to be reset so this batch can run on its real schedule.
+    }
+  }
+  const timings = polls.map(actualTimingForRehearsalRow);
+  await db.resetTemplateRehearsal(batchId, timings);
+  return {
+    batch_id: batchId,
+    poll_count: polls.length,
+    actual_release_at: timings.map((item) => item.release_at).sort()[0],
+  };
+}
+
+async function finalizeReadyTemplateRehearsals(db, telegram) {
+  const rows = await db.listReadyTemplateRehearsals();
+  const batches = new Map();
+  for (const row of rows) {
+    if (!batches.has(row.batch_id)) batches.set(row.batch_id, []);
+    batches.get(row.batch_id).push(row);
+  }
+  const reset = [];
+  for (const [batchId, polls] of batches) {
+    reset.push(await resetTemplateRehearsalBatch(db, telegram, batchId, polls));
+  }
+  return reset.filter(Boolean);
+}
+
+async function startTemplateRehearsal(db, telegram, {
+  group,
+  schedule,
+  releaseDate,
+  confirmationDelayMinutes = 5,
+  createdBy = null,
+  now = new Date(),
+}) {
+  if (!db.prepareTemplateRehearsal || !db.listTemplateRehearsalPolls || !db.resetTemplateRehearsal) {
+    const error = new Error('Template rehearsals require the Supabase production database');
+    error.statusCode = 501;
+    throw error;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(releaseDate || '')) ||
+      new Date(`${releaseDate}T00:00:00Z`).toISOString().slice(0, 10) !== releaseDate) {
+    const error = new RangeError('Choose a valid actual release date');
+    error.statusCode = 400;
+    throw error;
+  }
+  const delay = Number(confirmationDelayMinutes);
+  if (!Number.isInteger(delay) || delay < 1 || delay > 60) {
+    const error = new RangeError('Confirmation delay must be between 1 and 60 minutes');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (weekday(releaseDate) !== Number(schedule.poll_release_day_of_week)) {
+    const error = new RangeError('Rehearsal release date must match the weekly template release day');
+    error.statusCode = 400;
+    throw error;
+  }
+  const shifts = normalizeShifts(schedule.shifts);
+  if (!shifts.length) {
+    const error = new RangeError('Save at least one template shift before starting a rehearsal');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const scheduleWithGroup = {
+    ...schedule,
+    group_name: group.group_name,
+    service: group.service || schedule.service,
+    bot_id: group.bot_id || schedule.bot_id,
+    shifts,
+  };
+  const eventDates = eventDatesForReleaseDate(
+    scheduleWithGroup.service || scheduleWithGroup.bot_id,
+    releaseDate,
+    schedule.gap_weeks
+  );
+  const plans = [];
+  for (const eventDate of eventDates) {
+    if (db.isPollDateExcluded && await db.isPollDateExcluded(group.id, eventDate)) continue;
+    const payload = templatePayloadForEvent(scheduleWithGroup, eventDate, releaseDate);
+    if (new Date(payload.resolved_release_at) <= now) {
+      const error = new RangeError('Choose a future release date so the rehearsed batch can be restored for its real send time');
+      error.statusCode = 400;
+      throw error;
+    }
+    const existing = db.getActivePollForDate && await db.getActivePollForDate(group.id, eventDate);
+    if (existing) {
+      const reusable = !existing.is_custom &&
+        String(existing.weekly_schedule_id || '') === String(schedule.id) &&
+        ['draft', 'scheduled', 'failed'].includes(existing.status) &&
+        !existing.telegram_poll_id &&
+        !(existing.operational_tags || []).some((tag) => rehearsalBatchIdFromTag(tag));
+      if (!reusable) {
+        const error = new Error(`The actual batch cannot be rehearsed because ${eventDate} already has an active or custom poll.`);
+        error.statusCode = 409;
+        throw error;
+      }
+      plans.push({ id: existing.id, eventDate, payload });
+    } else {
+      plans.push({ id: null, eventDate, payload });
+    }
+  }
+  if (!plans.length) {
+    const error = new Error('Every date in this batch is skipped, so there are no polls to rehearse');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const candidates = [];
+  for (const plan of plans) {
+    candidates.push({
+      id: plan.id || await db.createScheduledEvent(plan.payload, createdBy),
+      eventDate: plan.eventDate,
+    });
+  }
+  const batchId = require('crypto').randomUUID();
+  const confirmationAt = new Date(now.getTime() + delay * 60 * 1000);
+  const closeAt = new Date(confirmationAt.getTime() + 60 * 1000);
+  await db.prepareTemplateRehearsal({
+    batchId,
+    pollIds: candidates.map((item) => item.id),
+    confirmationAt: confirmationAt.toISOString(),
+    closeAt: closeAt.toISOString(),
+  });
+  try {
+    for (const poll of candidates) {
+      const result = await sendScheduledPollImmediately(db, telegram, poll.id);
+      if (!result) throw new Error(`Poll ${poll.eventDate} could not be sent for rehearsal`);
+    }
+  } catch (error) {
+    await resetTemplateRehearsalBatch(db, telegram, batchId);
+    throw error;
+  }
+  return {
+    batch_id: batchId,
+    poll_count: candidates.length,
+    event_start: candidates[0].eventDate,
+    event_end: candidates[candidates.length - 1].eventDate,
+    confirmation_at: confirmationAt.toISOString(),
+    actual_release_at: templatePayloadForEvent(
+      scheduleWithGroup,
+      candidates[0].eventDate,
+      releaseDate
+    ).resolved_release_at,
+  };
+}
+
+async function sendTemplateRehearsalConfirmation(db, telegram, batchId) {
+  const rows = await db.listTemplateRehearsalPolls(batchId);
+  if (!rows.length) return null;
+  const pollIds = rows[0].service === 'PSA'
+    ? [rows[0].poll_id]
+    : rows.map((row) => row.poll_id);
+  let confirmations = 0;
+  for (const pollId of pollIds) {
+    const result = await sendScheduledConfirmationImmediately(db, telegram, pollId);
+    confirmations += Number(result?.confirmations || 0);
+  }
+  return confirmations ? { success: true, confirmations } : null;
+}
+
 module.exports = {
   runScheduledPolls,
   runScheduledConfirmations,
@@ -406,4 +621,9 @@ module.exports = {
   sendScheduledPollImmediately,
   sendScheduledConfirmationImmediately,
   generateScheduledPollsFromTemplates,
+  startTemplateRehearsal,
+  sendTemplateRehearsalConfirmation,
+  finalizeReadyTemplateRehearsals,
+  resetTemplateRehearsalBatch,
+  templatePayloadForEvent,
 };

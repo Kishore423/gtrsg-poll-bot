@@ -490,6 +490,82 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
   }
 });
 
+test('weekly template rehearsal API sends the actual future batch through one lifecycle', async () => {
+  const groupId = '11111111-1111-4111-8111-111111111111';
+  const scheduleId = '22222222-2222-4222-8222-222222222222';
+  const created = [];
+  const prepared = [];
+  const claims = new Map();
+  const db = {
+    async getTelegramGroup(id) {
+      return id === groupId ? {
+        id: groupId,
+        telegram_chat_id: '-1001',
+        group_name: 'PSA group',
+        service: 'PSA',
+        bot_id: 'PSA',
+        enabled: true,
+      } : null;
+    },
+    async getWeeklySchedule(id) {
+      return id === scheduleId ? {
+        id: scheduleId,
+        telegram_group_id: groupId,
+        poll_release_day_of_week: 3,
+        poll_release_time: '17:00',
+        confirmation_day_of_week: 5,
+        confirmation_time: '12:00',
+        gap_weeks: 0,
+        timezone: 'Asia/Singapore',
+        enabled: true,
+        shifts: [{ label: '0730-1500', start_time: '07:30', end_time: '15:00', capacity: 2 }],
+      } : null;
+    },
+    async isPollDateExcluded() { return false; },
+    async getActivePollForDate() { return null; },
+    async createScheduledEvent(payload) {
+      const id = `poll-${created.length + 1}`;
+      created.push(payload);
+      claims.set(id, {
+        id,
+        claim_token: `claim-${created.length}`,
+        service: 'PSA',
+        telegram_chat_id: '-1001',
+        poll_question: payload.poll_question,
+        poll_options: payload.shifts.map((shift) => shift.label),
+      });
+      return id;
+    },
+    async prepareTemplateRehearsal(value) { prepared.push(value); },
+    async claimSpecificPoll(id) { return claims.get(id); },
+    async completePollSend() { return true; },
+    async failPollSend() { throw new Error('unexpected failure'); },
+    async listTemplateRehearsalPolls() { return []; },
+    async resetTemplateRehearsal() { throw new Error('unexpected reset'); },
+  };
+  const telegram = makeTelegram();
+  const server = createServer(db, telegram, { enableLegacyWorkflow: false }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const response = await fetch(`${baseUrl}/api/template-rehearsals`, json('POST', {
+      telegram_group_id: groupId,
+      weekly_schedule_id: scheduleId,
+      release_date: '2099-01-07',
+      confirmation_delay_minutes: 5,
+    }));
+    assert.equal(response.status, 201);
+    const result = await response.json();
+    assert.equal(result.poll_count, 7);
+    assert.equal(telegram.polls.length, 7);
+    assert.equal(created.length, 7);
+    assert.equal(prepared[0].pollIds.length, 7);
+    assert.ok(created.every((payload) => !payload.poll_question.includes('[TEST]')));
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
+});
+
 test('memory repository rejects duplicate immutable Telegram bot IDs', async () => {
   const db = createMemoryDb();
   await db.createBot({

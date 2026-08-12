@@ -14,7 +14,7 @@ the software is built.
 - Set up a weekly poll template so polls go out automatically.
 - Skip specific event dates when no poll is needed.
 - Create a one-off (custom) poll for a special date.
-- Send a test poll to check everything looks right before it goes live.
+- Rehearse an upcoming weekly batch before its real send time.
 - Download a deployment sheet showing who is confirmed on which date.
 - (Admins) manage who can use the website and which bot each person has.
 
@@ -32,7 +32,7 @@ the software is built.
 
 | Page | What it's for |
 | --- | --- |
-| **Home** | Your managed groups, weekly template, skip dates, custom and test polls, and verifying your bot. |
+| **Home** | Your managed groups, weekly template, skip dates, custom polls, batch rehearsals, and verifying your bot. |
 | **Polls** | A read-only list of scheduled polls, with a Details view. |
 | **Deployment sheets** | Optional account-level panel for downloading the latest four confirmed deployment weeks by Telegram group. |
 | **Admin** | (Admins only) manage users and bots. |

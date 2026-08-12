@@ -1014,23 +1014,23 @@
         
         <hr style="border: none; border-top: 1px solid var(--border); margin: 1rem 0;" />
         
-        <!-- Test block -->
+        <!-- Rehearsal block -->
         <div style="display: flex; flex-direction: column; gap: 0.75rem;">
           <input type="hidden" id="weekly-send-group" />
           <div id="weekly-template-poll-preview" class="template-poll-preview">
             Save template shifts to preview the Telegram poll options.
           </div>
-          <h4 style="margin: 0;">Test template poll</h4>
+          <h4 style="margin: 0;">Rehearse actual batch</h4>
           <div style="display: flex; align-items: flex-end; gap: 0.75rem; flex-wrap: wrap;">
-            <label style="flex: 1; min-width: 10rem; margin: 0;">Release date override
+            <label style="flex: 1; min-width: 10rem; margin: 0;">Actual release date
               <input type="date" id="weekly-send-event-date" style="width: 100%;" />
             </label>
             <label style="width: 12rem; min-width: 10rem; margin: 0;">Confirmation after
-              <input type="number" id="weekly-send-confirmation-delay" min="1" step="1" value="5" style="width: 100%;" />
+              <input type="number" id="weekly-send-confirmation-delay" min="1" max="60" step="1" value="5" style="width: 100%;" />
             </label>
-            <button type="button" id="weekly-send-test" class="secondary" style="white-space: nowrap;">Send test poll</button>
+            <button type="button" id="weekly-start-rehearsal" class="secondary" style="white-space: nowrap;">Start batch rehearsal</button>
           </div>
-          <p class="hint" style="margin: 0;">Test only: sends every poll in the selected template's current release batch. Leave release date blank to use this week's release. Confirmation text sends this many minutes after the test polls are released.</p>
+          <p class="hint" style="margin: 0;">Sends the actual upcoming batch now for rehearsal. After its confirmation, rehearsal votes are cleared and the same batch is restored to the real release, cutoff, and confirmation schedule.</p>
         </div>
       </div>
 

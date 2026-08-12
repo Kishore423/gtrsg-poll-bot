@@ -160,7 +160,9 @@ test('managed workflows stay bound to the clicked group without duplicate select
   assert.doesNotMatch(html, /data-group-workflow="test"/);
   assert.match(html, /type="hidden" id="weekly-send-group"/);
   assert.match(html, /type="hidden" name="telegram_group_id"/);
-  assert.match(html, /id="weekly-send-test"/);
+  assert.match(html, /id="weekly-start-rehearsal"/);
+  assert.match(html, /Start batch rehearsal/);
+  assert.match(source, /fetch\('\/api\/template-rehearsals'/);
   assert.match(html, /id="send-test-poll"/);
   assert.equal((html.match(/class="secondary workflow-action"/g) || []).length, 3);
   assert.match(html, /data-lucide="calendar-range"/);
@@ -174,6 +176,15 @@ test('managed workflows stay bound to the clicked group without duplicate select
     html.indexOf('</main>') < html.indexOf('id="group-action-dialog"'),
     'viewport dialog must be outside the transformed main element',
   );
+});
+
+test('Polls treats rehearsals as actual batch rows instead of a separate test type', () => {
+  const html = readFileSync(join(__dirname, '..', 'public', 'polls.html'), 'utf8');
+  const source = readFileSync(join(__dirname, '..', 'public', 'polls.js'), 'utf8');
+  assert.doesNotMatch(html, /<option value="test">/);
+  assert.doesNotMatch(source, /pill-test/);
+  assert.match(source, /if \(poll\.is_custom\) return 'custom';/);
+  assert.match(source, /return 'batch_default';/);
 });
 
 test('shared dimensional theme and icon runtime load on every application page', () => {
