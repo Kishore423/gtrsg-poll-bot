@@ -47,9 +47,8 @@ ask your admin to confirm the exact spelling and capitalisation of your handle.
 
 ## A poll didn't go out when I expected
 
-- Automatic sending depends on the scheduler running. Depending on the hosting
-  plan, exact release times may not be minute-accurate — see
-  [Limitations](limitations.md).
+- The production scheduler checks once per minute. Allow roughly one minute for
+  the due check plus Telegram delivery; release times are not second-accurate.
 - Check the **Polls** page to see whether the poll was scheduled.
 - If you skipped that date, that's why. Check **Skip days** for the group.
 

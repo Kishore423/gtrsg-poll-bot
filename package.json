@@ -10,6 +10,7 @@
     "migrate": "node scripts/migrate.js",
     "migrate:multi-tenant": "node scripts/migrate-to-multi-tenant.js",
     "set-webhook": "node scripts/set-webhook.js",
+    "scheduler:setup": "node scripts/setup-supabase-scheduler.js",
     "delete-webhook": "node scripts/delete-webhook.js",
     "check": "node scripts/check.js",
     "build": "npm run check",

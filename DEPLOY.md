@@ -6,7 +6,8 @@
 flowchart LR
   A[Admin browser] -->|Supabase access token| V[Vercel Express API]
   T[Telegram Bot API] -->|secret-token webhook| V
-  C[Vercel Cron every 5 minutes] -->|CRON_SECRET| V
+  C[Supabase Cron every minute] -->|CRON_SECRET| V
+  F[Vercel Cron daily fallback] -->|CRON_SECRET| V
   V -->|SQL and transactional functions| S[Supabase PostgreSQL]
   V -->|sendPoll stopPoll editMessageText| T
   S --> R[Response history and allocation audit]
@@ -21,7 +22,8 @@ only when separate bot identities and permissions are an operational requirement
 
 - Node.js 24
 - Supabase CLI and a Supabase project
-- Vercel CLI/account and a plan that supports five-minute cron execution
+- Vercel CLI/account
+- Supabase Cron, `pg_net`, and Vault extensions (installed by the setup command)
 - One BotFather bot added as an administrator in every managed Telegram group
 
 The bot needs permission to send messages, send polls, edit its messages, and
@@ -77,8 +79,8 @@ psql "$DATABASE_URL" -f backup-before-202607120001.sql
 - Runtime: Node.js 24.x
 - Serverless entry: `api/index.js`
 - Cron: `GET /api/cron/scheduler` daily at 00:00 UTC on Vercel Hobby. Configure
-  an authenticated external five-minute scheduler or upgrade to Vercel Pro for
-  timely release, close, and confirmation execution.
+  Supabase Cron as the every-minute production scheduler; the Vercel schedule is
+  retained only as a daily fallback.
 
 Set these for Production (and separate values for Preview):
 
@@ -99,6 +101,23 @@ Set these for Production (and separate values for Preview):
 
 Do not expose the bot token, webhook secret, service-role key, database URL, or
 cron secret. Deploy with `vercel --prod` after environment variables are set.
+
+## Minute scheduler
+
+After the production deployment is live, register the protected Supabase Cron
+job. The command stores the production URL and bearer secret in Supabase Vault;
+it does not put either value in the job command or repository.
+
+```powershell
+$env:ENV_FILE='C:\path\to\your\local\.env'
+npm run scheduler:setup
+```
+
+The environment file must provide `DATABASE_URL` and `CRON_SECRET`. `APP_URL`
+defaults to `https://gtrsg-poll-bot.vercel.app`. The command is idempotent and
+registers `gtrsg-minute-scheduler` with the `* * * * *` schedule. Claims in the
+database prevent the minute scheduler and daily fallback from sending the same
+poll twice.
 
 ## Telegram webhook
 
@@ -139,5 +158,6 @@ editing in a non-production Telegram group before enabling operational use.
 Claimed rows intentionally remain `sending` if a function crashes after Telegram
 accepts a message but before the database records its ID. This prevents an
 automatic duplicate. Reconcile the Telegram group and database manually before
-resetting such a row to `failed`. The checked-in Hobby cron is once daily; use a
-suitable Vercel plan or an authenticated external scheduler for timely jobs.
+resetting such a row to `failed`. The checked-in Hobby cron is once daily; the
+Supabase Cron job created by `npm run scheduler:setup` is the minute-level
+production trigger.

@@ -193,6 +193,10 @@ Vercel Cron** for hosting/scheduling.
   omit the service-title line so internal identifiers never appear in Telegram.
   Only confirmed participants are included; waiting-list and unfilled slot rows
   are intentionally omitted.
+  Confirmed participants are mentioned with an HTML `tg://user?id=<immutable-id>`
+  link whose visible text is their display name. Telegram does not support
+  account mentions by phone number, and confirmation delivery must never prefer
+  a mutable username over the immutable ID.
 - The data layer is a repository with two implementations sharing one async
   interface (`src/db/memory.js`, `src/db/postgres.js`); keep them in lockstep —
   the memory one is what the tests run against.
@@ -360,6 +364,11 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   without adding `prepare:false`.
 - **Schema**: `npm run migrate` is disabled; use `npx supabase db push`
   (`supabase/migrations/202607120001_production_schema.sql`).
+- **Scheduler**: production uses Supabase Cron every minute to call the protected
+  `/api/cron/scheduler` endpoint. Run `npm run scheduler:setup` with
+  `DATABASE_URL`, `CRON_SECRET`, and `APP_URL` after deployment. The script stores
+  URL/secret values in Supabase Vault and is idempotent. Vercel Hobby's daily
+  cron remains only as a fallback.
 - **Admin bootstrap** (else locked out): `REQUIRE_ADMIN_AUTH=true` + an enabled
   admin row in `app_users` with `telegram_user_id`. The production migration maps
   the existing Kishore admin row to the Telegram identity already observed by
@@ -521,7 +530,9 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   waiting-list and unfilled slot rows are intentionally omitted.
 - Telegram needs ≥2 poll options; single-option days get a `Not available`
   filler (ignored in results/votes). Confirmation messages use Telegram HTML with
-  `tg://user?id=…` mentions; escape all user-supplied names.
+  `tg://user?id=…` mentions whose visible text is the user's display name; escape
+  all user-supplied names. Phone numbers and mutable handles are not reliable
+  Telegram mentions and must not be used in their place.
 - Poll sending is idempotent (legacy `sent_at`; managed claim tokens).
 - Confirmation delivery is service-specific: PSA due confirmations are grouped
   into one Telegram message per group/resolved confirmation time, with each event

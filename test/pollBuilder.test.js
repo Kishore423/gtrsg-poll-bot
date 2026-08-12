@@ -4,6 +4,7 @@ const {
   formatDateHeader,
   buildPollsFromSlots,
   buildConfirmationMessage,
+  managedMention,
   NOT_AVAILABLE_OPTION,
 } = require('../src/pollBuilder');
 
@@ -136,4 +137,15 @@ test('buildConfirmationMessage says "tomor" when the slot date is tomorrow', () 
   ]);
 
   assert.ok(html.startsWith('Confirmed slots for tomor, '));
+});
+
+test('managed confirmations mention the immutable Telegram account instead of its handle', () => {
+  assert.equal(
+    managedMention({
+      telegram_user_id: '123456789',
+      telegram_username: 'alice_handle',
+      display_name: 'Alice Tan',
+    }),
+    '<a href="tg://user?id=123456789">Alice Tan</a>'
+  );
 });

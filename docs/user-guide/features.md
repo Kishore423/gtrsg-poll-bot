@@ -112,6 +112,9 @@ Bot tokens and internal bot IDs are never displayed back to you.
 - Before the event, the system posts a **confirmation** message listing who is
   confirmed for each shift. Only confirmed people are listed (waiting-list and
   unfilled slots are not).
+- Confirmed people are linked to their immutable Telegram account ID, while the
+  message shows their display name. This is the reliable Telegram mention format
+  and continues to work if a person changes their Telegram handle.
 
 > TODO: confirm the exact wording and format of the confirmation message with a
 > supervisor before treating this description as authoritative.

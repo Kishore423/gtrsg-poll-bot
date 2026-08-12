@@ -51,9 +51,17 @@ account menu to add the latest four confirmed weeks to your navigation bar.
 
 ## Why did a poll arrive later than the exact time I set?
 
-Automatic sending depends on the scheduler cadence of the hosting plan, so exact
-minute-accurate delivery isn't guaranteed on every plan. See
-[Limitations](limitations.md).
+The production scheduler checks for due polls every minute. A poll set for 13:30
+should normally be sent at 13:30 or shortly after the next minute check. Telegram
+and network processing can add a small delay, so the setting is minute-accurate,
+not second-accurate.
+
+## Can the confirmation mention someone by phone number?
+
+No. Telegram does not treat `@<phone number>` as an account mention, so it does
+not reliably notify the person. The application links each confirmed person by
+their immutable Telegram account ID and displays their approved name. Phone
+numbers are not required or stored for this purpose.
 
 ## Who do I contact for access or problems?
 

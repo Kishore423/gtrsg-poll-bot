@@ -99,15 +99,11 @@ function mention(voter) {
 }
 
 function managedMention(voter) {
-  if (voter.telegram_username && /^[A-Za-z0-9_]{5,32}$/.test(voter.telegram_username)) {
-    return `@${escapeHtml(voter.telegram_username)}`;
-  }
   const name = voter.display_name || 'Unknown user';
-  const nameWithAt = name.startsWith('@') ? name : '@' + name;
   if (voter.telegram_user_id) {
-    return `<a href="tg://user?id=${escapeHtml(voter.telegram_user_id)}">${escapeHtml(nameWithAt)}</a>`;
+    return `<a href="tg://user?id=${escapeHtml(voter.telegram_user_id)}">${escapeHtml(name)}</a>`;
   }
-  return escapeHtml(nameWithAt);
+  return escapeHtml(name);
 }
 
 function buildManagedConfirmationMessage(rows, {
@@ -221,6 +217,7 @@ module.exports = {
   buildPollsFromSlots,
   buildConfirmationMessage,
   buildManagedConfirmationMessage,
+  managedMention,
   escapeHtml,
   NOT_AVAILABLE_OPTION,
 };

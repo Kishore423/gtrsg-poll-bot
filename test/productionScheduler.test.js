@@ -11,12 +11,16 @@ const {
 
 test('weekly rehearsal sends the actual future batch without creating test-labelled polls', async () => {
   const created = [];
+  const groupLookups = [];
   const prepared = [];
   const claimed = new Map();
   const sent = [];
   const db = {
     async isPollDateExcluded() { return false; },
-    async getActivePollForDate() { return null; },
+    async getActivePollForDate(groupId, eventDate) {
+      groupLookups.push({ groupId, eventDate });
+      return null;
+    },
     async createScheduledEvent(payload) {
       created.push(payload);
       const id = `poll-${created.length}`;
@@ -24,7 +28,7 @@ test('weekly rehearsal sends the actual future batch without creating test-label
         id,
         event_id: `event-${created.length}`,
         claim_token: `claim-${created.length}`,
-        service: 'PSA',
+        service: 'bot-1',
         telegram_chat_id: '-1001',
         poll_question: payload.poll_question,
         poll_options: payload.shifts.map((shift) => shift.label),
@@ -65,6 +69,9 @@ test('weekly rehearsal sends the actual future batch without creating test-label
   assert.equal(result.poll_count, 7);
   assert.equal(created.length, 7);
   assert.equal(sent.length, 7);
+  assert.ok(groupLookups.every(({ groupId }) => groupId === 'group-1'));
+  assert.ok(created.every((payload) => payload.telegram_group_id === 'group-1'));
+  assert.ok(sent.every(({ service, chatId }) => service === 'bot-1' && chatId === '-1001'));
   assert.equal(prepared.length, 1);
   assert.equal(prepared[0].pollIds.length, 7);
   assert.equal(prepared[0].clearAt, '2099-01-01T00:05:00.000Z');
@@ -555,4 +562,32 @@ test('automatic template generation waits until release time on the configured d
     db, new Date('2026-07-22T08:59:00Z')
   ), []);
   assert.equal(created, 0);
+});
+
+test('automatic template generation becomes due at the configured 13:30 minute', async () => {
+  const created = [];
+  const db = {
+    async listManagedWeeklySchedules() {
+      return [{
+        id: 'schedule-1', telegram_group_id: 'wheelchair-group', group_name: 'Wheelchair group',
+        service: 'WHCL', enabled: true, poll_release_day_of_week: 3,
+        poll_release_time: '13:30', timezone: 'Asia/Singapore',
+        shifts: [{ label: '0800-1700', start_time: '08:00', end_time: '17:00', capacity: 1 }],
+      }];
+    },
+    async isPollDateExcluded() { return false; },
+    async getActivePollForDate() { return null; },
+    async createScheduledEvent(payload) { created.push(payload); return `poll-${created.length}`; },
+  };
+
+  assert.deepEqual(await generateScheduledPollsFromTemplates(
+    db, new Date('2026-07-22T05:29:59Z')
+  ), []);
+  assert.equal(created.length, 0);
+
+  const generated = await generateScheduledPollsFromTemplates(
+    db, new Date('2026-07-22T05:30:00Z')
+  );
+  assert.equal(generated.length, 7);
+  assert.ok(created.every((poll) => poll.resolved_release_at === '2026-07-22T05:30:00.000Z'));
 });
