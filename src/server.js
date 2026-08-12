@@ -25,6 +25,7 @@ const {
   runScheduledClosures,
   startTemplateRehearsal,
   sendTemplateRehearsalConfirmation,
+  resetTestPollBatch,
 } = require('./productionScheduler');
 const { scopeGroups, assertGroupAccess, filterRowsByUserBot } = require('./tenancy');
 const { encryptToken, decryptToken, generateWebhookSecret } = require('./crypto');
@@ -1383,6 +1384,16 @@ function createServer(db, telegram, options = {}) {
     const closures = await runScheduledClosures(db, telegram);
     const confirmations = await runScheduledConfirmations(db, telegram);
     res.json({ polls: polls.length, closures: closures.length, confirmations: confirmations.length });
+  }));
+
+  app.post('/api/scheduled-polls/:id/reset-test-batch', wrap(async (req, res) => {
+    if (!db.getScheduledPollDetails) {
+      return res.status(501).json({ error: 'Supabase production database is required' });
+    }
+    const details = await db.getScheduledPollDetails(req.params.id);
+    if (!details) return res.status(404).json({ error: 'Poll not found' });
+    await assertGroupAccess(db, req.appUser, details.poll.telegram_group_id);
+    res.json(await resetTestPollBatch(db, telegram, req.params.id));
   }));
 
   app.post('/api/scheduled-polls/:id/:action', wrap(async (req, res) => {

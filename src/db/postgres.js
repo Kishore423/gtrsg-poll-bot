@@ -287,10 +287,12 @@ function createPostgresDb(sql = createSql()) {
       // non-admin users. Placed after sp.* so the group's bot wins.
       return sql`select sp.*,coalesce(g.bot_ref::text, g.bot_id) as bot_id,
         e.title,e.event_date,e.operational_tags,g.group_name,g.telegram_chat_id,
-        cm.status as confirmation_status,cm.resolved_send_at
+        cm.status as confirmation_status,cm.resolved_send_at,
+        cm.telegram_message_id as confirmation_message_id
         from scheduled_polls sp join events e on e.id=sp.event_id
         join telegram_groups g on g.id=sp.telegram_group_id
         left join confirmation_messages cm on cm.scheduled_poll_id=sp.id
+        where not ('reset-for-production'=any(e.operational_tags) and sp.telegram_poll_id is null)
         order by e.event_date asc, g.group_name asc, sp.resolved_release_at asc, sp.created_at asc`;
     },
     // botId scopes the list to one user's bot; admins pass nothing to see all.
@@ -875,6 +877,63 @@ function createPostgresDb(sql = createSql()) {
         where a.event_id=${poll.event_id} order by a.created_at`;
       return { poll, responses, participants, audit };
     },
+    async getPollResetBatch(id) {
+      await initPromise;
+      return sql`
+        with selected as (
+          select sp.telegram_group_id,sp.weekly_schedule_id,sp.is_custom,
+            date_trunc('week',e.event_date::timestamp)::date as event_week
+          from scheduled_polls sp join events e on e.id=sp.event_id
+          where sp.id=${id}::uuid
+        )
+        select sp.id as poll_id,sp.telegram_group_id,e.event_date::text,
+          sp.resolved_release_at,sp.telegram_message_id,
+          cm.telegram_message_id as confirmation_message_id,
+          coalesce(g.bot_ref::text,g.bot_id) as service,g.telegram_chat_id::text
+        from selected s
+        join scheduled_polls sp on sp.telegram_group_id=s.telegram_group_id
+          and ((s.is_custom or s.weekly_schedule_id is null) and sp.id=${id}::uuid
+            or not s.is_custom and s.weekly_schedule_id is not null and
+              sp.weekly_schedule_id=s.weekly_schedule_id)
+        join events e on e.id=sp.event_id
+          and (s.is_custom or date_trunc('week',e.event_date::timestamp)::date=s.event_week)
+        join telegram_groups g on g.id=sp.telegram_group_id and g.enabled
+        left join confirmation_messages cm on cm.scheduled_poll_id=sp.id
+        where sp.status<>'cancelled'
+        order by e.event_date,sp.id`;
+    },
+    async resetPollBatchForProduction(ids) {
+      await initPromise;
+      return sql.begin(async (tx) => {
+        const rows = await tx`
+          select sp.id as poll_id,sp.event_id
+          from scheduled_polls sp
+          where sp.id=any(${ids}::uuid[])
+          for update`;
+        if (rows.length !== ids.length) {
+          const error = new Error('The poll batch changed before it could be reset');
+          error.statusCode = 409;
+          throw error;
+        }
+        const pollIds = rows.map((row) => row.poll_id);
+        const eventIds = rows.map((row) => row.event_id);
+        await tx`delete from poll_response_events where scheduled_poll_id=any(${pollIds}::uuid[])`;
+        await tx`delete from allocation_audit_log where event_id=any(${eventIds}::uuid[])`;
+        await tx`delete from poll_participants where event_id=any(${eventIds}::uuid[])`;
+        await tx`update scheduled_polls set status='scheduled',enabled=true,
+          telegram_poll_id=null,telegram_message_id=null,sent_at=null,retry_count=0,
+          last_error=null,claim_token=null,claimed_at=null,updated_at=now()
+          where id=any(${pollIds}::uuid[])`;
+        await tx`update confirmation_messages set status='scheduled',telegram_message_id=null,
+          message_text=null,sent_at=null,retry_count=0,last_error=null,claim_token=null,
+          claimed_at=null,updated_at=now() where scheduled_poll_id=any(${pollIds}::uuid[])`;
+        await tx`update events set status='scheduled',operational_tags=array_append(array(
+          select value from unnest(operational_tags) as tags(value)
+          where value not like 'rehearsal:%' and value<>'reset-for-production'
+        ),'reset-for-production'),updated_at=now() where id=any(${eventIds}::uuid[])`;
+        return rows.length;
+      });
+    },
     async retryConfirmation(id) {
       const rows = await sql`update confirmation_messages set status='scheduled',resolved_send_at=now(),
         last_error=null,updated_at=now() where id=${id}::uuid and status='failed' returning *`;
@@ -947,6 +1006,7 @@ function createPostgresDb(sql = createSql()) {
           w.poll_release_day_of_week,w.poll_release_time,w.confirmation_day_of_week,
           w.confirmation_time,sp.resolved_release_at,sp.close_at,
           cm.resolved_send_at,cm.status as confirmation_status,
+          cm.telegram_message_id as confirmation_message_id,
           to_timestamp(substring(clear_meta.tag from 17)::double precision / 1000.0) as clear_at
         from events e
         cross join lateral (
@@ -966,7 +1026,8 @@ function createPostgresDb(sql = createSql()) {
         with tagged as (
           select substring(tag from 11) as batch_id,e.id as event_id,e.event_date,
             sp.id as poll_id,sp.telegram_message_id,sp.telegram_poll_id,sp.telegram_group_id,
-            sp.weekly_schedule_id,cm.status as confirmation_status
+            sp.weekly_schedule_id,cm.status as confirmation_status,
+            cm.telegram_message_id as confirmation_message_id
           from events e
           cross join lateral unnest(e.operational_tags) as tag
           join scheduled_polls sp on sp.event_id=e.id
@@ -980,7 +1041,7 @@ function createPostgresDb(sql = createSql()) {
           t.telegram_poll_id,g.telegram_chat_id,coalesce(g.service,g.bot_ref::text,g.bot_id) as service,
           w.timezone,w.gap_weeks,w.poll_release_day_of_week,w.poll_release_time,
           w.confirmation_day_of_week,w.confirmation_time,sp.resolved_release_at,
-          sp.close_at,cm.resolved_send_at,t.confirmation_status
+          sp.close_at,cm.resolved_send_at,t.confirmation_status,t.confirmation_message_id
         from tagged t join ready r on r.batch_id=t.batch_id
         join scheduled_polls sp on sp.id=t.poll_id
         join confirmation_messages cm on cm.scheduled_poll_id=t.poll_id
@@ -1094,6 +1155,14 @@ function createPostgresDb(sql = createSql()) {
     async completePollSend(id, token, pollId, messageId) {
       const [row] = await sql`select complete_poll_send(${id}::uuid,${token}::uuid,
         ${pollId},${messageId}) as ok`;
+      if (row.ok) {
+        await sql`
+          update events e set
+            operational_tags=array_remove(e.operational_tags,'reset-for-production'),
+            updated_at=now()
+          from scheduled_polls sp
+          where sp.id=${id}::uuid and e.id=sp.event_id`;
+      }
       return row.ok;
     },
     async failPollSend(id, token, error) {

@@ -1403,6 +1403,47 @@ test('single scheduled poll removal requires the configured clear password', asy
   }
 });
 
+test('test batch reset is scoped to the selected batch and preserves its future release', async () => {
+  const stopped = [];
+  const deleted = [];
+  let resetIds;
+  const futureRelease = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const db = {
+    async getScheduledPollDetails() {
+      return { poll: { id: 'poll-1', telegram_group_id: 'group-1' } };
+    },
+    async getPollResetBatch() {
+      return [{
+        poll_id: 'poll-1', event_date: '2099-01-12', resolved_release_at: futureRelease,
+        service: 'bot-1', telegram_chat_id: '-1001', telegram_message_id: 11,
+        confirmation_message_id: 12,
+      }];
+    },
+    async resetPollBatchForProduction(ids) { resetIds = ids; },
+  };
+  const telegram = {
+    async stopPoll(...args) { stopped.push(args); },
+    async deleteMessages(...args) { deleted.push(args); },
+  };
+  const server = createServer(db, telegram, { enableLegacyWorkflow: false }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const response = await fetch(`${baseUrl}/api/scheduled-polls/poll-1/reset-test-batch`, {
+      method: 'POST',
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.poll_count, 1);
+    assert.equal(body.actual_release_at, futureRelease);
+    assert.deepEqual(stopped, [['bot-1', '-1001', 11]]);
+    assert.deepEqual(deleted, [['bot-1', '-1001', [11, 12]]]);
+    assert.deepEqual(resetIds, ['poll-1']);
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
+});
+
 test('telegram group delete reports replacement requirement without deleting dependent polls', async () => {
   const db = {
     async deleteTelegramGroup() {

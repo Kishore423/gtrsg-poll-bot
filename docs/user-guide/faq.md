@@ -56,12 +56,17 @@ should normally be sent at 13:30 or shortly after the next minute check. Telegra
 and network processing can add a small delay, so the setting is minute-accurate,
 not second-accurate.
 
-## Can the confirmation mention someone by phone number?
+## How are people tagged in confirmation messages?
 
-No. Telegram does not treat `@<phone number>` as an account mention, so it does
-not reliably notify the person. The application links each confirmed person by
-their immutable Telegram account ID and displays their approved name. Phone
-numbers are not required or stored for this purpose.
+The confirmation uses each person's Telegram handle when available. If the
+person has no handle, the application uses a Telegram account link instead.
+
+## Why does deleting a poll in Telegram not remove it from Polls?
+
+Telegram does not notify normal bots when an ordinary group poll or message is
+manually deleted. For test polls, use **Reset test batch** on the Polls page. It
+deletes the known test messages, hides the saved records, and keeps them ready
+for their original production release.
 
 ## Who do I contact for access or problems?
 

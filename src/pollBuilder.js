@@ -7,6 +7,7 @@ const MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
+const CONFIRMATION_NOTIFY_HANDLES = '@CD_gtrsg @CD2_gtrsg';
 
 function formatDateHeader(isoDate) {
   const d = new Date(`${isoDate}T00:00:00`);
@@ -99,11 +100,15 @@ function mention(voter) {
 }
 
 function managedMention(voter) {
-  const name = voter.display_name || 'Unknown user';
-  if (voter.telegram_user_id) {
-    return `<a href="tg://user?id=${escapeHtml(voter.telegram_user_id)}">${escapeHtml(name)}</a>`;
+  if (voter.telegram_username && /^[A-Za-z0-9_]{5,32}$/.test(voter.telegram_username)) {
+    return `@${escapeHtml(voter.telegram_username)}`;
   }
-  return escapeHtml(name);
+  const name = voter.display_name || 'Unknown user';
+  const nameWithAt = name.startsWith('@') ? name : `@${name}`;
+  if (voter.telegram_user_id) {
+    return `<a href="tg://user?id=${escapeHtml(voter.telegram_user_id)}">${escapeHtml(nameWithAt)}</a>`;
+  }
+  return escapeHtml(nameWithAt);
 }
 
 function buildManagedConfirmationMessage(rows, {
@@ -166,6 +171,7 @@ function buildManagedConfirmationMessage(rows, {
   if (footer) {
     lines.push('', escapeHtml(footer));
   }
+  lines.push(CONFIRMATION_NOTIFY_HANDLES);
   return lines.join('\n');
 }
 
@@ -206,6 +212,7 @@ function buildConfirmationMessage(slotDate, assignments, footer = 'take note pls
     '',
     ...lines,
     escapeHtml(footer),
+    CONFIRMATION_NOTIFY_HANDLES,
   ].join('\n');
 
   return { html };
@@ -220,4 +227,5 @@ module.exports = {
   managedMention,
   escapeHtml,
   NOT_AVAILABLE_OPTION,
+  CONFIRMATION_NOTIFY_HANDLES,
 };

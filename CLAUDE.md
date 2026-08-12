@@ -331,8 +331,10 @@ The app currently ships BOTH, selected at runtime:
   while a managed section is hidden, because reopening it can otherwise change
   persisted times.
 - Telegram needs ≥2 poll options; single-option days get a `Not available`
-  filler (ignored in results/votes). Confirmation messages are Telegram HTML with
-  `tg://user?id=…` mentions; escape all user-supplied names.
+  filler (ignored in results/votes). Confirmation messages prefer each confirmed
+  user's current `@handle` and use an HTML `tg://user?id=<immutable-id>` fallback
+  when no handle is available. Escape all user-supplied names. The saved footer
+  appears before the final `@CD_gtrsg @CD2_gtrsg` coordinator line.
 - Poll sending is idempotent (legacy `sent_at`; managed claim tokens).
 - Isolated Testing card: allows sending test polls immediately. These are tagged with
   `operational_tags = ['test']` (Test mode), which bypasses duplicate check blocks,

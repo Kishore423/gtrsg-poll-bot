@@ -42,11 +42,14 @@ test('Telegram client resolves dynamic bot tokens and supports name sync calls',
   assert.deepEqual(await client.getMyName('bot-123'), { name: 'User bot' });
   assert.equal(await client.getChat('bot-123', '998877'), true);
   assert.equal(await client.deleteWebhook('bot-123'), true);
+  assert.equal(await client.deleteMessages('bot-123', '-1001', [7, 7, 8]), true);
   assert.equal(await client.setMyName('bot-123', 'New bot name'), true);
   assert.match(seen[0].url, /bottoken-for-bot-123\/getMyName$/);
   assert.match(seen[1].url, /bottoken-for-bot-123\/getChat$/);
   assert.deepEqual(seen[1].body, { chat_id: '998877' });
   assert.match(seen[2].url, /bottoken-for-bot-123\/deleteWebhook$/);
   assert.deepEqual(seen[2].body, { drop_pending_updates: true });
-  assert.deepEqual(seen[3].body, { name: 'New bot name' });
+  assert.match(seen[3].url, /bottoken-for-bot-123\/deleteMessages$/);
+  assert.deepEqual(seen[3].body, { chat_id: '-1001', message_ids: [7, 8] });
+  assert.deepEqual(seen[4].body, { name: 'New bot name' });
 });

@@ -94,6 +94,12 @@ function createTelegramClient({ tokens = {}, resolveToken = null, fetchImpl = fe
     return call(botKey, 'stopPoll', { chat_id: chatId, message_id: messageId });
   }
 
+  async function deleteMessages(botKey, chatId, messageIds) {
+    const ids = [...new Set((messageIds || []).map(Number).filter(Number.isInteger))];
+    if (!ids.length) return true;
+    return call(botKey, 'deleteMessages', { chat_id: chatId, message_ids: ids });
+  }
+
   async function setWebhook(botKey, url, secretToken) {
     return call(botKey, 'setWebhook', {
       url,
@@ -129,6 +135,7 @@ function createTelegramClient({ tokens = {}, resolveToken = null, fetchImpl = fe
     sendMessage,
     editMessage,
     stopPoll,
+    deleteMessages,
     setWebhook,
     deleteWebhook,
     getMe,

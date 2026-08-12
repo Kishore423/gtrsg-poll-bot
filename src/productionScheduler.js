@@ -1,4 +1,8 @@
-const { buildManagedConfirmationMessage, managedMention } = require('./pollBuilder');
+const {
+  buildManagedConfirmationMessage,
+  managedMention,
+  CONFIRMATION_NOTIFY_HANDLES,
+} = require('./pollBuilder');
 const { eventDatesForReleaseDate, managedTimingForEvent } = require('./scheduleRules');
 const { zonedDateTimeToUtc } = require('./scheduleResolver');
 
@@ -162,7 +166,83 @@ function buildPsaBatchConfirmationMessage(items, { header = 'Confirmed slots', f
   }
 
   if (footer) lines.push(escapeHtml(footer));
+  lines.push(CONFIRMATION_NOTIFY_HANDLES);
   return lines.join('\n').trim();
+}
+
+function groupTelegramMessages(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const key = `${row.service}|${row.telegram_chat_id}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        service: row.service,
+        telegramChatId: row.telegram_chat_id,
+        pollMessageIds: new Set(),
+        messageIds: new Set(),
+      });
+    }
+    const group = groups.get(key);
+    if (row.telegram_message_id) {
+      group.pollMessageIds.add(Number(row.telegram_message_id));
+      group.messageIds.add(Number(row.telegram_message_id));
+    }
+    if (row.confirmation_message_id) {
+      group.messageIds.add(Number(row.confirmation_message_id));
+    }
+  }
+  return [...groups.values()];
+}
+
+async function deleteTestMessages(telegram, rows) {
+  for (const group of groupTelegramMessages(rows)) {
+    for (const messageId of group.pollMessageIds) {
+      try {
+        await telegram.stopPoll(group.service, group.telegramChatId, messageId);
+      } catch {
+        // A manually deleted or already-closed poll cannot be stopped. Deleting
+        // the known message IDs below remains idempotent.
+      }
+    }
+    const ids = [...group.messageIds];
+    for (let offset = 0; offset < ids.length; offset += 100) {
+      if (telegram.deleteMessages) {
+        await telegram.deleteMessages(
+          group.service,
+          group.telegramChatId,
+          ids.slice(offset, offset + 100)
+        );
+      }
+    }
+  }
+}
+
+async function resetTestPollBatch(db, telegram, pollId, now = new Date()) {
+  if (!db.getPollResetBatch || !db.resetPollBatchForProduction) {
+    const error = new Error('Test batch reset requires the Supabase production database');
+    error.statusCode = 501;
+    throw error;
+  }
+  const rows = await db.getPollResetBatch(pollId);
+  if (!rows.length) {
+    const error = new Error('Poll not found');
+    error.statusCode = 404;
+    throw error;
+  }
+  if (rows.some((row) => !row.resolved_release_at || new Date(row.resolved_release_at) <= now)) {
+    const error = new Error('Only polls sent early for testing can be reset. The saved production release must still be in the future.');
+    error.statusCode = 409;
+    throw error;
+  }
+  await deleteTestMessages(telegram, rows);
+  await db.resetPollBatchForProduction(rows.map((row) => row.poll_id));
+  const dates = rows.map((row) => String(row.event_date).slice(0, 10)).sort();
+  return {
+    poll_count: rows.length,
+    event_start: dates[0],
+    event_end: dates[dates.length - 1],
+    actual_release_at: rows.map((row) => row.resolved_release_at).sort()[0],
+  };
 }
 
 function pollEventDateKey(poll) {
@@ -450,15 +530,7 @@ function rehearsalBatchIdFromTag(tag) {
 async function resetTemplateRehearsalBatch(db, telegram, batchId, rows = null) {
   const polls = rows || await db.listTemplateRehearsalPolls(batchId);
   if (!polls.length) return null;
-  for (const poll of polls) {
-    if (!poll.telegram_message_id) continue;
-    try {
-      await telegram.stopPoll(poll.service, poll.telegram_chat_id, poll.telegram_message_id);
-    } catch {
-      // The closure job may already have stopped the Telegram poll. The database
-      // still has to be reset so this batch can run on its real schedule.
-    }
-  }
+  await deleteTestMessages(telegram, polls);
   await db.resetTemplateRehearsal(batchId);
   return {
     batch_id: batchId,
@@ -618,5 +690,7 @@ module.exports = {
   sendTemplateRehearsalConfirmation,
   finalizeReadyTemplateRehearsals,
   resetTemplateRehearsalBatch,
+  resetTestPollBatch,
+  deleteTestMessages,
   templatePayloadForEvent,
 };

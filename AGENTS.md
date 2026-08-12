@@ -193,10 +193,15 @@ Vercel Cron** for hosting/scheduling.
   omit the service-title line so internal identifiers never appear in Telegram.
   Only confirmed participants are included; waiting-list and unfilled slot rows
   are intentionally omitted.
-  Confirmed participants are mentioned with an HTML `tg://user?id=<immutable-id>`
-  link whose visible text is their display name. Telegram does not support
-  account mentions by phone number, and confirmation delivery must never prefer
-  a mutable username over the immutable ID.
+  Confirmed participants are mentioned by `@telegram_username` when available,
+  with an HTML `tg://user?id=<immutable-id>` fallback for accounts without a
+  handle. Confirmation messages place `@CD_gtrsg @CD2_gtrsg` after the saved
+  footer/note as the final line.
+  Telegram Bot API does not expose ordinary group-message deletion updates. The
+  Polls-page **Reset test batch** action is the synchronization boundary: it
+  deletes known poll/confirmation messages, clears test data, hides the records
+  while pending, and preserves their future production timestamps. Weekly rows
+  reset by `(group, weekly template, event week)`; custom rows reset singly.
 - The data layer is a repository with two implementations sharing one async
   interface (`src/db/memory.js`, `src/db/postgres.js`); keep them in lockstep —
   the memory one is what the tests run against.
@@ -529,10 +534,10 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   never appear in Telegram. Only confirmed participants are included;
   waiting-list and unfilled slot rows are intentionally omitted.
 - Telegram needs ≥2 poll options; single-option days get a `Not available`
-  filler (ignored in results/votes). Confirmation messages use Telegram HTML with
-  `tg://user?id=…` mentions whose visible text is the user's display name; escape
-  all user-supplied names. Phone numbers and mutable handles are not reliable
-  Telegram mentions and must not be used in their place.
+  filler (ignored in results/votes). Confirmation messages prefer each confirmed
+  user's current `@handle` and use an HTML `tg://user?id=<immutable-id>` fallback
+  when no handle is available. Escape all user-supplied names. The saved footer
+  appears before the final `@CD_gtrsg @CD2_gtrsg` coordinator line.
 - Poll sending is idempotent (legacy `sent_at`; managed claim tokens).
 - Confirmation delivery is service-specific: PSA due confirmations are grouped
   into one Telegram message per group/resolved confirmation time, with each event

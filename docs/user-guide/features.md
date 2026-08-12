@@ -77,9 +77,14 @@ The Polls page is a **read-only monitoring view** of scheduled polls. Use
   that same group.
 - **Details:** each poll has a **Details** button that opens an in-page view of
   that poll.
-The Polls page intentionally has no bulk "clear all" or per-poll delete controls —
-it is for monitoring. To stop a default poll from being sent, use **Skip days**
-on the Home page instead.
+- **Reset test batch:** available after a poll has been sent early while its
+  saved production release is still in the future. For a weekly poll, the action
+  resets the complete Monday-Sunday batch; for a custom poll, it resets only that
+  poll. The bot deletes its known poll and confirmation messages, clears test
+  responses, hides the records from Polls, and sends the same records again at
+  their original production time.
+The Polls page has no permanent delete control. To stop a default poll from
+being sent, use **Skip days** on the Home page instead.
 
 ## Deployment sheets page
 
@@ -112,9 +117,10 @@ Bot tokens and internal bot IDs are never displayed back to you.
 - Before the event, the system posts a **confirmation** message listing who is
   confirmed for each shift. Only confirmed people are listed (waiting-list and
   unfilled slots are not).
-- Confirmed people are linked to their immutable Telegram account ID, while the
-  message shows their display name. This is the reliable Telegram mention format
-  and continues to work if a person changes their Telegram handle.
+- Confirmed people are tagged with their Telegram handle when one is available.
+  Accounts without a handle fall back to an immutable Telegram account link.
+- Confirmation messages end with the saved note (for example `take note pls`),
+  followed by `@CD_gtrsg @CD2_gtrsg` on the final line.
 
 > TODO: confirm the exact wording and format of the confirmation message with a
 > supervisor before treating this description as authoritative.

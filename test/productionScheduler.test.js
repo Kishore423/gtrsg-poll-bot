@@ -7,7 +7,53 @@ const {
   generateScheduledPollsFromTemplates,
   startTemplateRehearsal,
   finalizeReadyTemplateRehearsals,
+  resetTestPollBatch,
 } = require('../src/productionScheduler');
+
+test('reset test batch removes Telegram polls and confirmations then restores production records', async () => {
+  const stopped = [];
+  const deleted = [];
+  let resetIds;
+  const rows = [1, 2].map((number) => ({
+    poll_id: `poll-${number}`,
+    event_date: `2099-01-1${number}`,
+    resolved_release_at: '2099-01-07T09:00:00.000Z',
+    service: 'bot-1',
+    telegram_chat_id: '-1001',
+    telegram_message_id: 10 + number,
+    confirmation_message_id: 20,
+  }));
+  const db = {
+    async getPollResetBatch() { return rows; },
+    async resetPollBatchForProduction(ids) { resetIds = ids; },
+  };
+  const telegram = {
+    async stopPoll(...args) { stopped.push(args); },
+    async deleteMessages(...args) { deleted.push(args); },
+  };
+
+  const result = await resetTestPollBatch(db, telegram, 'poll-1', new Date('2099-01-01T00:00:00Z'));
+  assert.deepEqual(stopped, [['bot-1', '-1001', 11], ['bot-1', '-1001', 12]]);
+  assert.deepEqual(deleted, [['bot-1', '-1001', [11, 20, 12]]]);
+  assert.deepEqual(resetIds, ['poll-1', 'poll-2']);
+  assert.equal(result.poll_count, 2);
+  assert.equal(result.actual_release_at, '2099-01-07T09:00:00.000Z');
+});
+
+test('reset test batch refuses a poll whose production release is not in the future', async () => {
+  let reset = false;
+  const db = {
+    async getPollResetBatch() {
+      return [{ poll_id: 'poll-1', event_date: '2026-01-01', resolved_release_at: '2026-01-01T00:00:00.000Z' }];
+    },
+    async resetPollBatchForProduction() { reset = true; },
+  };
+  await assert.rejects(
+    () => resetTestPollBatch(db, {}, 'poll-1', new Date('2026-01-02T00:00:00Z')),
+    /saved production release must still be in the future/
+  );
+  assert.equal(reset, false);
+});
 
 test('weekly rehearsal sends the actual future batch without creating test-labelled polls', async () => {
   const created = [];
@@ -271,6 +317,7 @@ test('managed confirmation includes service title and omits empty and waiting li
   assert.doesNotMatch(sent[0], /Waiting list/);
   assert.doesNotMatch(sent[0], /1700-2200/);
   assert.doesNotMatch(sent[0], /Unfilled/);
+  assert.match(sent[0], /@CD_gtrsg @CD2_gtrsg$/);
 });
 
 test('dedicated bot confirmations never expose the internal bot UUID as a title', async () => {
@@ -378,6 +425,7 @@ test('PSA due confirmations are grouped into one batch message', async () => {
   assert.match(sent[0].html, /0800-1700hrs/);
   assert.match(sent[0].html, /<b>Tue 21 Jul<\/b>/);
   assert.match(sent[0].html, /2200-0300hrs/);
+  assert.match(sent[0].html, /take note pls\n@CD_gtrsg @CD2_gtrsg$/);
   assert.equal(completed.length, 2);
   assert.equal(completed[0][2], 99);
   assert.equal(completed[1][2], 99);

@@ -116,7 +116,8 @@ test('buildConfirmationMessage formats assignments as Telegram HTML mentions', (
       '0430-0830hrs <a href="tg://user?id=11">@Alice</a>\n' +
       '1700-2200hrs <a href="tg://user?id=22">@Bob</a> <a href="tg://user?id=33">@Carol</a>\n' +
       '2200-0300hrs — Unfilled (0/1)\n' +
-      'take note pls'
+      'take note pls\n' +
+      '@CD_gtrsg @CD2_gtrsg'
   );
 });
 
@@ -139,13 +140,17 @@ test('buildConfirmationMessage says "tomor" when the slot date is tomorrow', () 
   assert.ok(html.startsWith('Confirmed slots for tomor, '));
 });
 
-test('managed confirmations mention the immutable Telegram account instead of its handle', () => {
+test('managed confirmations prefer the Telegram handle and fall back to the immutable account', () => {
   assert.equal(
     managedMention({
       telegram_user_id: '123456789',
       telegram_username: 'alice_handle',
       display_name: 'Alice Tan',
     }),
-    '<a href="tg://user?id=123456789">Alice Tan</a>'
+    '@alice_handle'
+  );
+  assert.equal(
+    managedMention({ telegram_user_id: '123456789', display_name: 'Alice Tan' }),
+    '<a href="tg://user?id=123456789">@Alice Tan</a>'
   );
 });

@@ -196,6 +196,13 @@ test('Polls treats rehearsals as actual batch rows instead of a separate test ty
   assert.match(source, /return 'batch_default';/);
 });
 
+test('Polls exposes an explicit production reset for test-sent batches', () => {
+  const source = readFileSync(join(__dirname, '..', 'public', 'polls.js'), 'utf8');
+  assert.match(source, /Reset test batch/);
+  assert.match(source, /reset-test-batch/);
+  assert.match(source, /original production time/);
+});
+
 test('shared dimensional theme and icon runtime load on every application page', () => {
   for (const page of ['index.html', 'polls.html', 'admin.html']) {
     const html = readFileSync(join(__dirname, '..', 'public', page), 'utf8');

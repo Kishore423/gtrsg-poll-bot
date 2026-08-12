@@ -64,6 +64,17 @@ batch rows, but it never changes their production release, cutoff, or confirmati
 timestamps. Once confirmation completes, rehearsal votes are cleared and the
 same rows remain ready for their real scheduled send.
 
+### Reset a manually ended test
+
+If you end or delete test messages before rehearsal cleanup completes, open
+**Polls** and choose **Reset test batch** on any poll in that batch. Weekly polls
+reset as one Monday-Sunday batch; custom polls reset individually. The action is
+available only while the saved production release is still in the future.
+
+Telegram does not send ordinary group-message deletion events to bots, so
+deleting a poll directly in Telegram cannot update the website automatically.
+Use **Reset test batch** to keep Telegram and the website synchronized.
+
 ## Download the deployment sheet
 
 1. Open your account menu from your name in the navigation bar.
