@@ -901,9 +901,10 @@ function createPostgresDb(sql = createSql()) {
         limit 1`;
       return row || null;
     },
-    async prepareTemplateRehearsal({ batchId, pollIds, confirmationAt, closeAt }) {
+    async prepareTemplateRehearsal({ batchId, pollIds, clearAt }) {
       await initPromise;
       const tag = `rehearsal:${batchId}`;
+      const clearTag = `rehearsal-clear:${new Date(clearAt).getTime()}`;
       return sql.begin(async (tx) => {
         const rows = await tx`
           select sp.id,sp.event_id,sp.status,sp.is_custom,sp.weekly_schedule_id,
@@ -923,13 +924,14 @@ function createPostgresDb(sql = createSql()) {
         }
         const eventIds = rows.map((row) => row.event_id);
         await tx`update events set status='scheduled',
-          operational_tags=array_append(array_remove(operational_tags,${tag}),${tag}),updated_at=now()
+          operational_tags=array_append(array_append(array_remove(operational_tags,${tag}),${tag}),${clearTag}),
+          updated_at=now()
           where id=any(${eventIds}::uuid[])`;
-        await tx`update scheduled_polls set status='scheduled',resolved_release_at=now(),
-          close_at=${closeAt}::timestamptz,telegram_poll_id=null,telegram_message_id=null,sent_at=null,
+        await tx`update scheduled_polls set status='scheduled',
+          telegram_poll_id=null,telegram_message_id=null,sent_at=null,
           retry_count=0,last_error=null,claim_token=null,claimed_at=null,updated_at=now()
           where id=any(${pollIds}::uuid[])`;
-        await tx`update confirmation_messages set status='scheduled',resolved_send_at=${confirmationAt}::timestamptz,
+        await tx`update confirmation_messages set status='scheduled',
           telegram_message_id=null,message_text=null,sent_at=null,retry_count=0,last_error=null,
           claim_token=null,claimed_at=null,updated_at=now()
           where scheduled_poll_id=any(${pollIds}::uuid[])`;
@@ -943,8 +945,14 @@ function createPostgresDb(sql = createSql()) {
           sp.telegram_message_id,sp.telegram_poll_id,g.telegram_chat_id,
           coalesce(g.service,g.bot_ref::text,g.bot_id) as service,w.timezone,w.gap_weeks,
           w.poll_release_day_of_week,w.poll_release_time,w.confirmation_day_of_week,
-          w.confirmation_time,cm.status as confirmation_status
+          w.confirmation_time,sp.resolved_release_at,sp.close_at,
+          cm.resolved_send_at,cm.status as confirmation_status,
+          to_timestamp(substring(clear_meta.tag from 17)::double precision / 1000.0) as clear_at
         from events e
+        cross join lateral (
+          select tag from unnest(e.operational_tags) as tag
+          where tag like 'rehearsal-clear:%' limit 1
+        ) clear_meta
         join scheduled_polls sp on sp.event_id=e.id
         join weekly_poll_schedules w on w.id=sp.weekly_schedule_id
         join telegram_groups g on g.id=sp.telegram_group_id
@@ -963,7 +971,7 @@ function createPostgresDb(sql = createSql()) {
           cross join lateral unnest(e.operational_tags) as tag
           join scheduled_polls sp on sp.event_id=e.id
           join confirmation_messages cm on cm.scheduled_poll_id=sp.id
-          where tag like 'rehearsal:%'
+          where tag like 'rehearsal:%' and tag not like 'rehearsal-clear:%'
         ), ready as (
           select batch_id from tagged group by batch_id
           having bool_and(confirmation_status in ('sent','updated'))
@@ -971,13 +979,62 @@ function createPostgresDb(sql = createSql()) {
         select t.batch_id,t.poll_id,t.event_id,t.event_date::text,t.telegram_message_id,
           t.telegram_poll_id,g.telegram_chat_id,coalesce(g.service,g.bot_ref::text,g.bot_id) as service,
           w.timezone,w.gap_weeks,w.poll_release_day_of_week,w.poll_release_time,
-          w.confirmation_day_of_week,w.confirmation_time,t.confirmation_status
+          w.confirmation_day_of_week,w.confirmation_time,sp.resolved_release_at,
+          sp.close_at,cm.resolved_send_at,t.confirmation_status
         from tagged t join ready r on r.batch_id=t.batch_id
+        join scheduled_polls sp on sp.id=t.poll_id
+        join confirmation_messages cm on cm.scheduled_poll_id=t.poll_id
         join weekly_poll_schedules w on w.id=t.weekly_schedule_id
         join telegram_groups g on g.id=t.telegram_group_id
         order by t.batch_id,t.event_date,t.poll_id`;
     },
-    async resetTemplateRehearsal(batchId, timings) {
+    async listDueTemplateRehearsalBatchIds() {
+      await initPromise;
+      const rows = await sql`
+        with tagged as (
+          select substring(batch_tag from 11) as batch_id,
+            substring(clear_tag from 17)::bigint as clear_at_ms
+          from events e
+          cross join lateral (
+            select tag as batch_tag from unnest(e.operational_tags) as tag
+            where tag like 'rehearsal:%' and tag not like 'rehearsal-clear:%' limit 1
+          ) batch_meta
+          cross join lateral (
+            select tag as clear_tag from unnest(e.operational_tags) as tag
+            where tag like 'rehearsal-clear:%' limit 1
+          ) clear_meta
+        )
+        select distinct batch_id from tagged
+        where to_timestamp(clear_at_ms::double precision / 1000.0) <= now()
+        order by batch_id`;
+      return rows.map((row) => row.batch_id);
+    },
+    async claimTemplateRehearsalConfirmations(batchId) {
+      await initPromise;
+      return sql`
+        with batch_polls as (
+          select sp.id
+          from events e
+          join scheduled_polls sp on sp.event_id=e.id
+          cross join lateral (
+            select tag from unnest(e.operational_tags) as tag
+            where tag like 'rehearsal-clear:%' limit 1
+          ) clear_meta
+          where ${`rehearsal:${batchId}`}=any(e.operational_tags)
+            and to_timestamp(substring(clear_meta.tag from 17)::double precision / 1000.0) <= now()
+        ), claimed as (
+          update confirmation_messages cm set status='sending',claim_token=gen_random_uuid(),
+            claimed_at=now(),updated_at=now()
+          from batch_polls bp
+          where cm.scheduled_poll_id=bp.id and cm.status in ('scheduled','failed')
+          returning cm.*
+        )
+        select c.id,c.event_id,c.scheduled_poll_id,coalesce(g.service,g.bot_ref::text,g.bot_id) as service,
+          g.telegram_chat_id,c.telegram_message_id,c.header_text,c.footer_text,c.resolved_send_at,
+          c.show_waiting_list,c.show_empty_shifts,c.claim_token
+        from claimed c join telegram_groups g on g.id=c.telegram_group_id and g.enabled`;
+    },
+    async resetTemplateRehearsal(batchId) {
       await initPromise;
       const tag = `rehearsal:${batchId}`;
       return sql.begin(async (tx) => {
@@ -986,8 +1043,7 @@ function createPostgresDb(sql = createSql()) {
           from events e join scheduled_polls sp on sp.event_id=e.id
           where ${tag}=any(e.operational_tags)
           for update`;
-        const timingByPoll = new Map(timings.map((item) => [String(item.poll_id), item]));
-        if (!rows.length || rows.some((row) => !timingByPoll.has(String(row.poll_id)))) {
+        if (!rows.length) {
           const error = new Error('Template rehearsal batch is incomplete and could not be reset');
           error.statusCode = 409;
           throw error;
@@ -997,19 +1053,16 @@ function createPostgresDb(sql = createSql()) {
         await tx`delete from poll_response_events where scheduled_poll_id=any(${pollIds}::uuid[])`;
         await tx`delete from allocation_audit_log where event_id=any(${eventIds}::uuid[])`;
         await tx`delete from poll_participants where event_id=any(${eventIds}::uuid[])`;
-        for (const row of rows) {
-          const timing = timingByPoll.get(String(row.poll_id));
-          await tx`update scheduled_polls set specific_release_at=${timing.release_at}::timestamptz,
-            resolved_release_at=${timing.release_at}::timestamptz,close_at=${timing.close_at}::timestamptz,
-            status='scheduled',enabled=true,telegram_poll_id=null,telegram_message_id=null,sent_at=null,
-            retry_count=0,last_error=null,claim_token=null,claimed_at=null,updated_at=now()
-            where id=${row.poll_id}::uuid`;
-          await tx`update confirmation_messages set resolved_send_at=${timing.confirmation_at}::timestamptz,
-            status='scheduled',telegram_message_id=null,message_text=null,sent_at=null,retry_count=0,
-            last_error=null,claim_token=null,claimed_at=null,updated_at=now()
-            where scheduled_poll_id=${row.poll_id}::uuid`;
-        }
-        await tx`update events set status='scheduled',operational_tags=array_remove(operational_tags,${tag}),
+        await tx`update scheduled_polls set status='scheduled',enabled=true,
+          telegram_poll_id=null,telegram_message_id=null,sent_at=null,retry_count=0,last_error=null,
+          claim_token=null,claimed_at=null,updated_at=now() where id=any(${pollIds}::uuid[])`;
+        await tx`update confirmation_messages set status='scheduled',telegram_message_id=null,
+          message_text=null,sent_at=null,retry_count=0,last_error=null,claim_token=null,claimed_at=null,
+          updated_at=now() where scheduled_poll_id=any(${pollIds}::uuid[])`;
+        await tx`update events set status='scheduled',operational_tags=array(
+          select value from unnest(operational_tags) as tags(value)
+          where value<>${tag} and value not like 'rehearsal-clear:%'
+        ),
           updated_at=now() where id=any(${eventIds}::uuid[])`;
         return rows.length;
       });

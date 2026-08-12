@@ -58,8 +58,7 @@ test('weekly rehearsal sends the actual future batch without creating test-label
   const result = await startTemplateRehearsal(db, telegram, {
     group: { id: 'group-1', group_name: 'PSA group', service: 'PSA', bot_id: 'bot-1' },
     schedule,
-    releaseDate: '2099-01-07',
-    confirmationDelayMinutes: 5,
+    clearAfterMinutes: 5,
     now: new Date('2099-01-01T00:00:00Z'),
   });
 
@@ -68,6 +67,9 @@ test('weekly rehearsal sends the actual future batch without creating test-label
   assert.equal(sent.length, 7);
   assert.equal(prepared.length, 1);
   assert.equal(prepared[0].pollIds.length, 7);
+  assert.equal(prepared[0].clearAt, '2099-01-01T00:05:00.000Z');
+  assert.equal('confirmationAt' in prepared[0], false);
+  assert.equal('closeAt' in prepared[0], false);
   assert.ok(created.every((payload) => payload.is_custom === false));
   assert.ok(created.every((payload) => payload.operational_tags.length === 0));
   assert.ok(created.every((payload) => !payload.title.includes('[TEST]') && !payload.poll_question.includes('[TEST]')));
@@ -78,7 +80,7 @@ test('weekly rehearsal sends the actual future batch without creating test-label
   assert.equal(result.actual_release_at, '2099-01-07T09:00:00.000Z');
 });
 
-test('completed rehearsal closes Telegram polls and restores actual release timings', async () => {
+test('completed rehearsal closes Telegram polls and preserves stored production timings', async () => {
   const stopped = [];
   let reset;
   const db = {
@@ -97,23 +99,69 @@ test('completed rehearsal closes Telegram polls and restores actual release timi
         poll_release_time: '17:00',
         confirmation_day_of_week: 5,
         confirmation_time: '12:00',
+        resolved_release_at: '2099-01-07T09:00:00.000Z',
       }];
     },
-    async resetTemplateRehearsal(batchId, timings) { reset = { batchId, timings }; },
+    async resetTemplateRehearsal(batchId) { reset = { batchId }; },
   };
   const telegram = { async stopPoll(...args) { stopped.push(args); } };
 
   const result = await finalizeReadyTemplateRehearsals(db, telegram);
   assert.deepEqual(stopped, [['PSA', '-1001', 77]]);
   assert.equal(reset.batchId, 'batch-1');
-  assert.deepEqual(reset.timings[0], {
+  assert.deepEqual(Object.keys(reset), ['batchId']);
+  assert.equal(result[0].actual_release_at, '2099-01-07T09:00:00.000Z');
+});
+
+test('confirmation scheduler clears due rehearsals without changing production timing fields', async () => {
+  let confirmationStatus = 'scheduled';
+  let resetArgs;
+  const rehearsalRow = {
+    batch_id: 'batch-1',
     poll_id: 'poll-1',
     event_id: 'event-1',
-    release_at: '2099-01-07T09:00:00.000Z',
-    close_at: '2099-01-09T00:00:00.000Z',
-    confirmation_at: '2099-01-09T04:00:00.000Z',
-  });
-  assert.equal(result[0].actual_release_at, '2099-01-07T09:00:00.000Z');
+    event_date: '2099-01-12',
+    telegram_message_id: 77,
+    telegram_chat_id: '-1001',
+    service: 'WHCL',
+    resolved_release_at: '2099-01-07T09:00:00.000Z',
+    close_at: '2099-01-11T00:00:00.000Z',
+    resolved_send_at: '2099-01-09T04:00:00.000Z',
+    clear_at: '2000-01-01T00:00:00.000Z',
+  };
+  const db = {
+    async claimDueConfirmations() { return []; },
+    async listDueTemplateRehearsalBatchIds() { return ['batch-1']; },
+    async listTemplateRehearsalPolls() { return [{ ...rehearsalRow, confirmation_status: confirmationStatus }]; },
+    async claimTemplateRehearsalConfirmations() {
+      return [{
+        id: 'confirmation-1',
+        event_id: 'event-1',
+        scheduled_poll_id: 'poll-1',
+        claim_token: 'claim-1',
+        service: 'WHCL',
+        telegram_chat_id: '-1001',
+        header_text: 'Confirmed slots',
+        footer_text: 'take note pls',
+        resolved_send_at: rehearsalRow.resolved_send_at,
+      }];
+    },
+    async getAllocation() { return []; },
+    async getEventDate() { return rehearsalRow.event_date; },
+    async completeConfirmationSend() { confirmationStatus = 'sent'; return true; },
+    async failConfirmationSend() { throw new Error('unexpected confirmation failure'); },
+    async listReadyTemplateRehearsals() {
+      return confirmationStatus === 'sent' ? [{ ...rehearsalRow, confirmation_status: 'sent' }] : [];
+    },
+    async resetTemplateRehearsal(...args) { resetArgs = args; },
+  };
+  const telegram = {
+    async sendMessage() { return { message_id: 88 }; },
+    async stopPoll() {},
+  };
+
+  assert.deepEqual(await runScheduledConfirmations(db, telegram), ['confirmation-1']);
+  assert.deepEqual(resetArgs, ['batch-1']);
 });
 
 test('scheduled poll completion stores Telegram identifiers through its claim', async () => {

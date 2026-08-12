@@ -1261,9 +1261,8 @@ function createServer(db, telegram, options = {}) {
 
   app.post('/api/template-rehearsals', wrap(async (req, res) => {
     const body = req.body || {};
-    if (!body.telegram_group_id || !body.weekly_schedule_id ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(body.release_date || '')) {
-      return res.status(400).json({ error: 'Group, weekly template, and release date are required' });
+    if (!body.telegram_group_id || !body.weekly_schedule_id) {
+      return res.status(400).json({ error: 'Group and weekly template are required' });
     }
     const group = await assertGroupAccess(db, req.appUser, body.telegram_group_id);
     const schedule = db.getWeeklySchedule && await db.getWeeklySchedule(body.weekly_schedule_id);
@@ -1273,8 +1272,7 @@ function createServer(db, telegram, options = {}) {
     const result = await startTemplateRehearsal(db, telegram, {
       group,
       schedule,
-      releaseDate: body.release_date,
-      confirmationDelayMinutes: body.confirmation_delay_minutes,
+      clearAfterMinutes: body.clear_after_minutes,
       createdBy: req.adminUser?.id || req.appUser?.id || null,
     });
     res.status(201).json(result);

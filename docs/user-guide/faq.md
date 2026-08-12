@@ -38,8 +38,9 @@ capacity. Voting earlier improves your chances for a limited shift.
 
 No. A weekly batch rehearsal temporarily sends the actual upcoming batch. After
 its confirmation is sent, rehearsal votes are cleared and the same records are
-restored to their real release, cutoff, and confirmation times. They remain
-**Batch default** on the Polls page.
+kept for their real release, cutoff, and confirmation times. Rehearsal timing is
+stored separately and never overwrites those production timestamps. The rows
+remain **Batch default** on the Polls page.
 
 ## What is the deployment sheet?
 

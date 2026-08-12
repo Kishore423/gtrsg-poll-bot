@@ -51,16 +51,18 @@ exceptions.
 
 ### Batch rehearsal
 
-Use **Rehearse actual batch** to check an upcoming weekly batch in Telegram
-before its real send time:
+Use **Start batch rehearsal** beside **Save default** to check the next weekly
+batch in Telegram before its real send time:
 
 - The rehearsal uses the actual batch-default poll records and normal poll text;
   it does not create a second test-labelled copy.
-- Choose the future release date for the batch and a short rehearsal confirmation
-  delay. Skipped event dates stay excluded.
+- The application selects the next eligible batch automatically. Set only the
+  1-60 minute clear duration. Skipped event dates stay excluded.
 - After the rehearsal confirmation is sent, the rehearsal polls are closed,
-  rehearsal votes and allocations are cleared, and the same batch is restored to
-  its real release, cutoff, and confirmation times.
+  rehearsal votes and allocations are cleared, and the same batch remains ready
+  for its real schedule.
+- Production release, cutoff, and confirmation timestamps are never replaced by
+  rehearsal timing.
 - The Polls page continues to show these rows as **Batch default**.
 
 ## Polls page

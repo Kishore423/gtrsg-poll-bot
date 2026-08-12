@@ -477,18 +477,21 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   sends also synthesize `specific_release_at=now` when no weekly/specific release
   schedule is present.
   Weekly template testing is an actual-batch rehearsal, not a parallel set of
-  test records. **Start batch rehearsal** creates or reuses the upcoming
-  `batch_default` rows for the selected group's future release date, temporarily
-  tags those same events with `rehearsal:<uuid>`, sends them immediately with
-  normal titles, and gives all rows one short rehearsal confirmation time. A
+  test records. **Start batch rehearsal**, placed beside **Save default**, creates
+  or reuses the next eligible `batch_default` rows for the selected group,
+  temporarily tags those same events with `rehearsal:<uuid>` plus a separate
+  `rehearsal-clear:<epoch-ms>` deadline, and sends them immediately with normal
+  titles. The only user-set rehearsal timing is a 1-60 minute clear duration. A
   custom/sent/open poll on any event date blocks the rehearsal rather than being
   replaced. Persistent skipped event dates remain omitted. Automatic generation
   sees rehearsal rows as active, so it cannot duplicate the real batch.
-  After every rehearsal confirmation is `sent`/`updated`, the scheduler closes
+  Rehearsal metadata never updates `resolved_release_at`, `close_at`, or the
+  confirmation's `resolved_send_at`; production timing stays unchanged throughout.
+  At the clear deadline, the scheduler sends the rehearsal confirmation and closes
   the rehearsal Telegram polls, transactionally deletes rehearsal response,
   participant, and allocation-audit data, clears Telegram/message/claim state,
-  removes the rehearsal tag, and restores the same rows to the weekly template's
-  real release, cutoff, and confirmation timestamps. This finalizer runs inside
+  removes both rehearsal tags, and keeps the same rows on their original release,
+  cutoff, and confirmation timestamps. This finalizer runs inside
   normal confirmation scheduling as well as the browser's short-delay trigger,
   so closing the page does not strand the batch. Partial rehearsal-send failures
   also run the reset. Polls renders rehearsals as **Batch default** and has no

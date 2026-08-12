@@ -59,14 +59,6 @@ let managedScheduleSavePending = false;
 
 const managedWorkflowSections = [managedScheduleSection, skipDaysSection, advancePollSection].filter(Boolean);
 
-function ensureTemplatePreviewPlacement() {
-  const preview = document.getElementById('weekly-template-poll-preview');
-  const heading = [...document.querySelectorAll('h4')]
-    .find((element) => element.textContent.trim() === 'Test template poll');
-  if (!preview || !heading || preview.nextElementSibling === heading) return;
-  heading.parentElement.insertBefore(preview, heading);
-}
-
 function hideManagedWorkflowSections() {
   managedWorkflowSections.forEach((section) => {
     section.hidden = true;
@@ -1139,14 +1131,13 @@ async function submitOneOffPoll(isTest = false) {
 
 async function submitWeeklyTemplateRehearsal() {
   const telegramGroupId = document.getElementById('weekly-send-group').value;
-  const releaseDateOverride = document.getElementById('weekly-send-event-date').value;
-  const delayInput = document.getElementById('weekly-send-confirmation-delay');
+  const delayInput = document.getElementById('weekly-rehearsal-clear-delay');
   const submitButton = document.getElementById('weekly-start-rehearsal');
-  const confirmationDelayMinutes = Number(delayInput?.value || 5);
+  const clearAfterMinutes = Number(delayInput?.value || 5);
 
   if (!telegramGroupId) return setStatus('Error: Please select a Telegram group first.', 'error');
-  if (!Number.isInteger(confirmationDelayMinutes) || confirmationDelayMinutes < 1 || confirmationDelayMinutes > 60) {
-    return setStatus('Error: Confirmation delay must be between 1 and 60 minutes.', 'error');
+  if (!Number.isInteger(clearAfterMinutes) || clearAfterMinutes < 1 || clearAfterMinutes > 60) {
+    return setStatus('Error: Rehearsal clear time must be between 1 and 60 minutes.', 'error');
   }
 
   const schedule = managedSchedules.find((s) => s.telegram_group_id === telegramGroupId && s.enabled);
@@ -1162,15 +1153,15 @@ async function submitWeeklyTemplateRehearsal() {
     return setStatus('Error: The template for this group has no shifts saved.', 'error');
   }
 
-  const releaseDate = releaseDateOverride || nextReleaseDateForSchedule(schedule);
+  const releaseDate = nextReleaseDateForSchedule(schedule);
   const eventDates = batchRangeForReleaseDate(releaseDate, schedule.gap_weeks).sort();
   const preview = [
     `${managedGroupOptionLabel(group)}`,
-    `Actual release date: ${formatLocalDate(releaseDate)}`,
-    `Actual batch polls to rehearse now: ${eventDates.length}`,
+    `Next production release: ${formatLocalDate(releaseDate)}`,
+    `Batch polls to rehearse now: ${eventDates.length}`,
     `Event range: ${formatLocalDate(eventDates[0])} to ${formatLocalDate(eventDates[eventDates.length - 1])}`,
-    `Confirmation: ${confirmationDelayMinutes} minute${confirmationDelayMinutes === 1 ? '' : 's'} after send`,
-    'After confirmation, rehearsal votes are cleared and this same batch returns to its actual schedule.',
+    `Clear rehearsal after: ${clearAfterMinutes} minute${clearAfterMinutes === 1 ? '' : 's'}`,
+    'Production release, cutoff, and confirmation timestamps will not change.',
     '',
     eventDates.map((dateText) => `- ${formatLocalDate(dateText)}`).join('\n'),
   ].join('\n');
@@ -1185,13 +1176,12 @@ async function submitWeeklyTemplateRehearsal() {
       body: JSON.stringify({
         telegram_group_id: telegramGroupId,
         weekly_schedule_id: schedule.id,
-        release_date: releaseDate,
-        confirmation_delay_minutes: confirmationDelayMinutes,
+        clear_after_minutes: clearAfterMinutes,
       }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Rehearsal could not be started');
-    setStatus(`${result.poll_count} actual batch poll${result.poll_count === 1 ? '' : 's'} sent for rehearsal. Confirmation will run in ${confirmationDelayMinutes} minute${confirmationDelayMinutes === 1 ? '' : 's'}, then the batch will reset to ${formatLocalDateTime(result.actual_release_at)}.`, 'success');
+    setStatus(`${result.poll_count} actual batch poll${result.poll_count === 1 ? '' : 's'} sent for rehearsal. In ${clearAfterMinutes} minute${clearAfterMinutes === 1 ? '' : 's'}, confirmations will be sent and rehearsal data cleared. Production timing remains ${formatLocalDateTime(result.actual_release_at)}.`, 'success');
     window.alert('Actual batch rehearsal sent. Please check Telegram.');
     window.setTimeout(async () => {
       try {
@@ -1203,8 +1193,7 @@ async function submitWeeklyTemplateRehearsal() {
       } catch (error) {
         setStatus(`Rehearsal confirmation check failed: ${error.message}. The scheduler will retry automatically.`, 'error');
       }
-    }, confirmationDelayMinutes * 60 * 1000);
-    document.getElementById('weekly-send-event-date').value = '';
+    }, clearAfterMinutes * 60 * 1000);
     await loadScheduledPolls();
   } catch (error) {
     setStatus(`Template rehearsal failed: ${error.message}`, 'error');
@@ -1723,7 +1712,6 @@ async function loadDashboard(includeLegacy = legacyWorkflowEnabled) {
 }
 
 async function bootstrap() {
-  ensureTemplatePreviewPlacement();
   hideManagedWorkflowSections();
   window.gtrsgAuth.init();
   const config = await (await nativeFetch('/api/auth-config')).json();

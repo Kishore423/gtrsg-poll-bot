@@ -551,8 +551,7 @@ test('weekly template rehearsal API sends the actual future batch through one li
     const response = await fetch(`${baseUrl}/api/template-rehearsals`, json('POST', {
       telegram_group_id: groupId,
       weekly_schedule_id: scheduleId,
-      release_date: '2099-01-07',
-      confirmation_delay_minutes: 5,
+      clear_after_minutes: 5,
     }));
     assert.equal(response.status, 201);
     const result = await response.json();
@@ -560,6 +559,8 @@ test('weekly template rehearsal API sends the actual future batch through one li
     assert.equal(telegram.polls.length, 7);
     assert.equal(created.length, 7);
     assert.equal(prepared[0].pollIds.length, 7);
+    assert.ok(prepared[0].clearAt);
+    assert.equal('confirmationAt' in prepared[0], false);
     assert.ok(created.every((payload) => !payload.poll_question.includes('[TEST]')));
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));

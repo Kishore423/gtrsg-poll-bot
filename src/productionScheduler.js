@@ -6,6 +6,7 @@ const SERVICE_LABELS = { WHCL: 'Wheelchair', PSA: 'PSA', PRIMARY: 'General' };
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const REHEARSAL_TAG_PREFIX = 'rehearsal:';
+const REHEARSAL_CLEAR_TAG_PREFIX = 'rehearsal-clear:';
 
 function localDateAt(date, timeZone) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -20,6 +21,24 @@ function localDateAt(date, timeZone) {
 
 function weekday(dateText) {
   return new Date(`${dateText}T00:00:00Z`).getUTCDay();
+}
+
+function addDays(dateText, days) {
+  const value = new Date(`${dateText}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + Number(days));
+  return value.toISOString().slice(0, 10);
+}
+
+function nextReleaseDateForSchedule(schedule, now = new Date()) {
+  const timezone = schedule.timezone || 'Asia/Singapore';
+  const today = localDateAt(now, timezone);
+  const releaseDay = Number(schedule.poll_release_day_of_week);
+  const releaseTime = String(schedule.poll_release_time || '17:00').slice(0, 5);
+  let releaseDate = addDays(today, (releaseDay - weekday(today) + 7) % 7);
+  if (zonedDateTimeToUtc(releaseDate, releaseTime, timezone) <= now) {
+    releaseDate = addDays(releaseDate, 7);
+  }
+  return releaseDate;
 }
 
 function releaseDueToday(now, releaseDay, releaseTime, timeZone) {
@@ -304,10 +323,8 @@ function psaBatchKey(confirmation) {
   ].join('|');
 }
 
-async function runScheduledConfirmations(db, telegram, limit = 50) {
-  if (!db.claimDueConfirmations) return [];
+async function sendClaimedConfirmations(db, telegram, confirmations) {
   const completed = [];
-  const confirmations = await db.claimDueConfirmations(limit);
   const psaGroups = new Map();
   const singles = [];
   for (const confirmation of confirmations) {
@@ -360,6 +377,22 @@ async function runScheduledConfirmations(db, telegram, limit = 50) {
       for (const confirmation of confirmations) {
         await db.failConfirmationSend(confirmation.id, confirmation.claim_token, error.message);
       }
+    }
+  }
+  return completed;
+}
+
+async function runScheduledConfirmations(db, telegram, limit = 50) {
+  if (!db.claimDueConfirmations) return [];
+  const completed = await sendClaimedConfirmations(
+    db,
+    telegram,
+    await db.claimDueConfirmations(limit)
+  );
+  if (db.listDueTemplateRehearsalBatchIds && db.claimTemplateRehearsalConfirmations) {
+    for (const batchId of await db.listDueTemplateRehearsalBatchIds()) {
+      const result = await sendTemplateRehearsalConfirmation(db, telegram, batchId);
+      if (result?.confirmation_ids) completed.push(...result.confirmation_ids);
     }
   }
   if (db.listReadyTemplateRehearsals && db.resetTemplateRehearsal) {
@@ -420,29 +453,10 @@ async function sendScheduledConfirmationImmediately(db, telegram, pollId) {
 }
 
 function rehearsalBatchIdFromTag(tag) {
-  return String(tag || '').startsWith(REHEARSAL_TAG_PREFIX)
+  return String(tag || '').startsWith(REHEARSAL_TAG_PREFIX) &&
+    !String(tag || '').startsWith(REHEARSAL_CLEAR_TAG_PREFIX)
     ? String(tag).slice(REHEARSAL_TAG_PREFIX.length)
     : null;
-}
-
-function actualTimingForRehearsalRow(row) {
-  const timezone = row.timezone || 'Asia/Singapore';
-  const timing = managedTimingForEvent({
-    service: row.service || row.bot_id || 'WHCL',
-    eventDate: String(row.event_date).slice(0, 10),
-    gapWeeks: row.gap_weeks,
-    releaseDay: row.poll_release_day_of_week,
-    releaseTime: String(row.poll_release_time || '17:00').slice(0, 5),
-    confirmationDay: row.confirmation_day_of_week,
-    confirmationTime: String(row.confirmation_time || '').slice(0, 5),
-  });
-  return {
-    poll_id: row.poll_id,
-    event_id: row.event_id,
-    release_at: utcIso(timing.releaseAt, timezone),
-    close_at: utcIso(timing.closeAt, timezone),
-    confirmation_at: utcIso(timing.confirmationAt, timezone),
-  };
 }
 
 async function resetTemplateRehearsalBatch(db, telegram, batchId, rows = null) {
@@ -457,12 +471,11 @@ async function resetTemplateRehearsalBatch(db, telegram, batchId, rows = null) {
       // still has to be reset so this batch can run on its real schedule.
     }
   }
-  const timings = polls.map(actualTimingForRehearsalRow);
-  await db.resetTemplateRehearsal(batchId, timings);
+  await db.resetTemplateRehearsal(batchId);
   return {
     batch_id: batchId,
     poll_count: polls.length,
-    actual_release_at: timings.map((item) => item.release_at).sort()[0],
+    actual_release_at: polls.map((item) => item.resolved_release_at).filter(Boolean).sort()[0] || null,
   };
 }
 
@@ -483,8 +496,7 @@ async function finalizeReadyTemplateRehearsals(db, telegram) {
 async function startTemplateRehearsal(db, telegram, {
   group,
   schedule,
-  releaseDate,
-  confirmationDelayMinutes = 5,
+  clearAfterMinutes = 5,
   createdBy = null,
   now = new Date(),
 }) {
@@ -493,20 +505,9 @@ async function startTemplateRehearsal(db, telegram, {
     error.statusCode = 501;
     throw error;
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(releaseDate || '')) ||
-      new Date(`${releaseDate}T00:00:00Z`).toISOString().slice(0, 10) !== releaseDate) {
-    const error = new RangeError('Choose a valid actual release date');
-    error.statusCode = 400;
-    throw error;
-  }
-  const delay = Number(confirmationDelayMinutes);
+  const delay = Number(clearAfterMinutes);
   if (!Number.isInteger(delay) || delay < 1 || delay > 60) {
-    const error = new RangeError('Confirmation delay must be between 1 and 60 minutes');
-    error.statusCode = 400;
-    throw error;
-  }
-  if (weekday(releaseDate) !== Number(schedule.poll_release_day_of_week)) {
-    const error = new RangeError('Rehearsal release date must match the weekly template release day');
+    const error = new RangeError('Rehearsal clear time must be between 1 and 60 minutes');
     error.statusCode = 400;
     throw error;
   }
@@ -524,6 +525,7 @@ async function startTemplateRehearsal(db, telegram, {
     bot_id: group.bot_id || schedule.bot_id,
     shifts,
   };
+  const releaseDate = nextReleaseDateForSchedule(scheduleWithGroup, now);
   const eventDates = eventDatesForReleaseDate(
     scheduleWithGroup.service || scheduleWithGroup.bot_id,
     releaseDate,
@@ -569,13 +571,11 @@ async function startTemplateRehearsal(db, telegram, {
     });
   }
   const batchId = require('crypto').randomUUID();
-  const confirmationAt = new Date(now.getTime() + delay * 60 * 1000);
-  const closeAt = new Date(confirmationAt.getTime() + 60 * 1000);
+  const clearAt = new Date(now.getTime() + delay * 60 * 1000);
   await db.prepareTemplateRehearsal({
     batchId,
     pollIds: candidates.map((item) => item.id),
-    confirmationAt: confirmationAt.toISOString(),
-    closeAt: closeAt.toISOString(),
+    clearAt: clearAt.toISOString(),
   });
   try {
     for (const poll of candidates) {
@@ -591,7 +591,7 @@ async function startTemplateRehearsal(db, telegram, {
     poll_count: candidates.length,
     event_start: candidates[0].eventDate,
     event_end: candidates[candidates.length - 1].eventDate,
-    confirmation_at: confirmationAt.toISOString(),
+    clear_at: clearAt.toISOString(),
     actual_release_at: templatePayloadForEvent(
       scheduleWithGroup,
       candidates[0].eventDate,
@@ -603,15 +603,20 @@ async function startTemplateRehearsal(db, telegram, {
 async function sendTemplateRehearsalConfirmation(db, telegram, batchId) {
   const rows = await db.listTemplateRehearsalPolls(batchId);
   if (!rows.length) return null;
-  const pollIds = rows[0].service === 'PSA'
-    ? [rows[0].poll_id]
-    : rows.map((row) => row.poll_id);
-  let confirmations = 0;
-  for (const pollId of pollIds) {
-    const result = await sendScheduledConfirmationImmediately(db, telegram, pollId);
-    confirmations += Number(result?.confirmations || 0);
+  const clearAt = rows[0].clear_at && new Date(rows[0].clear_at);
+  if (!clearAt || Number.isNaN(clearAt.getTime()) || clearAt > new Date()) {
+    return null;
   }
-  return confirmations ? { success: true, confirmations } : null;
+  const claimed = await db.claimTemplateRehearsalConfirmations(batchId);
+  const confirmationIds = await sendClaimedConfirmations(db, telegram, claimed);
+  const resets = await finalizeReadyTemplateRehearsals(db, telegram);
+  const reset = resets.find((item) => item.batch_id === batchId);
+  return confirmationIds.length || reset ? {
+    success: true,
+    confirmations: confirmationIds.length,
+    confirmation_ids: confirmationIds,
+    reset: Boolean(reset),
+  } : null;
 }
 
 module.exports = {

@@ -496,6 +496,31 @@
       min-width: 10rem;
     }
 
+    .rehearsal-clear-control {
+      width: min(32rem, 100%);
+      padding: 1rem;
+      border-left: 3px solid var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .rehearsal-clear-control label {
+      margin: 0;
+    }
+
+    .rehearsal-duration-input {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin: 0.45rem 0;
+      color: var(--ink-soft);
+      font-weight: 700;
+      text-transform: none;
+    }
+
+    .rehearsal-duration-input input {
+      width: 7rem;
+    }
+
     .skip-date-panel {
       border-top: 1px solid var(--border);
       border-bottom: 1px solid var(--border);
@@ -1009,28 +1034,27 @@
           <div class="template-actions">
             <button type="button" id="weekly-add-shift" class="secondary">Add template shift</button>
             <button type="submit" class="primary">Save default</button>
+            <button type="button" id="weekly-start-rehearsal" class="secondary">Start batch rehearsal</button>
+          </div>
+          <div class="rehearsal-clear-control">
+            <label>Time to clear rehearsal polls
+              <span class="rehearsal-duration-input">
+                <input type="number" id="weekly-rehearsal-clear-delay" min="1" max="60" step="1" value="5" />
+                <span>minutes</span>
+              </span>
+              <span class="field-help">At this time, confirmations are sent, rehearsal votes are removed, and the same records return to their original schedule.</span>
+            </label>
           </div>
         </form>
         
         <hr style="border: none; border-top: 1px solid var(--border); margin: 1rem 0;" />
         
-        <!-- Rehearsal block -->
         <div style="display: flex; flex-direction: column; gap: 0.75rem;">
           <input type="hidden" id="weekly-send-group" />
           <div id="weekly-template-poll-preview" class="template-poll-preview">
             Save template shifts to preview the Telegram poll options.
           </div>
-          <h4 style="margin: 0;">Rehearse actual batch</h4>
-          <div style="display: flex; align-items: flex-end; gap: 0.75rem; flex-wrap: wrap;">
-            <label style="flex: 1; min-width: 10rem; margin: 0;">Actual release date
-              <input type="date" id="weekly-send-event-date" style="width: 100%;" />
-            </label>
-            <label style="width: 12rem; min-width: 10rem; margin: 0;">Confirmation after
-              <input type="number" id="weekly-send-confirmation-delay" min="1" max="60" step="1" value="5" style="width: 100%;" />
-            </label>
-            <button type="button" id="weekly-start-rehearsal" class="secondary" style="white-space: nowrap;">Start batch rehearsal</button>
-          </div>
-          <p class="hint" style="margin: 0;">Sends the actual upcoming batch now for rehearsal. After its confirmation, rehearsal votes are cleared and the same batch is restored to the real release, cutoff, and confirmation schedule.</p>
+          <p class="hint" style="margin: 0;">A rehearsal sends the next actual batch now without changing its production release, cutoff, or confirmation timestamps.</p>
         </div>
       </div>
 

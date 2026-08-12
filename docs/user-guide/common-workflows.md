@@ -53,14 +53,16 @@ been sent to Telegram, skipping cannot recall it.
 ## Rehearse an upcoming weekly batch
 
 1. On **Home**, open the group and choose **Weekly default template**.
-2. Under **Rehearse actual batch**, choose the actual future release date and a
-   short confirmation delay.
-3. Click **Start batch rehearsal**, confirm the summary, then vote in Telegram.
-4. After the rehearsal confirmation arrives, return to Polls if needed and
-   verify the same batch-default rows show their real future timings again.
+2. Set **Time to clear rehearsal polls** to between 1 and 60 minutes.
+3. Click **Start batch rehearsal** beside **Save default**, confirm the summary,
+   then vote in Telegram.
+4. At the clear time, the confirmation is sent and the rehearsal polls are
+   closed automatically.
 
-The rehearsal uses the actual batch rows. Once confirmation completes, rehearsal
-votes are cleared and those rows are restored for the real scheduled send.
+The next eligible batch is selected automatically. The rehearsal uses the actual
+batch rows, but it never changes their production release, cutoff, or confirmation
+timestamps. Once confirmation completes, rehearsal votes are cleared and the
+same rows remain ready for their real scheduled send.
 
 ## Download the deployment sheet
 
