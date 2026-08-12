@@ -292,7 +292,8 @@ function createPostgresDb(sql = createSql()) {
         from scheduled_polls sp join events e on e.id=sp.event_id
         join telegram_groups g on g.id=sp.telegram_group_id
         left join confirmation_messages cm on cm.scheduled_poll_id=sp.id
-        where not ('reset-for-production'=any(e.operational_tags) and sp.telegram_poll_id is null)
+        where not ('reset-for-production'=any(e.operational_tags) and
+          sp.telegram_poll_id is null and sp.status='scheduled')
         order by e.event_date asc, g.group_name asc, sp.resolved_release_at asc, sp.created_at asc`;
     },
     // botId scopes the list to one user's bot; admins pass nothing to see all.
