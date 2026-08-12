@@ -1189,12 +1189,10 @@ async function submitWeeklyTemplateRehearsal() {
         const confirmationResult = await confirmationRes.json().catch(() => ({}));
         if (!confirmationRes.ok) throw new Error(confirmationResult.error || 'Confirmation failed');
         setStatus(`Rehearsal confirmation sent (${confirmationResult.confirmations}). Votes were cleared and the actual batch was restored to its scheduled send time.`, 'success');
-        await loadScheduledPolls();
       } catch (error) {
         setStatus(`Rehearsal confirmation check failed: ${error.message}. The scheduler will retry automatically.`, 'error');
       }
     }, clearAfterMinutes * 60 * 1000);
-    await loadScheduledPolls();
   } catch (error) {
     setStatus(`Template rehearsal failed: ${error.message}`, 'error');
   } finally {

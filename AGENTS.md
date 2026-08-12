@@ -511,6 +511,8 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   also run the reset. Polls renders rehearsals as **Batch default** and has no
   separate Test filter/type. One-off **Send test poll** still uses the generic
   custom-poll smoke-test path but is rendered as Custom, not as another poll type.
+  Home rehearsal callbacks must not call `loadScheduledPolls`; that loader exists
+  only on the Polls page, and the scheduler owns the server-side reset.
   Confirmation delivery is service-specific: PSA due confirmations are
   grouped into one Telegram message per group/resolved confirmation time, with
   each event date and its confirmed timeslots listed in date order. Wheelchair

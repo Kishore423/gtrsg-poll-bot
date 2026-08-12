@@ -196,6 +196,11 @@ test('Polls treats rehearsals as actual batch rows instead of a separate test ty
   assert.match(source, /return 'batch_default';/);
 });
 
+test('Home rehearsal flow does not call the Polls-page loader', () => {
+  const source = readFileSync(join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.doesNotMatch(source, /loadScheduledPolls\s*\(/);
+});
+
 test('Polls exposes an explicit production reset for test-sent batches', () => {
   const source = readFileSync(join(__dirname, '..', 'public', 'polls.js'), 'utf8');
   assert.match(source, /Reset test batch/);
