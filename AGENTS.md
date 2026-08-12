@@ -418,6 +418,9 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   Successful **Save default** and **Review and schedule** actions show an in-page
   completion dialog naming the selected Telegram group; API failures remain in
   the shared status area and must not open the success dialog.
+  Weekly-template save is single-flight: its submit control is disabled and the
+  form is marked busy until the save plus refresh completes, preventing repeated
+  completion dialogs from concurrent submissions.
   Home, Polls, and Admin retain their existing layouts while sharing a restrained
   Telegram scheduling illustration in the page header plus dimensional surfaces,
   table states, modal blur, and reduced-motion-aware transitions from

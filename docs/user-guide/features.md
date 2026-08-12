@@ -29,7 +29,9 @@ after Telegram accepts that message. Use it if you're unsure a group is wired up
 The weekly template is the recurring poll for a group. You choose the release day
 and time and the shift options (each shift has a start and end time chosen with a
 scroll-wheel time picker). A live **Telegram poll preview** shows the question and
-options as they will appear. Click **Save default** to store the template.
+options as they will appear. Click **Save default** to store the template. While
+the save is running, the button stays unavailable so one action produces one
+completion message.
 
 Once saved, the system automatically generates and sends the poll batch on the
 configured release day — you do not create each week's batch by hand.

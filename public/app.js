@@ -55,6 +55,7 @@ let selectedManagedGroupId = '';
 let adminManagedUsers = [];
 let selectedAdminManagedUserId = '';
 let adminManagedContextRefreshPromise = null;
+let managedScheduleSavePending = false;
 
 const managedWorkflowSections = [managedScheduleSection, skipDaysSection, advancePollSection].filter(Boolean);
 
@@ -1384,36 +1385,52 @@ async function loadManagedSchedules({ syncEditor = true } = {}) {
 
 managedScheduleForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const body = Object.fromEntries(new FormData(managedScheduleForm).entries());
-  body.timezone = 'Asia/Singapore';
-  
-  const shifts = shiftRowsFromContainer(weeklyShiftEditor).map(({ complete, ...shift }) => shift);
-  body.shifts = shifts;
-  body.poll_release_day_of_week = Number(body.poll_release_day_of_week);
-  body.confirmation_day_of_week = Number(body.confirmation_day_of_week);
-  body.gap_weeks = Number(body.gap_weeks);
+  if (managedScheduleSavePending) return;
 
-  setStatus('Saving weekly default...', 'pending');
-  const response = await fetch('/api/weekly-schedules', { method: 'PUT',
-    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  const result = await response.json();
-  if (!response.ok) return setStatus(`Error: ${result.error}`, 'error');
-  const savedSchedule = scheduleFromSaveResult(result, body);
-  replaceManagedSchedule(savedSchedule);
-  syncWeeklyTemplateFormFromSavedSchedule(body.telegram_group_id);
-  if (advancePollForm.elements.telegram_group_id.value === body.telegram_group_id) {
-    syncOneOffPollFormFromSavedSchedule(body.telegram_group_id);
+  const submitButton = event.submitter || managedScheduleForm.querySelector('[type="submit"]');
+  managedScheduleSavePending = true;
+  managedScheduleForm.setAttribute('aria-busy', 'true');
+  if (submitButton) submitButton.disabled = true;
+
+  try {
+    const body = Object.fromEntries(new FormData(managedScheduleForm).entries());
+    body.timezone = 'Asia/Singapore';
+
+    const shifts = shiftRowsFromContainer(weeklyShiftEditor).map(({ complete, ...shift }) => shift);
+    body.shifts = shifts;
+    body.poll_release_day_of_week = Number(body.poll_release_day_of_week);
+    body.confirmation_day_of_week = Number(body.confirmation_day_of_week);
+    body.gap_weeks = Number(body.gap_weeks);
+
+    setStatus('Saving weekly default...', 'pending');
+    const response = await fetch('/api/weekly-schedules', { method: 'PUT',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const result = await response.json();
+    if (!response.ok) {
+      setStatus(`Error: ${result.error}`, 'error');
+      return;
+    }
+    const savedSchedule = scheduleFromSaveResult(result, body);
+    replaceManagedSchedule(savedSchedule);
+    syncWeeklyTemplateFormFromSavedSchedule(body.telegram_group_id);
+    if (advancePollForm.elements.telegram_group_id.value === body.telegram_group_id) {
+      syncOneOffPollFormFromSavedSchedule(body.telegram_group_id);
+    }
+    await loadManagedSchedules({ syncEditor: false });
+    replaceManagedSchedule(savedSchedule);
+    syncWeeklyTemplateFormFromSavedSchedule(body.telegram_group_id);
+    if (advancePollForm.elements.telegram_group_id.value === body.telegram_group_id) {
+      syncOneOffPollFormFromSavedSchedule(body.telegram_group_id);
+    }
+    updateTemplatePollPreview();
+    setStatus('Weekly default saved.', 'success');
+    const group = groupById(body.telegram_group_id);
+    showActionFeedback(`Default template saved for ${group?.group_name || 'the selected Telegram group'}.`);
+  } finally {
+    managedScheduleSavePending = false;
+    managedScheduleForm.removeAttribute('aria-busy');
+    if (submitButton) submitButton.disabled = false;
   }
-  await loadManagedSchedules({ syncEditor: false });
-  replaceManagedSchedule(savedSchedule);
-  syncWeeklyTemplateFormFromSavedSchedule(body.telegram_group_id);
-  if (advancePollForm.elements.telegram_group_id.value === body.telegram_group_id) {
-    syncOneOffPollFormFromSavedSchedule(body.telegram_group_id);
-  }
-  updateTemplatePollPreview();
-  setStatus('Weekly default saved.', 'success');
-  const group = groupById(body.telegram_group_id);
-  showActionFeedback(`Default template saved for ${group?.group_name || 'the selected Telegram group'}.`);
 });
 
 // renderScheduledPolls and loadScheduledPolls moved to polls.js

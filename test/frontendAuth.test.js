@@ -367,6 +367,16 @@ test('weekly default and one-off scheduling show group-specific success popups',
   assert.match(source, /actionFeedbackMessage\.textContent = message/);
 });
 
+test('weekly default save allows only one in-flight submission and completion popup', () => {
+  const source = readFileSync(join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(source, /let managedScheduleSavePending = false/);
+  assert.match(source, /if \(managedScheduleSavePending\) return/);
+  assert.match(source, /managedScheduleForm\.setAttribute\('aria-busy', 'true'\)/);
+  assert.match(source, /if \(submitButton\) submitButton\.disabled = true/);
+  assert.match(source, /finally \{[\s\S]*managedScheduleSavePending = false/);
+  assert.equal((source.match(/showActionFeedback\(`Default template saved for/g) || []).length, 1);
+});
+
 test('deployment sheets are downloaded only from the dedicated navbar page', () => {
   const home = readFileSync(join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const polls = readFileSync(join(__dirname, '..', 'public', 'polls.html'), 'utf8');
