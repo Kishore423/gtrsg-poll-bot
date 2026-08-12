@@ -10,6 +10,7 @@ const SERVICE_LABELS = { WHCL: 'Wheelchair', PSA: 'PSA', PRIMARY: 'General' };
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const REHEARSAL_TAG_PREFIX = 'rehearsal:';
+const REHEARSAL_START_TAG_PREFIX = 'rehearsal-start:';
 const REHEARSAL_CLEAR_TAG_PREFIX = 'rehearsal-clear:';
 
 function localDateAt(date, timeZone) {
@@ -306,7 +307,7 @@ async function generateScheduledPollsFromTemplates(db, now = new Date()) {
 async function runScheduledPolls(db, telegram, limit = 10) {
   if (!db.claimDuePolls) return [];
   await generateScheduledPollsFromTemplates(db);
-  const completed = [];
+  const completed = await runDueTemplateRehearsalStarts(db, telegram);
   for (const poll of sortClaimedPollsForSending(await db.claimDuePolls(limit))) {
     try {
       const result = await telegram.sendPoll(poll.service, poll.telegram_chat_id,
@@ -317,6 +318,25 @@ async function runScheduledPolls(db, telegram, limit = 10) {
       completed.push(poll.id);
     } catch (error) {
       await db.failPollSend(poll.id, poll.claim_token, error.message);
+    }
+  }
+  return completed;
+}
+
+async function runDueTemplateRehearsalStarts(db, telegram) {
+  if (!db.listDueTemplateRehearsalStartBatchIds || !db.listTemplateRehearsalPolls) return [];
+  const completed = [];
+  for (const batchId of await db.listDueTemplateRehearsalStartBatchIds()) {
+    const rows = await db.listTemplateRehearsalPolls(batchId);
+    rows.sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)));
+    for (const row of rows) {
+      if (row.telegram_poll_id || !['draft', 'scheduled', 'failed'].includes(row.status)) continue;
+      try {
+        const result = await sendScheduledPollImmediately(db, telegram, row.poll_id);
+        if (result) completed.push(row.poll_id);
+      } catch (_) {
+        // sendScheduledPollImmediately records the failure for the next minute retry.
+      }
     }
   }
   return completed;
@@ -522,6 +542,7 @@ async function sendScheduledConfirmationImmediately(db, telegram, pollId) {
 
 function rehearsalBatchIdFromTag(tag) {
   return String(tag || '').startsWith(REHEARSAL_TAG_PREFIX) &&
+    !String(tag || '').startsWith(REHEARSAL_START_TAG_PREFIX) &&
     !String(tag || '').startsWith(REHEARSAL_CLEAR_TAG_PREFIX)
     ? String(tag).slice(REHEARSAL_TAG_PREFIX.length)
     : null;
@@ -556,6 +577,7 @@ async function finalizeReadyTemplateRehearsals(db, telegram) {
 async function startTemplateRehearsal(db, telegram, {
   group,
   schedule,
+  startAt,
   clearAfterMinutes = 5,
   createdBy = null,
   now = new Date(),
@@ -571,6 +593,13 @@ async function startTemplateRehearsal(db, telegram, {
     error.statusCode = 400;
     throw error;
   }
+  const rehearsalStartAt = new Date(startAt);
+  if (!startAt || Number.isNaN(rehearsalStartAt.getTime()) || rehearsalStartAt <= now) {
+    const error = new RangeError('Choose a rehearsal start date and time in the future');
+    error.statusCode = 400;
+    throw error;
+  }
+  const clearAt = new Date(rehearsalStartAt.getTime() + delay * 60 * 1000);
   const shifts = normalizeShifts(schedule.shifts);
   if (!shifts.length) {
     const error = new RangeError('Save at least one template shift before starting a rehearsal');
@@ -595,8 +624,8 @@ async function startTemplateRehearsal(db, telegram, {
   for (const eventDate of eventDates) {
     if (db.isPollDateExcluded && await db.isPollDateExcluded(group.id, eventDate)) continue;
     const payload = templatePayloadForEvent(scheduleWithGroup, eventDate, releaseDate);
-    if (new Date(payload.resolved_release_at) <= now) {
-      const error = new RangeError('Choose a future release date so the rehearsed batch can be restored for its real send time');
+    if (new Date(payload.resolved_release_at) <= clearAt) {
+      const error = new RangeError('The rehearsal must finish before the actual production release');
       error.statusCode = 400;
       throw error;
     }
@@ -631,26 +660,18 @@ async function startTemplateRehearsal(db, telegram, {
     });
   }
   const batchId = require('crypto').randomUUID();
-  const clearAt = new Date(now.getTime() + delay * 60 * 1000);
   await db.prepareTemplateRehearsal({
     batchId,
     pollIds: candidates.map((item) => item.id),
+    startAt: rehearsalStartAt.toISOString(),
     clearAt: clearAt.toISOString(),
   });
-  try {
-    for (const poll of candidates) {
-      const result = await sendScheduledPollImmediately(db, telegram, poll.id);
-      if (!result) throw new Error(`Poll ${poll.eventDate} could not be sent for rehearsal`);
-    }
-  } catch (error) {
-    await resetTemplateRehearsalBatch(db, telegram, batchId);
-    throw error;
-  }
   return {
     batch_id: batchId,
     poll_count: candidates.length,
     event_start: candidates[0].eventDate,
     event_end: candidates[candidates.length - 1].eventDate,
+    start_at: rehearsalStartAt.toISOString(),
     clear_at: clearAt.toISOString(),
     actual_release_at: templatePayloadForEvent(
       scheduleWithGroup,

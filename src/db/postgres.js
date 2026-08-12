@@ -961,9 +961,10 @@ function createPostgresDb(sql = createSql()) {
         limit 1`;
       return row || null;
     },
-    async prepareTemplateRehearsal({ batchId, pollIds, clearAt }) {
+    async prepareTemplateRehearsal({ batchId, pollIds, startAt, clearAt }) {
       await initPromise;
       const tag = `rehearsal:${batchId}`;
+      const startTag = `rehearsal-start:${new Date(startAt).getTime()}`;
       const clearTag = `rehearsal-clear:${new Date(clearAt).getTime()}`;
       return sql.begin(async (tx) => {
         const rows = await tx`
@@ -983,8 +984,10 @@ function createPostgresDb(sql = createSql()) {
           throw error;
         }
         const eventIds = rows.map((row) => row.event_id);
-        await tx`update events set status='scheduled',
-          operational_tags=array_append(array_append(array_remove(operational_tags,${tag}),${tag}),${clearTag}),
+        await tx`update events set status='scheduled',operational_tags=array_append(array_append(array_append(array(
+          select value from unnest(operational_tags) as tags(value)
+          where value not like 'rehearsal:%'
+        ),${tag}),${startTag}),${clearTag}),
           updated_at=now()
           where id=any(${eventIds}::uuid[])`;
         await tx`update scheduled_polls set status='scheduled',
@@ -1002,14 +1005,20 @@ function createPostgresDb(sql = createSql()) {
       await initPromise;
       return sql`
         select ${String(batchId)} as batch_id,sp.id as poll_id,sp.event_id,sp.telegram_group_id,e.event_date::text,
+          sp.status,
           sp.telegram_message_id,sp.telegram_poll_id,g.telegram_chat_id,
           coalesce(g.service,g.bot_ref::text,g.bot_id) as service,w.timezone,w.gap_weeks,
           w.poll_release_day_of_week,w.poll_release_time,w.confirmation_day_of_week,
           w.confirmation_time,sp.resolved_release_at,sp.close_at,
           cm.resolved_send_at,cm.status as confirmation_status,
           cm.telegram_message_id as confirmation_message_id,
+          to_timestamp(substring(start_meta.tag from 17)::double precision / 1000.0) as start_at,
           to_timestamp(substring(clear_meta.tag from 17)::double precision / 1000.0) as clear_at
         from events e
+        left join lateral (
+          select tag from unnest(e.operational_tags) as tag
+          where tag like 'rehearsal-start:%' limit 1
+        ) start_meta on true
         cross join lateral (
           select tag from unnest(e.operational_tags) as tag
           where tag like 'rehearsal-clear:%' limit 1
@@ -1033,7 +1042,8 @@ function createPostgresDb(sql = createSql()) {
           cross join lateral unnest(e.operational_tags) as tag
           join scheduled_polls sp on sp.event_id=e.id
           join confirmation_messages cm on cm.scheduled_poll_id=sp.id
-          where tag like 'rehearsal:%' and tag not like 'rehearsal-clear:%'
+          where tag like 'rehearsal:%' and tag not like 'rehearsal-start:%'
+            and tag not like 'rehearsal-clear:%'
         ), ready as (
           select batch_id from tagged group by batch_id
           having bool_and(confirmation_status in ('sent','updated'))
@@ -1050,6 +1060,30 @@ function createPostgresDb(sql = createSql()) {
         join telegram_groups g on g.id=t.telegram_group_id
         order by t.batch_id,t.event_date,t.poll_id`;
     },
+    async listDueTemplateRehearsalStartBatchIds() {
+      await initPromise;
+      const rows = await sql`
+        with tagged as (
+          select substring(batch_tag from 11) as batch_id,
+            substring(start_tag from 17)::bigint as start_at_ms
+          from events e
+          join scheduled_polls sp on sp.event_id=e.id
+          cross join lateral (
+            select tag as batch_tag from unnest(e.operational_tags) as tag
+            where tag like 'rehearsal:%' and tag not like 'rehearsal-start:%'
+              and tag not like 'rehearsal-clear:%' limit 1
+          ) batch_meta
+          cross join lateral (
+            select tag as start_tag from unnest(e.operational_tags) as tag
+            where tag like 'rehearsal-start:%' limit 1
+          ) start_meta
+          where sp.status in ('draft','scheduled','failed') and sp.telegram_poll_id is null
+        )
+        select distinct batch_id from tagged
+        where to_timestamp(start_at_ms::double precision / 1000.0) <= now()
+        order by batch_id`;
+      return rows.map((row) => row.batch_id);
+    },
     async listDueTemplateRehearsalBatchIds() {
       await initPromise;
       const rows = await sql`
@@ -1059,7 +1093,8 @@ function createPostgresDb(sql = createSql()) {
           from events e
           cross join lateral (
             select tag as batch_tag from unnest(e.operational_tags) as tag
-            where tag like 'rehearsal:%' and tag not like 'rehearsal-clear:%' limit 1
+            where tag like 'rehearsal:%' and tag not like 'rehearsal-start:%'
+              and tag not like 'rehearsal-clear:%' limit 1
           ) batch_meta
           cross join lateral (
             select tag as clear_tag from unnest(e.operational_tags) as tag
@@ -1123,7 +1158,8 @@ function createPostgresDb(sql = createSql()) {
           updated_at=now() where scheduled_poll_id=any(${pollIds}::uuid[])`;
         await tx`update events set status='scheduled',operational_tags=array(
           select value from unnest(operational_tags) as tags(value)
-          where value<>${tag} and value not like 'rehearsal-clear:%'
+          where value<>${tag} and value not like 'rehearsal-start:%'
+            and value not like 'rehearsal-clear:%'
         ),
           updated_at=now() where id=any(${eventIds}::uuid[])`;
         return rows.length;

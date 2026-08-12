@@ -55,12 +55,10 @@ test('reset test batch refuses a poll whose production release is not in the fut
   assert.equal(reset, false);
 });
 
-test('weekly rehearsal sends the actual future batch without creating test-labelled polls', async () => {
+test('weekly rehearsal schedules the actual future batch without sending before its start time', async () => {
   const created = [];
   const groupLookups = [];
   const prepared = [];
-  const claimed = new Map();
-  const sent = [];
   const db = {
     async isPollDateExcluded() { return false; },
     async getActivePollForDate(groupId, eventDate) {
@@ -69,31 +67,13 @@ test('weekly rehearsal sends the actual future batch without creating test-label
     },
     async createScheduledEvent(payload) {
       created.push(payload);
-      const id = `poll-${created.length}`;
-      claimed.set(id, {
-        id,
-        event_id: `event-${created.length}`,
-        claim_token: `claim-${created.length}`,
-        service: 'bot-1',
-        telegram_chat_id: '-1001',
-        poll_question: payload.poll_question,
-        poll_options: payload.shifts.map((shift) => shift.label),
-      });
-      return id;
+      return `poll-${created.length}`;
     },
     async prepareTemplateRehearsal(value) { prepared.push(value); },
-    async claimSpecificPoll(id) { return claimed.get(id); },
-    async completePollSend() { return true; },
-    async failPollSend() { throw new Error('unexpected send failure'); },
     async listTemplateRehearsalPolls() { return []; },
     async resetTemplateRehearsal() { throw new Error('unexpected reset'); },
   };
-  const telegram = {
-    async sendPoll(service, chatId, question) {
-      sent.push({ service, chatId, question });
-      return { poll_id: `tg-${sent.length}`, message_id: sent.length };
-    },
-  };
+  const telegram = { async sendPoll() { throw new Error('must not send before the scheduled start'); } };
   const schedule = {
     id: 'schedule-1',
     telegram_group_id: 'group-1',
@@ -108,19 +88,19 @@ test('weekly rehearsal sends the actual future batch without creating test-label
   const result = await startTemplateRehearsal(db, telegram, {
     group: { id: 'group-1', group_name: 'PSA group', service: 'PSA', bot_id: 'bot-1' },
     schedule,
+    startAt: '2099-01-01T00:02:00.000Z',
     clearAfterMinutes: 5,
     now: new Date('2099-01-01T00:00:00Z'),
   });
 
   assert.equal(result.poll_count, 7);
   assert.equal(created.length, 7);
-  assert.equal(sent.length, 7);
   assert.ok(groupLookups.every(({ groupId }) => groupId === 'group-1'));
   assert.ok(created.every((payload) => payload.telegram_group_id === 'group-1'));
-  assert.ok(sent.every(({ service, chatId }) => service === 'bot-1' && chatId === '-1001'));
   assert.equal(prepared.length, 1);
   assert.equal(prepared[0].pollIds.length, 7);
-  assert.equal(prepared[0].clearAt, '2099-01-01T00:05:00.000Z');
+  assert.equal(prepared[0].startAt, '2099-01-01T00:02:00.000Z');
+  assert.equal(prepared[0].clearAt, '2099-01-01T00:07:00.000Z');
   assert.equal('confirmationAt' in prepared[0], false);
   assert.equal('closeAt' in prepared[0], false);
   assert.ok(created.every((payload) => payload.is_custom === false));
@@ -130,7 +110,44 @@ test('weekly rehearsal sends the actual future batch without creating test-label
     '2099-01-12', '2099-01-13', '2099-01-14', '2099-01-15',
     '2099-01-16', '2099-01-17', '2099-01-18',
   ]);
+  assert.equal(result.start_at, '2099-01-01T00:02:00.000Z');
   assert.equal(result.actual_release_at, '2099-01-07T09:00:00.000Z');
+});
+
+test('poll scheduler releases a due rehearsal batch in event-date order', async () => {
+  const sent = [];
+  const rows = [3, 1, 2].map((number) => ({
+    poll_id: `poll-${number}`,
+    event_date: `2099-01-${10 + number}`,
+    status: 'scheduled',
+    telegram_poll_id: null,
+  }));
+  const db = {
+    async listDueTemplateRehearsalStartBatchIds() { return ['batch-1']; },
+    async listTemplateRehearsalPolls() { return rows; },
+    async claimSpecificPoll(id) {
+      return {
+        id,
+        claim_token: `claim-${id}`,
+        service: 'bot-1',
+        telegram_chat_id: '-1001',
+        poll_question: id,
+        poll_options: ['A', 'B'],
+      };
+    },
+    async completePollSend() { return true; },
+    async failPollSend() { throw new Error('unexpected failure'); },
+    async claimDuePolls() { return []; },
+  };
+  const telegram = {
+    async sendPoll(service, chatId, question) {
+      sent.push({ service, chatId, question });
+      return { poll_id: `tg-${question}`, message_id: sent.length };
+    },
+  };
+
+  assert.deepEqual(await runScheduledPolls(db, telegram), ['poll-1', 'poll-2', 'poll-3']);
+  assert.deepEqual(sent.map((item) => item.question), ['poll-1', 'poll-2', 'poll-3']);
 });
 
 test('completed rehearsal closes Telegram polls and preserves stored production timings', async () => {

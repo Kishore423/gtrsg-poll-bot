@@ -71,6 +71,7 @@ function setSelectedManagedGroup(telegramGroupId) {
   advancePollForm.elements.telegram_group_id.value = selectedManagedGroupId;
   const weeklyTestGroup = document.getElementById('weekly-send-group');
   if (weeklyTestGroup) weeklyTestGroup.value = selectedManagedGroupId;
+  refreshRehearsalStartDefault();
   syncWeeklyTemplateFormFromSavedSchedule(selectedManagedGroupId);
   syncOneOffPollFormFromSavedSchedule(selectedManagedGroupId);
   refreshManagedPreviews();
@@ -237,6 +238,32 @@ function formatLocalDateTime(value) {
   return new Date(value).toLocaleString('en-SG', {
     hour12: false, year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
+}
+
+function singaporeDateTimeInputValue(date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Singapore',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}`;
+}
+
+function rehearsalStartInstant(value) {
+  return new Date(`${value}:00+08:00`);
+}
+
+function refreshRehearsalStartDefault() {
+  const input = document.getElementById('weekly-rehearsal-start-at');
+  if (!input) return;
+  const nextMinute = new Date(Date.now() + 2 * 60 * 1000);
+  nextMinute.setUTCSeconds(0, 0);
+  input.min = singaporeDateTimeInputValue(nextMinute);
+  const current = input.value && rehearsalStartInstant(input.value);
+  if (!current || Number.isNaN(current.getTime()) || current <= new Date()) {
+    input.value = singaporeDateTimeInputValue(nextMinute);
+  }
 }
 
 function formatLocalDate(dateText) {
@@ -1131,13 +1158,19 @@ async function submitOneOffPoll(isTest = false) {
 
 async function submitWeeklyTemplateRehearsal() {
   const telegramGroupId = document.getElementById('weekly-send-group').value;
+  const startInput = document.getElementById('weekly-rehearsal-start-at');
   const delayInput = document.getElementById('weekly-rehearsal-clear-delay');
   const submitButton = document.getElementById('weekly-start-rehearsal');
   const clearAfterMinutes = Number(delayInput?.value || 5);
+  const startAt = rehearsalStartInstant(startInput?.value || '');
 
   if (!telegramGroupId) return setStatus('Error: Please select a Telegram group first.', 'error');
   if (!Number.isInteger(clearAfterMinutes) || clearAfterMinutes < 1 || clearAfterMinutes > 60) {
     return setStatus('Error: Rehearsal clear time must be between 1 and 60 minutes.', 'error');
+  }
+  if (!startInput?.value || Number.isNaN(startAt.getTime()) || startAt <= new Date()) {
+    refreshRehearsalStartDefault();
+    return setStatus('Error: Choose a rehearsal start date and time in the future.', 'error');
   }
 
   const schedule = managedSchedules.find((s) => s.telegram_group_id === telegramGroupId && s.enabled);
@@ -1155,20 +1188,23 @@ async function submitWeeklyTemplateRehearsal() {
 
   const releaseDate = nextReleaseDateForSchedule(schedule);
   const eventDates = batchRangeForReleaseDate(releaseDate, schedule.gap_weeks).sort();
+  const clearAt = new Date(startAt.getTime() + clearAfterMinutes * 60 * 1000);
   const preview = [
     `${managedGroupOptionLabel(group)}`,
     `Next production release: ${formatLocalDate(releaseDate)}`,
-    `Batch polls to rehearse now: ${eventDates.length}`,
+    `Batch polls scheduled for rehearsal: ${eventDates.length}`,
     `Event range: ${formatLocalDate(eventDates[0])} to ${formatLocalDate(eventDates[eventDates.length - 1])}`,
+    `Rehearsal starts: ${formatLocalDateTime(startAt.toISOString())}`,
+    `Rehearsal clears: ${formatLocalDateTime(clearAt.toISOString())}`,
     `Clear rehearsal after: ${clearAfterMinutes} minute${clearAfterMinutes === 1 ? '' : 's'}`,
     'Production release, cutoff, and confirmation timestamps will not change.',
     '',
     eventDates.map((dateText) => `- ${formatLocalDate(dateText)}`).join('\n'),
   ].join('\n');
-  if (!window.confirm(`Rehearse the actual weekly batch now?\n\n${preview}`)) return;
+  if (!window.confirm(`Schedule the actual weekly batch rehearsal?\n\n${preview}`)) return;
 
   submitButton.disabled = true;
-  setStatus(`Starting rehearsal for ${eventDates.length} actual batch poll${eventDates.length === 1 ? '' : 's'}...`, 'pending');
+  setStatus(`Scheduling rehearsal for ${eventDates.length} actual batch poll${eventDates.length === 1 ? '' : 's'}...`, 'pending');
   try {
     const response = await fetch('/api/template-rehearsals', {
       method: 'POST',
@@ -1176,23 +1212,16 @@ async function submitWeeklyTemplateRehearsal() {
       body: JSON.stringify({
         telegram_group_id: telegramGroupId,
         weekly_schedule_id: schedule.id,
+        start_at: startAt.toISOString(),
         clear_after_minutes: clearAfterMinutes,
       }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Rehearsal could not be started');
-    setStatus(`${result.poll_count} actual batch poll${result.poll_count === 1 ? '' : 's'} sent for rehearsal. In ${clearAfterMinutes} minute${clearAfterMinutes === 1 ? '' : 's'}, confirmations will be sent and rehearsal data cleared. Production timing remains ${formatLocalDateTime(result.actual_release_at)}.`, 'success');
-    window.alert('Actual batch rehearsal sent. Please check Telegram.');
-    window.setTimeout(async () => {
-      try {
-        const confirmationRes = await fetch(`/api/template-rehearsals/${result.batch_id}/confirm`, { method: 'POST' });
-        const confirmationResult = await confirmationRes.json().catch(() => ({}));
-        if (!confirmationRes.ok) throw new Error(confirmationResult.error || 'Confirmation failed');
-        setStatus(`Rehearsal confirmation sent (${confirmationResult.confirmations}). Votes were cleared and the actual batch was restored to its scheduled send time.`, 'success');
-      } catch (error) {
-        setStatus(`Rehearsal confirmation check failed: ${error.message}. The scheduler will retry automatically.`, 'error');
-      }
-    }, clearAfterMinutes * 60 * 1000);
+    setStatus(`${result.poll_count} actual batch poll${result.poll_count === 1 ? '' : 's'} scheduled for rehearsal at ${formatLocalDateTime(result.start_at)}. The scheduler will clear them at ${formatLocalDateTime(result.clear_at)}. Production timing remains ${formatLocalDateTime(result.actual_release_at)}.`, 'success');
+    window.alert(`Actual batch rehearsal scheduled for ${formatLocalDateTime(result.start_at)}.`);
+    startInput.value = '';
+    refreshRehearsalStartDefault();
   } catch (error) {
     setStatus(`Template rehearsal failed: ${error.message}`, 'error');
   } finally {

@@ -493,9 +493,10 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   Weekly template testing is an actual-batch rehearsal, not a parallel set of
   test records. **Start batch rehearsal**, placed beside **Save default**, creates
   or reuses the next eligible `batch_default` rows for the selected group,
-  temporarily tags those same events with `rehearsal:<uuid>` plus a separate
-  `rehearsal-clear:<epoch-ms>` deadline, and sends them immediately with normal
-  titles. The only user-set rehearsal timing is a 1-60 minute clear duration. A
+  temporarily tags those same events with `rehearsal:<uuid>`,
+  `rehearsal-start:<epoch-ms>`, and `rehearsal-clear:<epoch-ms>`. The minute
+  scheduler sends them with normal titles at the user-set rehearsal start time;
+  the 1-60 minute clear duration begins from that scheduled start. A
   custom/sent/open poll on any event date blocks the rehearsal rather than being
   replaced. Persistent skipped event dates remain omitted. Automatic generation
   sees rehearsal rows as active, so it cannot duplicate the real batch.
@@ -504,11 +505,11 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   At the clear deadline, the scheduler sends the rehearsal confirmation and closes
   the rehearsal Telegram polls, transactionally deletes rehearsal response,
   participant, and allocation-audit data, clears Telegram/message/claim state,
-  removes both rehearsal tags, and keeps the same rows on their original release,
+  removes all rehearsal tags, and keeps the same rows on their original release,
   cutoff, and confirmation timestamps. This finalizer runs inside
-  normal confirmation scheduling as well as the browser's short-delay trigger,
-  so closing the page does not strand the batch. Partial rehearsal-send failures
-  also run the reset. Polls renders rehearsals as **Batch default** and has no
+  normal confirmation scheduling, so closing the page does not strand the batch.
+  Due rehearsal sends use the same minute scheduler and poll claim path as
+  production sends. Polls renders rehearsals as **Batch default** and has no
   separate Test filter/type. One-off **Send test poll** still uses the generic
   custom-poll smoke-test path but is rendered as Custom, not as another poll type.
   Home rehearsal callbacks must not call `loadScheduledPolls`; that loader exists
