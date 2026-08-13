@@ -1404,6 +1404,63 @@ test('single scheduled poll removal requires the configured clear password', asy
   }
 });
 
+test('weekly Testing mode arms a temporary override without replacing production fields', async () => {
+  const groupId = '11111111-1111-4111-8111-111111111111';
+  const production = {
+    id: '22222222-2222-4222-8222-222222222222',
+    telegram_group_id: groupId,
+    event_category: null,
+    poll_release_day_of_week: 3,
+    poll_release_time: '17:00',
+    confirmation_day_of_week: 5,
+    confirmation_time: '12:00',
+    gap_weeks: 0,
+    timezone: 'Asia/Singapore',
+    enabled: true,
+    shifts: [{ label: 'production', start_time: '08:00', end_time: '17:00', capacity: 1 }],
+  };
+  let armed;
+  const db = {
+    async getTelegramGroup(id) {
+      return id === groupId ? {
+        id: groupId, telegram_chat_id: '-1001', group_name: 'Wheelchair group',
+        service: 'WHCL', bot_id: 'WHCL', enabled: true,
+      } : null;
+    },
+    async listManagedWeeklySchedules() { return [production]; },
+    async upsertManagedWeeklySchedule() { throw new Error('production template must not be overwritten'); },
+    async armManagedWeeklyScheduleTest(value, batchId) {
+      armed = { value, batchId };
+      return { ...production, testing_mode: true, testing_status: 'armed', testing_batch_id: batchId };
+    },
+  };
+  const server = createServer(db, makeTelegram(), { enableLegacyWorkflow: false }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const response = await fetch(`${baseUrl}/api/weekly-schedules`, json('PUT', {
+      telegram_group_id: groupId,
+      poll_release_day_of_week: 5,
+      poll_release_time: '17:00',
+      confirmation_day_of_week: 6,
+      confirmation_time: '12:00',
+      gap_weeks: 0,
+      testing_mode: true,
+      shifts: [{ label: 'temporary', start_time: '09:00', end_time: '12:00', capacity: 2 }],
+    }));
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.testing_mode, true);
+    assert.match(armed.batchId, /^[0-9a-f-]{36}$/);
+    assert.equal(armed.value.shifts[0].label, 'temporary');
+    assert.equal(production.shifts[0].label, 'production');
+    assert.ok(result.testing_release_at);
+    assert.ok(result.testing_final_confirmation_at);
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
+});
+
 test('test batch reset clears only website state and preserves its future release', async () => {
   const telegramCalls = [];
   let resetIds;

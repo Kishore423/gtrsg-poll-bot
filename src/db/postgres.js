@@ -39,7 +39,12 @@ function createPostgresDb(sql = createSql()) {
       add column if not exists consumed_at timestamptz`;
     await sql`alter table telegram_groups add column if not exists bot_ref uuid references bots(id) on delete cascade`;
     await sql`alter table weekly_poll_schedules
-      add column if not exists gap_weeks smallint not null default 0`;
+      add column if not exists gap_weeks smallint not null default 0,
+      add column if not exists testing_mode boolean not null default false,
+      add column if not exists testing_status text not null default 'off',
+      add column if not exists testing_batch_id uuid,
+      add column if not exists testing_override jsonb,
+      add column if not exists testing_started_at timestamptz`;
     await sql`create index if not exists telegram_groups_bot_ref_idx on telegram_groups(bot_ref)`;
     await sql`create unique index if not exists telegram_groups_chat_bot_ref_key
       on telegram_groups(telegram_chat_id, bot_ref) where bot_ref is not null`;
@@ -146,11 +151,14 @@ function createPostgresDb(sql = createSql()) {
           select sp.id
           from scheduled_polls sp
           join events e on e.id=sp.event_id
+          left join weekly_poll_schedules w on w.id=sp.weekly_schedule_id
           where sp.enabled and sp.status in ('scheduled','failed')
             and sp.resolved_release_at <= now()
             and (sp.claimed_at is null or sp.claimed_at < now() - interval '10 minutes')
+            and (w.id is null or not w.testing_mode or
+              ('template-testing:' || w.testing_batch_id::text)=any(e.operational_tags))
           order by e.event_date, sp.resolved_release_at, sp.id
-          for update skip locked limit greatest(1, least(p_limit, 50))
+          for update of sp skip locked limit greatest(1, least(p_limit, 50))
         ), claimed as (
           update scheduled_polls sp set status='sending', claim_token=gen_random_uuid(),
             claimed_at=now(), updated_at=now()
@@ -176,10 +184,15 @@ function createPostgresDb(sql = createSql()) {
         return query
         with candidates as (
           select cm.id from confirmation_messages cm
+          join scheduled_polls sp on sp.id=cm.scheduled_poll_id
+          join events e on e.id=sp.event_id
+          left join weekly_poll_schedules w on w.id=sp.weekly_schedule_id
           where cm.status in ('scheduled','failed') and cm.resolved_send_at <= now()
             and (cm.claimed_at is null or cm.claimed_at < now() - interval '10 minutes')
+            and (w.id is null or not w.testing_mode or
+              ('template-testing:' || w.testing_batch_id::text)=any(e.operational_tags))
           order by cm.resolved_send_at, cm.id
-          for update skip locked limit greatest(1, least(p_limit, 50))
+          for update of cm skip locked limit greatest(1, least(p_limit, 50))
         ), claimed as (
           update confirmation_messages cm set status='sending', claim_token=gen_random_uuid(),
             claimed_at=now(), updated_at=now()
@@ -292,8 +305,11 @@ function createPostgresDb(sql = createSql()) {
         from scheduled_polls sp join events e on e.id=sp.event_id
         join telegram_groups g on g.id=sp.telegram_group_id
         left join confirmation_messages cm on cm.scheduled_poll_id=sp.id
+        left join weekly_poll_schedules w on w.id=sp.weekly_schedule_id
         where not ('reset-for-production'=any(e.operational_tags) and
           sp.telegram_poll_id is null and sp.status='scheduled')
+          and (w.id is null or not w.testing_mode or
+            ('template-testing:' || w.testing_batch_id::text)=any(e.operational_tags))
         order by e.event_date asc, g.group_name asc, sp.resolved_release_at asc, sp.created_at asc`;
     },
     // botId scopes the list to one user's bot; admins pass nothing to see all.
@@ -747,7 +763,6 @@ function createPostgresDb(sql = createSql()) {
             throw error;
           }
         }
-
         await tx`delete from telegram_groups where id=${id}::uuid`;
       });
     },
@@ -770,8 +785,93 @@ function createPostgresDb(sql = createSql()) {
           confirmation_day_of_week=excluded.confirmation_day_of_week,
           confirmation_time=excluded.confirmation_time,gap_weeks=excluded.gap_weeks,
           timezone=excluded.timezone,
-          enabled=excluded.enabled,shifts=excluded.shifts,updated_at=now() returning *`;
+          enabled=excluded.enabled,shifts=excluded.shifts,
+          testing_mode=false,testing_status='off',testing_batch_id=null,
+          testing_override=null,testing_started_at=null,updated_at=now() returning *`;
       return row;
+    },
+    async armManagedWeeklyScheduleTest(value, batchId) {
+      await initPromise;
+      return sql.begin(async (tx) => {
+        const [current] = await tx`
+          select * from weekly_poll_schedules
+          where telegram_group_id=${value.telegram_group_id}::uuid
+            and event_category is not distinct from ${value.event_category || null}
+          for update`;
+        if (!current) {
+          const error = new Error('Save the production weekly template before enabling Testing mode');
+          error.statusCode = 409;
+          throw error;
+        }
+        if (current.testing_mode) {
+          const error = new Error('Testing mode is already active for this weekly template');
+          error.statusCode = 409;
+          throw error;
+        }
+        const [row] = await tx`
+          update weekly_poll_schedules set testing_mode=true,testing_status='armed',
+            testing_batch_id=${batchId}::uuid,testing_override=${sql.json(value)},
+            testing_started_at=null,updated_at=now()
+          where id=${current.id}::uuid returning *`;
+        return row;
+      });
+    },
+    async markManagedWeeklyScheduleTestRunning(scheduleId, batchId) {
+      await initPromise;
+      const [row] = await sql`
+        update weekly_poll_schedules set testing_status='running',testing_started_at=now(),updated_at=now()
+        where id=${scheduleId}::uuid and testing_mode and testing_status='armed'
+          and testing_batch_id=${batchId}::uuid returning *`;
+      return row || null;
+    },
+    async clearManagedWeeklyScheduleTest(scheduleId, batchId) {
+      await initPromise;
+      const [row] = await sql`
+        update weekly_poll_schedules set testing_mode=false,testing_status='off',
+          testing_batch_id=null,testing_override=null,testing_started_at=null,updated_at=now()
+        where id=${scheduleId}::uuid and testing_mode and testing_status='armed'
+          and testing_batch_id=${batchId}::uuid returning *`;
+      return row || null;
+    },
+    async listReadyManagedWeeklyScheduleTests() {
+      await initPromise;
+      return sql`
+        select w.id as weekly_schedule_id,w.testing_batch_id::text as batch_id,
+          w.telegram_group_id,count(*)::int as poll_count
+        from weekly_poll_schedules w
+        join events e on ('template-testing:' || w.testing_batch_id::text)=any(e.operational_tags)
+        join scheduled_polls sp on sp.event_id=e.id and sp.weekly_schedule_id=w.id
+        join confirmation_messages cm on cm.scheduled_poll_id=sp.id
+        where w.testing_mode and w.testing_status='running'
+        group by w.id,w.testing_batch_id,w.telegram_group_id
+        having bool_and(cm.status in ('sent','updated'))
+        order by min(cm.sent_at)`;
+    },
+    async completeManagedWeeklyScheduleTest(batchId) {
+      await initPromise;
+      return sql.begin(async (tx) => {
+        const [schedule] = await tx`
+          select * from weekly_poll_schedules
+          where testing_mode and testing_status='running' and testing_batch_id=${batchId}::uuid
+          for update`;
+        if (!schedule) return null;
+        const tag = `template-testing:${batchId}`;
+        const testRows = await tx`
+          select e.id,cm.status from events e
+          join scheduled_polls sp on sp.event_id=e.id and sp.weekly_schedule_id=${schedule.id}::uuid
+          join confirmation_messages cm on cm.scheduled_poll_id=sp.id
+          where ${tag}=any(e.operational_tags)`;
+        if (!testRows.length || testRows.some((row) => !['sent', 'updated'].includes(row.status))) {
+          return null;
+        }
+        const eventIds = [...new Set(testRows.map((row) => row.id))];
+        await tx`delete from events where id=any(${eventIds}::uuid[])`;
+        const [restored] = await tx`
+          update weekly_poll_schedules set testing_mode=false,testing_status='off',
+            testing_batch_id=null,testing_override=null,testing_started_at=null,updated_at=now()
+          where id=${schedule.id}::uuid returning *`;
+        return { ...restored, deleted_poll_count: eventIds.length };
+      });
     },
     async deleteManagedWeeklySchedule(id) {
       await sql`delete from weekly_poll_schedules where id=${id}::uuid`;
@@ -948,8 +1048,9 @@ function createPostgresDb(sql = createSql()) {
       const [row] = await sql`select event_date::text from events where id=${eventId}::uuid`;
       return row?.event_date || null;
     },
-    async getActivePollForDate(telegramGroupId, eventDate) {
+    async getActivePollForDate(telegramGroupId, eventDate, { testingBatchId = null } = {}) {
       await initPromise;
+      const testingTag = testingBatchId ? `template-testing:${testingBatchId}` : null;
       const [row] = await sql`
         select sp.id, sp.status, sp.is_custom, sp.weekly_schedule_id,
           sp.telegram_poll_id, e.event_date::text, e.operational_tags
@@ -958,6 +1059,10 @@ function createPostgresDb(sql = createSql()) {
           and e.event_date = ${eventDate}::date
           and sp.status != 'cancelled'
           and not ('test' = any(e.operational_tags))
+          and (${testingTag}::text is null
+            or ${testingTag}::text=any(e.operational_tags))
+          and (${testingTag}::text is not null
+            or not exists (select 1 from unnest(e.operational_tags) tag where tag like 'template-testing:%'))
         limit 1`;
       return row || null;
     },

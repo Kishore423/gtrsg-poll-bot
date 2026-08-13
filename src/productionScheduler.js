@@ -12,6 +12,7 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 const REHEARSAL_TAG_PREFIX = 'rehearsal:';
 const REHEARSAL_START_TAG_PREFIX = 'rehearsal-start:';
 const REHEARSAL_CLEAR_TAG_PREFIX = 'rehearsal-clear:';
+const TEMPLATE_TEST_TAG_PREFIX = 'template-testing:';
 
 function localDateAt(date, timeZone) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -140,6 +141,27 @@ function templatePayloadForEvent(schedule, eventDate, releaseDate = null) {
   };
 }
 
+function effectiveWeeklySchedule(schedule) {
+  if (!schedule.testing_mode || schedule.testing_status !== 'armed' || !schedule.testing_override) {
+    return schedule;
+  }
+  const override = typeof schedule.testing_override === 'string'
+    ? JSON.parse(schedule.testing_override)
+    : schedule.testing_override;
+  return {
+    ...schedule,
+    ...override,
+    id: schedule.id,
+    telegram_group_id: schedule.telegram_group_id,
+    group_name: schedule.group_name,
+    service: schedule.service,
+    bot_id: schedule.bot_id,
+    testing_mode: true,
+    testing_status: schedule.testing_status,
+    testing_batch_id: schedule.testing_batch_id,
+  };
+}
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>"]/g, (char) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char])
@@ -234,38 +256,85 @@ async function generateScheduledPollsFromTemplates(db, now = new Date()) {
   const schedules = await db.listManagedWeeklySchedules();
   for (const schedule of schedules) {
     if (!schedule.enabled) continue;
-    const shifts = normalizeShifts(schedule.shifts);
+    if (schedule.testing_mode && schedule.testing_status !== 'armed') continue;
+    const effectiveSchedule = effectiveWeeklySchedule(schedule);
+    const testingBatchId = effectiveSchedule.testing_mode
+      ? String(effectiveSchedule.testing_batch_id || '')
+      : null;
+    if (effectiveSchedule.testing_mode && !testingBatchId) continue;
+    const shifts = normalizeShifts(effectiveSchedule.shifts);
     if (!shifts.length) continue;
-    const service = schedule.service || schedule.bot_id || 'WHCL';
-    const timezone = schedule.timezone || 'Asia/Singapore';
-    const releaseTime = String(schedule.poll_release_time || '17:00').slice(0, 5);
+    const service = effectiveSchedule.service || effectiveSchedule.bot_id || 'WHCL';
+    const timezone = effectiveSchedule.timezone || 'Asia/Singapore';
+    const releaseTime = String(effectiveSchedule.poll_release_time || '17:00').slice(0, 5);
     const dueRelease = releaseDueToday(
       now,
-      schedule.poll_release_day_of_week,
+      effectiveSchedule.poll_release_day_of_week,
       releaseTime,
       timezone
     );
     if (!dueRelease) continue;
     const { releaseDate } = dueRelease;
-
+    const eligibleDates = [];
     for (const eventDate of eventDatesForReleaseDate(
       service,
       releaseDate,
-      schedule.gap_weeks
+      effectiveSchedule.gap_weeks
     )) {
       const excluded = db.isPollDateExcluded &&
-        await db.isPollDateExcluded(schedule.telegram_group_id, eventDate);
+        await db.isPollDateExcluded(effectiveSchedule.telegram_group_id, eventDate);
       if (excluded) continue;
-      const existing = db.getActivePollForDate &&
-        await db.getActivePollForDate(schedule.telegram_group_id, eventDate);
-      if (existing) continue;
+      eligibleDates.push(eventDate);
+    }
 
-      const payload = templatePayloadForEvent(schedule, eventDate, releaseDate);
+    const payloads = eligibleDates.map((eventDate) =>
+      templatePayloadForEvent(effectiveSchedule, eventDate, releaseDate));
+    if (testingBatchId && !payloads.length) {
+      if (db.clearManagedWeeklyScheduleTest) {
+        await db.clearManagedWeeklyScheduleTest(schedule.id, testingBatchId);
+      }
+      continue;
+    }
+    if (testingBatchId && service !== 'PSA' && payloads.length) {
+      const firstConfirmationAt = new Date(payloads[0].resolved_confirmation_at);
+      payloads.forEach((payload, index) => {
+        payload.resolved_confirmation_at = new Date(
+          firstConfirmationAt.getTime() + index * 5 * 60 * 1000
+        ).toISOString();
+      });
+    }
+
+    let hasTestingRows = false;
+    for (const payload of payloads) {
+      const eventDate = payload.event_date;
+      const existing = db.getActivePollForDate &&
+        await db.getActivePollForDate(effectiveSchedule.telegram_group_id, eventDate, {
+          testingBatchId,
+        });
+      if (existing) {
+        if (testingBatchId) hasTestingRows = true;
+        continue;
+      }
+      if (testingBatchId) payload.operational_tags = [`${TEMPLATE_TEST_TAG_PREFIX}${testingBatchId}`];
       const id = await db.createScheduledEvent(payload, null);
-      created.push({ id, telegram_group_id: schedule.telegram_group_id, event_date: eventDate });
+      if (testingBatchId) hasTestingRows = true;
+      created.push({ id, telegram_group_id: effectiveSchedule.telegram_group_id, event_date: eventDate });
+    }
+    if (testingBatchId && hasTestingRows && db.markManagedWeeklyScheduleTestRunning) {
+      await db.markManagedWeeklyScheduleTestRunning(schedule.id, testingBatchId);
     }
   }
   return created;
+}
+
+async function finalizeReadyManagedWeeklyScheduleTests(db) {
+  if (!db.listReadyManagedWeeklyScheduleTests || !db.completeManagedWeeklyScheduleTest) return [];
+  const completed = [];
+  for (const testBatch of await db.listReadyManagedWeeklyScheduleTests()) {
+    const result = await db.completeManagedWeeklyScheduleTest(testBatch.batch_id);
+    if (result) completed.push(result);
+  }
+  return completed;
 }
 
 async function runScheduledPolls(db, telegram, limit = 10) {
@@ -450,6 +519,7 @@ async function runScheduledConfirmations(db, telegram, limit = 50) {
   if (db.listReadyTemplateRehearsals && db.resetTemplateRehearsal) {
     await finalizeReadyTemplateRehearsals(db, telegram);
   }
+  await finalizeReadyManagedWeeklyScheduleTests(db);
   return completed;
 }
 
@@ -667,6 +737,7 @@ module.exports = {
   startTemplateRehearsal,
   sendTemplateRehearsalConfirmation,
   finalizeReadyTemplateRehearsals,
+  finalizeReadyManagedWeeklyScheduleTests,
   resetTemplateRehearsalBatch,
   resetTestPollBatch,
   templatePayloadForEvent,

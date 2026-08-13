@@ -13,7 +13,7 @@ const {
 const { buildConfirmationMessage, NOT_AVAILABLE_OPTION, escapeHtml } = require('./pollBuilder');
 const { buildConfirmationState } = require('./confirmation');
 const { processTelegramUpdate } = require('./processUpdate');
-const { resolvePollSchedule } = require('./scheduleResolver');
+const { resolvePollSchedule, zonedDateTimeToUtc } = require('./scheduleResolver');
 const {
   addLocalDays,
   eventDatesForReleaseDate,
@@ -36,6 +36,28 @@ const ROUTED_SERVICES = ['WHCL', 'PSA'];
 
 function isValidTime(value) {
   return typeof value === 'string' && /^\d{2}:?\d{2}$/.test(value);
+}
+
+function singaporeDateText(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Singapore', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
+function nextReleaseForWeeklySchedule(schedule, now = new Date()) {
+  const today = singaporeDateText(now);
+  const todayDay = new Date(`${today}T00:00:00Z`).getUTCDay();
+  let offset = (Number(schedule.poll_release_day_of_week) - todayDay + 7) % 7;
+  let releaseDate = addLocalDays(today, offset);
+  let releaseAt = new Date(`${releaseDate}T${String(schedule.poll_release_time).slice(0, 5)}:00+08:00`);
+  if (releaseAt <= now) {
+    offset += 7;
+    releaseDate = addLocalDays(today, offset);
+    releaseAt = new Date(`${releaseDate}T${String(schedule.poll_release_time).slice(0, 5)}:00+08:00`);
+  }
+  return { releaseDate, releaseAt };
 }
 
 // RFC-4180 CSV cell: quote when it contains a comma, quote, or newline.
@@ -247,7 +269,6 @@ function createServer(db, telegram, options = {}) {
       res.status(error.statusCode || 500).json(payload);
     }
   });
-
   app.post('/api/auth/telegram/otp/verify', async (req, res) => {
     if (!options.requireAdminAuth) return res.json({ disabled: true });
     try {
@@ -1148,6 +1169,7 @@ function createServer(db, telegram, options = {}) {
   app.put('/api/weekly-schedules', wrap(async (req, res) => {
     if (!db.upsertManagedWeeklySchedule) return res.status(501).json({ error: 'Supabase production database is required' });
     const body = req.body || {};
+    body.testing_mode = body.testing_mode === true;
     for (const key of ['poll_release_day_of_week', 'confirmation_day_of_week']) {
       if (!Number.isInteger(Number(body[key])) || Number(body[key]) < 0 || Number(body[key]) > 6) {
         return res.status(400).json({ error: `${key} must be 0 through 6` });
@@ -1164,6 +1186,13 @@ function createServer(db, telegram, options = {}) {
     }
     const group = await assertGroupAccess(db, req.appUser, body.telegram_group_id);
     const service = resolveTelegramGroupService(group, 'WHCL');
+    const currentSchedules = db.listManagedWeeklySchedules
+      ? await db.listManagedWeeklySchedules()
+      : [];
+    const currentSchedule = currentSchedules.find((schedule) =>
+      String(schedule.telegram_group_id) === String(body.telegram_group_id) &&
+      String(schedule.event_category || '') === String(body.event_category || '')
+    ) || null;
     const referenceReleaseDate = addLocalDays(
       '2030-01-07',
       (body.poll_release_day_of_week + 6) % 7
@@ -1199,6 +1228,55 @@ function createServer(db, telegram, options = {}) {
       shift.capacity = Number(shift.capacity);
     }
     body.shifts = shifts;
+    if (body.testing_mode) {
+      if (!currentSchedule) {
+        return res.status(409).json({ error: 'Save the production weekly template before enabling Testing mode' });
+      }
+      if (!db.armManagedWeeklyScheduleTest) {
+        return res.status(501).json({ error: 'Testing mode requires the Supabase production database' });
+      }
+      const now = new Date();
+      const testRelease = nextReleaseForWeeklySchedule(body, now);
+      const eventDates = eventDatesForReleaseDate(service, testRelease.releaseDate, body.gap_weeks);
+      const firstTiming = managedTimingForEvent({
+        service,
+        eventDate: eventDates[0],
+        releaseDate: testRelease.releaseDate,
+        releaseDay: body.poll_release_day_of_week,
+        releaseTime: body.poll_release_time,
+        gapWeeks: body.gap_weeks,
+        confirmationDay: body.confirmation_day_of_week,
+        confirmationTime: body.confirmation_time,
+      });
+      const [confirmationDate, confirmationTime] = firstTiming.confirmationAt.split('T');
+      const firstConfirmation = zonedDateTimeToUtc(
+        confirmationDate,
+        confirmationTime,
+        body.timezone
+      );
+      const finalConfirmation = service === 'PSA'
+        ? firstConfirmation
+        : new Date(firstConfirmation.getTime() + Math.max(0, eventDates.length - 1) * 5 * 60 * 1000);
+      const productionRelease = nextReleaseForWeeklySchedule(currentSchedule, now).releaseAt;
+      if (finalConfirmation >= productionRelease) {
+        return res.status(409).json({
+          error: 'Testing confirmations must finish before the next saved production release. Choose an earlier Testing release or confirmation time.',
+        });
+      }
+      const batchId = crypto.randomUUID();
+      const row = await db.armManagedWeeklyScheduleTest(body, batchId);
+      return res.json({
+        ...row,
+        testing_release_at: testRelease.releaseAt.toISOString(),
+        testing_first_confirmation_at: firstConfirmation.toISOString(),
+        testing_final_confirmation_at: finalConfirmation.toISOString(),
+      });
+    }
+    if (currentSchedule?.testing_mode) {
+      return res.status(409).json({
+        error: 'Testing mode is active. It switches off automatically after all testing confirmations are sent.',
+      });
+    }
     res.json(await db.upsertManagedWeeklySchedule(body));
   }));
 

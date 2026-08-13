@@ -7,6 +7,7 @@ const {
   generateScheduledPollsFromTemplates,
   startTemplateRehearsal,
   finalizeReadyTemplateRehearsals,
+  finalizeReadyManagedWeeklyScheduleTests,
   resetTestPollBatch,
 } = require('../src/productionScheduler');
 
@@ -497,7 +498,6 @@ test('specific confirmation trigger claims only the requested poll confirmation'
   assert.equal(claimedPollId, 'poll-1');
   assert.match(sent[0], /^<b>PSA<\/b>/);
 });
-
 test('test confirmation header includes the event date', async () => {
   const db = {
     async claimDueConfirmations() {
@@ -617,6 +617,90 @@ test('automatic PSA generation uses the group gap and creates only one event wee
   assert.equal(created[0].resolved_release_at, '2026-08-05T09:00:00.000Z');
   assert.equal(created[0].close_at, '2026-08-14T00:00:00.000Z');
   assert.equal(created[0].resolved_confirmation_at, '2026-08-14T04:00:00.000Z');
+});
+
+test('testing mode snapshots temporary poll content and spaces daily confirmations five minutes apart', async () => {
+  const created = [];
+  let markedRunning = null;
+  const db = {
+    async listManagedWeeklySchedules() {
+      return [{
+        id: 'schedule-test',
+        telegram_group_id: 'group-test',
+        group_name: 'Wheelchair group',
+        service: 'WHCL',
+        enabled: true,
+        poll_release_day_of_week: 3,
+        poll_release_time: '17:00',
+        confirmation_day_of_week: 5,
+        confirmation_time: '08:00',
+        gap_weeks: 0,
+        timezone: 'Asia/Singapore',
+        shifts: [{ label: 'production', start_time: '08:00', end_time: '17:00', capacity: 1 }],
+        testing_mode: true,
+        testing_status: 'armed',
+        testing_batch_id: '11111111-1111-4111-8111-111111111111',
+        testing_override: {
+          poll_release_day_of_week: 3,
+          poll_release_time: '17:00',
+          confirmation_day_of_week: 5,
+          confirmation_time: '08:00',
+          gap_weeks: 0,
+          timezone: 'Asia/Singapore',
+          enabled: true,
+          shifts: [{ label: '0900-1200', start_time: '09:00', end_time: '12:00', capacity: 3 }],
+        },
+      }];
+    },
+    async getActivePollForDate(_groupId, _eventDate, options) {
+      assert.equal(options.testingBatchId, '11111111-1111-4111-8111-111111111111');
+      return null;
+    },
+    async isPollDateExcluded() { return false; },
+    async createScheduledEvent(payload) {
+      created.push(payload);
+      return `poll-${created.length}`;
+    },
+    async markManagedWeeklyScheduleTestRunning(scheduleId, batchId) {
+      markedRunning = { scheduleId, batchId };
+    },
+  };
+
+  const result = await generateScheduledPollsFromTemplates(
+    db,
+    new Date('2026-08-05T09:01:00Z')
+  );
+
+  assert.equal(result.length, 7);
+  assert.deepEqual(markedRunning, {
+    scheduleId: 'schedule-test',
+    batchId: '11111111-1111-4111-8111-111111111111',
+  });
+  assert.equal(created[0].shifts[0].label, '0900-1200');
+  assert.equal(created[0].shifts[0].capacity, 3);
+  assert.doesNotMatch(created[0].poll_question, /test/i);
+  assert.deepEqual(created[0].operational_tags, [
+    'template-testing:11111111-1111-4111-8111-111111111111',
+  ]);
+  assert.equal(created[0].resolved_confirmation_at, '2026-08-07T00:00:00.000Z');
+  assert.equal(created[1].resolved_confirmation_at, '2026-08-07T00:05:00.000Z');
+  assert.equal(created[6].resolved_confirmation_at, '2026-08-07T00:30:00.000Z');
+});
+
+test('completed Testing mode batches are automatically removed and restored', async () => {
+  const completed = [];
+  const db = {
+    async listReadyManagedWeeklyScheduleTests() {
+      return [{ batch_id: 'batch-1' }, { batch_id: 'batch-2' }];
+    },
+    async completeManagedWeeklyScheduleTest(batchId) {
+      completed.push(batchId);
+      return batchId === 'batch-1' ? { id: 'schedule-1' } : null;
+    },
+  };
+
+  assert.deepEqual(await finalizeReadyManagedWeeklyScheduleTests(db), [{ id: 'schedule-1' }]);
+  assert.deepEqual(completed, ['batch-1', 'batch-2']);
 });
 
 test('automatic template generation does not backfill after the configured release day', async () => {

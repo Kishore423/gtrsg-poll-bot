@@ -493,35 +493,22 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   scheduled-state transition after the poll is already open. Backend immediate
   sends also synthesize `specific_release_at=now` when no weekly/specific release
   schedule is present.
-  Weekly template testing is an actual-batch rehearsal, not a parallel set of
-  test records. **Start batch rehearsal**, placed beside **Save default**, creates
-  or reuses the next eligible `batch_default` rows for the selected group,
-  temporarily tags those same events with `rehearsal:<uuid>`,
-  `rehearsal-start:<epoch-ms>`, and `rehearsal-clear:<epoch-ms>`. The start tag
-  is derived from the next occurrence of the saved template release time; there
-  is no separate rehearsal start field. The minute scheduler sends them with normal titles at that time;
-  the 1-60 minute clear duration begins from that scheduled start. A
-  custom/sent/open poll on any event date blocks the rehearsal rather than being
-  replaced. Persistent skipped event dates remain omitted. Automatic generation
-  sees rehearsal rows as active, so it cannot duplicate the real batch.
-  Rehearsal metadata never updates `resolved_release_at`, `close_at`, or the
-  confirmation's `resolved_send_at`; production timing stays unchanged throughout.
-  At the clear deadline, the scheduler sends the rehearsal confirmation and
-  resets the website records without stopping or deleting Telegram messages;
-  users remove the rehearsal polls and confirmation manually in Telegram.
-  Cleanup transactionally deletes rehearsal response, participant, and
-  allocation-audit data, clears Telegram/message/claim state, removes all
-  rehearsal tags, and keeps the same rows on their original release, cutoff, and
-  confirmation timestamps. This finalizer runs inside
-  normal confirmation scheduling, so closing the page does not strand the batch.
-  Due rehearsal sends use the same minute scheduler and poll claim path as
-  production sends. Polls renders rehearsals as **Batch default** and has no
-  separate Test filter/type. One-off **Send test poll** still uses the generic
-  custom-poll smoke-test path but is rendered as Custom, not as another poll type.
-  Home rehearsal callbacks must not call `loadScheduledPolls`; that loader exists
-  only on the Polls page, and the scheduler owns the server-side reset. While
-  visible, Polls refreshes this list every 15 seconds so completed rehearsal rows
-  disappear without a manual browser reload.
+  Weekly template testing uses a one-shot **Testing mode** toggle beside **Save
+  default**. A complete production weekly template must already exist. Saving
+  with Testing mode on stores the edited release, confirmation, gap-week, shift,
+  and capacity fields as `testing_override`; it does not overwrite the production
+  columns. Cron creates a separate internal Monday-Sunday batch tagged
+  `template-testing:<uuid>` at the temporary release day/time and suppresses the
+  production rows for that schedule while the test is armed or running. Telegram
+  text is production-identical. PSA keeps its configured weekly confirmation;
+  Wheelchair sends its first configured confirmation normally and later event
+  confirmations five minutes apart. A test is rejected if confirmations would
+  overlap the next production release. After every confirmation is sent, cleanup
+  deletes the internal test events and their dependent website data, clears
+  Testing mode, and exposes the untouched production template again. Telegram
+  messages are deleted manually. Polls has no testing cleanup/reset button and
+  refreshes every 15 seconds. Legacy rehearsal/reset endpoints remain only for
+  compatibility and are not part of the primary UI.
   Confirmation delivery is service-specific: PSA due confirmations are
   grouped into one Telegram message per group/resolved confirmation time, with
   each event date and its confirmed timeslots listed in date order. Wheelchair

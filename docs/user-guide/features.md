@@ -49,24 +49,21 @@ Use **Custom poll** to create a poll for a special date that isn't part of the
 weekly template. It starts from your saved template's shifts so you only edit the
 exceptions.
 
-### Batch rehearsal
+### Testing mode
 
-Use **Start batch rehearsal** beside **Save default** to check the next weekly
-batch in Telegram before its real send time:
+Testing mode is a one-shot check of the complete weekly template:
 
-- The rehearsal uses the actual batch-default poll records and normal poll text;
-  it does not create a second test-labelled copy.
-- The application selects the next eligible batch automatically. It uses the
-  next occurrence of the saved template release time plus a 1-60 minute clear
-  duration. The minute scheduler releases the batch at that saved time; skipped event dates
-  stay excluded.
-- After the rehearsal confirmation is sent, rehearsal votes and allocations are
-  cleared automatically from the Polls page, and the same batch remains ready
-  for its real schedule. Users delete the rehearsal poll and confirmation
-  messages manually in Telegram.
-- Production release, cutoff, and confirmation timestamps are never replaced by
-  rehearsal timing.
-- The Polls page continues to show these rows as **Batch default**.
+- A production template must be saved first.
+- Temporary release, confirmation, gap-week, shift, and capacity values do not
+  overwrite the production template.
+- Cron sends the temporary Monday-Sunday batch at the configured release time;
+  Telegram poll and confirmation text has no testing label.
+- Wheelchair's first confirmation follows the configured time and later event
+  confirmations send five minutes apart. PSA's weekly summary remains one
+  message at its configured weekday and time.
+- After the final confirmation, testing records and votes are removed and the
+  complete production template is restored. Telegram messages are deleted
+  manually.
 
 ## Polls page
 
@@ -80,13 +77,8 @@ The Polls page is a **read-only monitoring view** of scheduled polls. Use
   that same group.
 - **Details:** each poll has a **Details** button that opens an in-page view of
   that poll.
-- **Reset test batch:** available after a poll has been sent early while its
-  saved production release is still in the future. For a weekly poll, the action
-  resets the complete Monday-Sunday batch; for a custom poll, it resets only that
-  poll. It clears test responses, hides the records from Polls, and sends the
-  same records again at their original production time. Telegram messages are
-  deleted manually. The Polls list refreshes automatically every 15 seconds
-  while the page is visible.
+The Polls list refreshes automatically every 15 seconds, so completed Testing
+mode cleanup appears without a page reload.
 The Polls page has no permanent delete control. To stop a default poll from
 being sent, use **Skip days** on the Home page instead.
 

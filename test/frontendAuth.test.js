@@ -160,19 +160,17 @@ test('managed workflows stay bound to the clicked group without duplicate select
   assert.doesNotMatch(html, /data-group-workflow="test"/);
   assert.match(html, /type="hidden" id="weekly-send-group"/);
   assert.match(html, /type="hidden" name="telegram_group_id"/);
-  assert.match(html, /id="weekly-start-rehearsal"/);
-  assert.match(html, /Start batch rehearsal/);
+  assert.match(html, /id="weekly-testing-mode"/);
+  assert.match(html, /Testing mode/);
+  assert.match(html, /id="weekly-testing-status"/);
+  assert.doesNotMatch(html, /id="weekly-start-rehearsal"/);
+  assert.doesNotMatch(html, /Start batch rehearsal/);
   assert.doesNotMatch(html, /id="weekly-rehearsal-start-at"/);
-  assert.match(html, /id="weekly-rehearsal-clear-delay"/);
+  assert.doesNotMatch(html, /id="weekly-rehearsal-clear-delay"/);
   assert.doesNotMatch(html, /id="weekly-send-event-date"/);
   assert.doesNotMatch(html, /id="weekly-send-confirmation-delay"/);
-  assert.ok(
-    html.indexOf('Save default') < html.indexOf('Start batch rehearsal'),
-    'rehearsal action should follow Save default',
-  );
-  assert.match(source, /fetch\('\/api\/template-rehearsals'/);
-  assert.doesNotMatch(source, /start_at:/);
-  assert.match(source, /clear_after_minutes: clearAfterMinutes/);
+  assert.match(source, /body\.testing_mode = Boolean\(weeklyTestingMode\?\.checked\)/);
+  assert.match(source, /The complete previous production template restores automatically/);
   assert.doesNotMatch(source, /Actual batch rehearsal sent/);
   assert.doesNotMatch(source, /release_date: releaseDate/);
   assert.match(html, /id="send-test-poll"/);
@@ -204,12 +202,10 @@ test('Home rehearsal flow does not call the Polls-page loader', () => {
   assert.doesNotMatch(source, /loadScheduledPolls\s*\(/);
 });
 
-test('Polls exposes an explicit production reset for test-sent batches', () => {
+test('Testing batches clean themselves up without a Polls-page reset control', () => {
   const source = readFileSync(join(__dirname, '..', 'public', 'polls.js'), 'utf8');
-  assert.match(source, /Reset test batch/);
-  assert.match(source, /reset-test-batch/);
-  assert.match(source, /original production time/);
-  assert.match(source, /Delete its poll and confirmation messages manually in Telegram/);
+  assert.doesNotMatch(source, /Reset test batch/);
+  assert.doesNotMatch(source, /reset-test-batch/);
   assert.match(source, /setInterval\([\s\S]*loadScheduledPolls\(\)[\s\S]*15000/);
 });
 

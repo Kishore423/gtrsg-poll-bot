@@ -34,16 +34,18 @@ and it refreshes on the website the next time you interact with the login bot.
 First-come, first-served by the time each person votes, up to each shift's
 capacity. Voting earlier improves your chances for a limited shift.
 
-## Does rehearsing a batch create duplicate test polls?
+## Does Testing mode change my production template?
 
-No. A weekly batch rehearsal queues the actual upcoming batch for the next
-occurrence of the saved template release time. The minute scheduler releases those same rows. After
-the rehearsal confirmation is sent, rehearsal votes are cleared automatically
-from the website and the records are kept for their real release, cutoff, and
-confirmation times. Delete the rehearsal poll and confirmation messages
-manually in Telegram. Rehearsal timing is stored separately and never overwrites
-those production timestamps. The rows remain **Batch default** on the Polls page
-until cleanup runs.
+No. Testing mode stores temporary values for one isolated batch. After its final
+confirmation, the testing records and votes are removed and the complete
+production release, confirmation, gap-week, shift, and capacity settings become
+active again automatically.
+
+## How are confirmations accelerated during Testing mode?
+
+For Wheelchair, the first confirmation follows its configured time and each
+remaining event confirmation sends five minutes after the previous one. PSA
+still sends one weekly summary at its configured weekday and time.
 
 ## What is the deployment sheet?
 
@@ -64,12 +66,11 @@ not second-accurate.
 The confirmation uses each person's Telegram handle when available. If the
 person has no handle, the application uses a Telegram account link instead.
 
-## Why does deleting a poll in Telegram not remove it from Polls?
+## Why do testing messages remain in Telegram after Testing mode finishes?
 
-Telegram does not notify normal bots when an ordinary group poll or message is
-manually deleted. For test polls, use **Reset test batch** on the Polls page. It
-deletes the known test messages, hides the saved records, and keeps them ready
-for their original production release.
+The website automatically removes the testing records and votes, but Telegram
+does not notify normal bots when an ordinary group poll or message is manually
+deleted. Delete the testing poll and confirmation messages manually in Telegram.
 
 ## Who do I contact for access or problems?
 

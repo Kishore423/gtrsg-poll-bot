@@ -496,31 +496,33 @@
       min-width: 10rem;
     }
 
-    .rehearsal-clear-control {
-      width: min(32rem, 100%);
-      padding: 1rem;
-      border-left: 3px solid var(--accent);
-      background: var(--accent-soft);
-      display: grid;
-      gap: 1rem;
-    }
-
-    .rehearsal-clear-control label {
-      margin: 0;
-    }
-
-    .rehearsal-duration-input {
-      display: flex;
+    .testing-mode-toggle {
+      min-height: 2.75rem;
+      flex-direction: row;
       align-items: center;
-      gap: 0.75rem;
-      margin: 0.45rem 0;
-      color: var(--ink-soft);
-      font-weight: 700;
+      gap: 0.65rem;
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fbfcfd;
+      color: var(--ink);
+      font-size: 0.9rem;
       text-transform: none;
+      letter-spacing: 0;
+      cursor: pointer;
     }
 
-    .rehearsal-duration-input input {
-      width: 7rem;
+    .testing-mode-toggle:has(input:checked) {
+      border-color: var(--green);
+      background: var(--green-light);
+      color: var(--green-dark);
+    }
+
+    .testing-mode-toggle input {
+      width: 1.1rem;
+      height: 1.1rem;
+      margin: 0;
+      accent-color: var(--green);
     }
 
     .skip-date-panel {
@@ -1035,18 +1037,15 @@
           <div id="weekly-shift-editor"></div>
           <div class="template-actions">
             <button type="button" id="weekly-add-shift" class="secondary">Add template shift</button>
-            <button type="submit" class="primary">Save default</button>
-            <button type="button" id="weekly-start-rehearsal" class="secondary">Start batch rehearsal</button>
-          </div>
-          <div class="rehearsal-clear-control">
-            <label>Time to clear rehearsal polls
-              <span class="rehearsal-duration-input">
-                <input type="number" id="weekly-rehearsal-clear-delay" min="1" max="60" step="1" value="5" />
-                <span>minutes</span>
-              </span>
-              <span class="field-help">At this time, confirmations are sent, rehearsal results clear from Polls, and the same records return to their original schedule. Delete the Telegram messages manually.</span>
+            <label class="testing-mode-toggle" for="weekly-testing-mode">
+              <input type="checkbox" id="weekly-testing-mode" name="testing_mode" />
+              <span>Testing mode</span>
             </label>
+            <button type="submit" class="primary">Save default</button>
           </div>
+          <p id="weekly-testing-status" class="hint" style="margin: 0;">
+            Testing mode is off. Saving updates the production weekly default.
+          </p>
         </form>
         
         <hr style="border: none; border-top: 1px solid var(--border); margin: 1rem 0;" />
@@ -1056,7 +1055,6 @@
           <div id="weekly-template-poll-preview" class="template-poll-preview">
             Save template shifts to preview the Telegram poll options.
           </div>
-          <p class="hint" style="margin: 0;">A rehearsal uses the saved template release time at its next occurrence without changing the batch's production release, cutoff, or confirmation timestamps.</p>
         </div>
       </div>
 

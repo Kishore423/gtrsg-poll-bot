@@ -54,37 +54,25 @@ been sent to Telegram, skipping cannot recall it.
 2. Adjust the shifts (they start from your saved template).
 3. Set the date and timing, review the preview, and create the poll.
 
-## Rehearse an upcoming weekly batch
+## Test an upcoming weekly template
 
-1. On **Home**, open the group and choose **Weekly default template**.
-2. Confirm the saved template **Release time**. The rehearsal uses the next
-   occurrence of this same time.
-3. Set **Time to clear rehearsal polls** to between 1 and 60 minutes. This
-   countdown starts from the scheduled rehearsal release.
-4. Click **Start batch rehearsal** beside **Save default** and confirm the
-   summary. The polls remain queued until the saved release time.
-5. When the polls arrive in Telegram, vote normally.
-6. At the clear time, the confirmation is sent and the rehearsal results are
-   cleared automatically from **Polls**. Delete the rehearsal polls and
-   confirmation message manually in Telegram.
+1. Save the normal production weekly default first.
+2. Change the release, confirmation, gap-week, shift, and capacity fields to the
+   temporary values you want to test.
+3. Turn on **Testing mode** beside **Save default**, then click **Save default**.
+4. Cron releases one temporary Monday-Sunday batch at its configured release
+   weekday and time. Telegram text and options are identical to production.
+5. Wheelchair's first confirmation follows the configured confirmation time;
+   later event confirmations send five minutes apart. PSA's weekly summary sends
+   once at its configured weekday and time.
+6. After the final confirmation succeeds, the website automatically removes the
+   testing batch and votes, switches Testing mode off, and restores the complete
+   previous production template.
+7. Delete the testing poll and confirmation messages manually in Telegram.
 
-The next eligible batch is selected automatically. The rehearsal uses the actual
-batch rows, but it never changes their production release, cutoff, or confirmation
-timestamps. Rehearsal votes are cleared and the same rows remain ready for their
-real scheduled send. An open Polls page refreshes automatically, so cleared rows
-disappear within about 15 seconds.
-
-### Reset a manually ended test
-
-To clear the website before the scheduled cleanup, open **Polls** and choose
-**Reset test batch** on any poll in that batch. Weekly polls reset as one
-Monday-Sunday batch; custom polls reset individually. The action is available
-only while the saved production release is still in the future. It does not
-delete Telegram messages.
-
-Telegram does not send ordinary group-message deletion events to bots. Deleting
-a message in Telegram therefore does not trigger the website reset; the saved
-clear time or **Reset test batch** performs that reset.
+Testing mode is one-shot. It does not overwrite production release,
+confirmation, gap-week, shift, or capacity settings. A test is rejected if its
+confirmation sequence would overlap the next production release.
 
 ## Download the deployment sheet
 

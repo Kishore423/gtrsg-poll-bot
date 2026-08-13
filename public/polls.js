@@ -253,14 +253,10 @@ function renderPollsTable(polls) {
       managedGroups.find((g) => g.id === poll.telegram_group_id)?.bot_id;
 
     const isActive   = ['draft', 'scheduled', 'failed'].includes(poll.status);
-    const canResetTest = Boolean(poll.telegram_message_id || poll.confirmation_message_id) &&
-      new Date(poll.resolved_release_at).getTime() > Date.now();
-
     const actionBtns = [
       isActive ? `<button type="button" data-id="${poll.id}" data-action="send-now" class="secondary btn-sm poll-action"><i data-lucide="send" aria-hidden="true"></i> Send now</button>` : '',
       poll.status === 'failed' ? `<button type="button" data-id="${poll.id}" data-action="retry" class="secondary btn-sm poll-action"><i data-lucide="rotate-ccw" aria-hidden="true"></i> Retry</button>` : '',
       isActive ? `<button type="button" data-id="${poll.id}" data-action="cancel" class="danger-link btn-sm poll-action"><i data-lucide="x-circle" aria-hidden="true"></i> Cancel</button>` : '',
-      canResetTest ? `<button type="button" data-id="${poll.id}" class="secondary btn-sm poll-reset-test"><i data-lucide="archive-restore" aria-hidden="true"></i> Reset test batch</button>` : '',
     ].filter(Boolean).join('');
 
     return `
@@ -324,33 +320,6 @@ function renderPollsTable(polls) {
     setStatus('', '');
   }));
 
-  pollsTableContainer.querySelectorAll('.poll-reset-test').forEach((btn) => btn.addEventListener('click', async (event) => {
-    event.preventDefault();
-    const poll = scheduledPolls.find((item) => String(item.id) === String(btn.dataset.id));
-    const kind = poll?.is_custom ? 'poll' : 'weekly batch';
-    if (!window.confirm(
-      `Reset this test ${kind} in the website? Delete its poll and confirmation messages manually in Telegram. ` +
-      'The saved records will disappear here and send again at their original production time.'
-    )) return;
-    btn.disabled = true;
-    setStatus(`Resetting test ${kind}...`, 'pending');
-    try {
-      const response = await fetch(`/api/scheduled-polls/${btn.dataset.id}/reset-test-batch`, {
-        method: 'POST',
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Reset failed');
-      setStatus(
-        `${result.poll_count} poll${result.poll_count === 1 ? '' : 's'} reset. ` +
-        `They will send at ${formatLocalDateTime(result.actual_release_at)}.`,
-        'success'
-      );
-      await loadScheduledPolls();
-    } catch (error) {
-      setStatus(`Error: ${error.message}`, 'error');
-      btn.disabled = false;
-    }
-  }));
   window.refreshIcons?.();
 }
 
