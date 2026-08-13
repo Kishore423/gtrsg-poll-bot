@@ -494,16 +494,19 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   test records. **Start batch rehearsal**, placed beside **Save default**, creates
   or reuses the next eligible `batch_default` rows for the selected group,
   temporarily tags those same events with `rehearsal:<uuid>`,
-  `rehearsal-start:<epoch-ms>`, and `rehearsal-clear:<epoch-ms>`. The minute
-  scheduler sends them with normal titles at the user-set rehearsal start time;
+  `rehearsal-start:<epoch-ms>`, and `rehearsal-clear:<epoch-ms>`. The start tag
+  is derived from the next occurrence of the saved template release time; there
+  is no separate rehearsal start field. The minute scheduler sends them with normal titles at that time;
   the 1-60 minute clear duration begins from that scheduled start. A
   custom/sent/open poll on any event date blocks the rehearsal rather than being
   replaced. Persistent skipped event dates remain omitted. Automatic generation
   sees rehearsal rows as active, so it cannot duplicate the real batch.
   Rehearsal metadata never updates `resolved_release_at`, `close_at`, or the
   confirmation's `resolved_send_at`; production timing stays unchanged throughout.
-  At the clear deadline, the scheduler sends the rehearsal confirmation and closes
-  the rehearsal Telegram polls, transactionally deletes rehearsal response,
+  At the clear deadline, the scheduler sends the rehearsal confirmation, closes
+  the rehearsal Telegram polls, and deletes both confirmation and poll messages.
+  Database message IDs and rehearsal state are retained for retry unless Telegram
+  confirms deletion. Successful cleanup transactionally deletes rehearsal response,
   participant, and allocation-audit data, clears Telegram/message/claim state,
   removes all rehearsal tags, and keeps the same rows on their original release,
   cutoff, and confirmation timestamps. This finalizer runs inside

@@ -56,12 +56,12 @@ batch in Telegram before its real send time:
 
 - The rehearsal uses the actual batch-default poll records and normal poll text;
   it does not create a second test-labelled copy.
-- The application selects the next eligible batch automatically. Set the future
-  rehearsal start date/time and a 1-60 minute clear duration. The minute
-  scheduler releases the batch at the chosen start time; skipped event dates
+- The application selects the next eligible batch automatically. It uses the
+  next occurrence of the saved template release time plus a 1-60 minute clear
+  duration. The minute scheduler releases the batch at that saved time; skipped event dates
   stay excluded.
-- After the rehearsal confirmation is sent, the rehearsal polls are closed,
-  rehearsal votes and allocations are cleared, and the same batch remains ready
+- After the rehearsal confirmation is sent, the confirmation and poll messages
+  are deleted from Telegram, rehearsal votes and allocations are cleared, and the same batch remains ready
   for its real schedule.
 - Production release, cutoff, and confirmation timestamps are never replaced by
   rehearsal timing.

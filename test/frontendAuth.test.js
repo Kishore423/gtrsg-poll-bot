@@ -162,7 +162,7 @@ test('managed workflows stay bound to the clicked group without duplicate select
   assert.match(html, /type="hidden" name="telegram_group_id"/);
   assert.match(html, /id="weekly-start-rehearsal"/);
   assert.match(html, /Start batch rehearsal/);
-  assert.match(html, /id="weekly-rehearsal-start-at"/);
+  assert.doesNotMatch(html, /id="weekly-rehearsal-start-at"/);
   assert.match(html, /id="weekly-rehearsal-clear-delay"/);
   assert.doesNotMatch(html, /id="weekly-send-event-date"/);
   assert.doesNotMatch(html, /id="weekly-send-confirmation-delay"/);
@@ -171,7 +171,7 @@ test('managed workflows stay bound to the clicked group without duplicate select
     'rehearsal action should follow Save default',
   );
   assert.match(source, /fetch\('\/api\/template-rehearsals'/);
-  assert.match(source, /start_at: startAt\.toISOString\(\)/);
+  assert.doesNotMatch(source, /start_at:/);
   assert.match(source, /clear_after_minutes: clearAfterMinutes/);
   assert.doesNotMatch(source, /Actual batch rehearsal sent/);
   assert.doesNotMatch(source, /release_date: releaseDate/);

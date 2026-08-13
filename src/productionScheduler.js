@@ -46,6 +46,18 @@ function nextReleaseDateForSchedule(schedule, now = new Date()) {
   return releaseDate;
 }
 
+function nextRehearsalStartForSchedule(schedule, now = new Date()) {
+  const timezone = schedule.timezone || 'Asia/Singapore';
+  const releaseTime = String(schedule.poll_release_time || '17:00').slice(0, 5);
+  let localDate = localDateAt(now, timezone);
+  let startAt = zonedDateTimeToUtc(localDate, releaseTime, timezone);
+  if (startAt <= now) {
+    localDate = addDays(localDate, 1);
+    startAt = zonedDateTimeToUtc(localDate, releaseTime, timezone);
+  }
+  return startAt;
+}
+
 function releaseDueToday(now, releaseDay, releaseTime, timeZone) {
   const localToday = localDateAt(now, timeZone);
   if (weekday(localToday) !== Number(releaseDay)) return null;
@@ -207,12 +219,37 @@ async function deleteTestMessages(telegram, rows) {
     }
     const ids = [...group.messageIds];
     for (let offset = 0; offset < ids.length; offset += 100) {
+      const batch = ids.slice(offset, offset + 100);
+      let bulkDeleted = false;
       if (telegram.deleteMessages) {
-        await telegram.deleteMessages(
-          group.service,
-          group.telegramChatId,
-          ids.slice(offset, offset + 100)
-        );
+        try {
+          bulkDeleted = await telegram.deleteMessages(
+            group.service,
+            group.telegramChatId,
+            batch
+          ) === true;
+        } catch {
+          // Fall back to one message at a time. This also handles a bulk request
+          // containing one message that was already removed manually.
+        }
+      }
+      if (bulkDeleted) continue;
+      if (!telegram.deleteMessage) {
+        throw new Error('Telegram did not confirm rehearsal message deletion');
+      }
+      for (const messageId of batch) {
+        try {
+          const deleted = await telegram.deleteMessage(
+            group.service,
+            group.telegramChatId,
+            messageId
+          );
+          if (deleted !== true) {
+            throw new Error(`Telegram did not delete rehearsal message ${messageId}`);
+          }
+        } catch (error) {
+          if (!/message to delete not found/i.test(String(error?.message || ''))) throw error;
+        }
       }
     }
   }
@@ -577,7 +614,6 @@ async function finalizeReadyTemplateRehearsals(db, telegram) {
 async function startTemplateRehearsal(db, telegram, {
   group,
   schedule,
-  startAt,
   clearAfterMinutes = 5,
   createdBy = null,
   now = new Date(),
@@ -593,12 +629,7 @@ async function startTemplateRehearsal(db, telegram, {
     error.statusCode = 400;
     throw error;
   }
-  const rehearsalStartAt = new Date(startAt);
-  if (!startAt || Number.isNaN(rehearsalStartAt.getTime()) || rehearsalStartAt <= now) {
-    const error = new RangeError('Choose a rehearsal start date and time in the future');
-    error.statusCode = 400;
-    throw error;
-  }
+  const rehearsalStartAt = nextRehearsalStartForSchedule(schedule, now);
   const clearAt = new Date(rehearsalStartAt.getTime() + delay * 60 * 1000);
   const shifts = normalizeShifts(schedule.shifts);
   if (!shifts.length) {

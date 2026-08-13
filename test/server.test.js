@@ -490,7 +490,7 @@ test('admin APIs mirror Telegram bot identity and keep it read-only', async () =
   }
 });
 
-test('weekly template rehearsal API queues the actual future batch for its chosen start time', async () => {
+test('weekly template rehearsal API queues the actual future batch for the saved release time', async () => {
   const groupId = '11111111-1111-4111-8111-111111111111';
   const scheduleId = '22222222-2222-4222-8222-222222222222';
   const created = [];
@@ -548,11 +548,9 @@ test('weekly template rehearsal API queues the actual future batch for its chose
   await new Promise((resolve) => server.once('listening', resolve));
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
   try {
-    const startAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
     const response = await fetch(`${baseUrl}/api/template-rehearsals`, json('POST', {
       telegram_group_id: groupId,
       weekly_schedule_id: scheduleId,
-      start_at: startAt,
       clear_after_minutes: 5,
     }));
     assert.equal(response.status, 201);
@@ -561,7 +559,7 @@ test('weekly template rehearsal API queues the actual future batch for its chose
     assert.equal(telegram.polls.length, 0);
     assert.equal(created.length, 7);
     assert.equal(prepared[0].pollIds.length, 7);
-    assert.equal(prepared[0].startAt, startAt);
+    assert.equal(prepared[0].startAt, result.start_at);
     assert.ok(prepared[0].clearAt);
     assert.equal('confirmationAt' in prepared[0], false);
     assert.ok(created.every((payload) => !payload.poll_question.includes('[TEST]')));
@@ -1426,7 +1424,7 @@ test('test batch reset is scoped to the selected batch and preserves its future 
   };
   const telegram = {
     async stopPoll(...args) { stopped.push(args); },
-    async deleteMessages(...args) { deleted.push(args); },
+    async deleteMessages(...args) { deleted.push(args); return true; },
   };
   const server = createServer(db, telegram, { enableLegacyWorkflow: false }).listen(0);
   await new Promise((resolve) => server.once('listening', resolve));

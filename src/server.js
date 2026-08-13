@@ -1273,7 +1273,6 @@ function createServer(db, telegram, options = {}) {
     const result = await startTemplateRehearsal(db, telegram, {
       group,
       schedule,
-      startAt: body.start_at,
       clearAfterMinutes: body.clear_after_minutes,
       createdBy: req.adminUser?.id || req.appUser?.id || null,
     });

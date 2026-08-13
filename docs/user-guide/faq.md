@@ -36,9 +36,9 @@ capacity. Voting earlier improves your chances for a limited shift.
 
 ## Does rehearsing a batch create duplicate test polls?
 
-No. A weekly batch rehearsal queues the actual upcoming batch for the chosen
-rehearsal start date/time. The minute scheduler releases those same rows. After
-its confirmation is sent, rehearsal votes are cleared and the records are kept
+No. A weekly batch rehearsal queues the actual upcoming batch for the next
+occurrence of the saved template release time. The minute scheduler releases those same rows. After
+its confirmation and poll messages are deleted, rehearsal votes are cleared and the records are kept
 for their real release, cutoff, and confirmation times. Rehearsal timing is
 stored separately and never overwrites those production timestamps. The rows
 remain **Batch default** on the Polls page.

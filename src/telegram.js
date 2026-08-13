@@ -100,6 +100,13 @@ function createTelegramClient({ tokens = {}, resolveToken = null, fetchImpl = fe
     return call(botKey, 'deleteMessages', { chat_id: chatId, message_ids: ids });
   }
 
+  async function deleteMessage(botKey, chatId, messageId) {
+    return call(botKey, 'deleteMessage', {
+      chat_id: chatId,
+      message_id: Number(messageId),
+    });
+  }
+
   async function setWebhook(botKey, url, secretToken) {
     return call(botKey, 'setWebhook', {
       url,
@@ -135,6 +142,7 @@ function createTelegramClient({ tokens = {}, resolveToken = null, fetchImpl = fe
     sendMessage,
     editMessage,
     stopPoll,
+    deleteMessage,
     deleteMessages,
     setWebhook,
     deleteWebhook,

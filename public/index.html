@@ -1039,10 +1039,6 @@
             <button type="button" id="weekly-start-rehearsal" class="secondary">Start batch rehearsal</button>
           </div>
           <div class="rehearsal-clear-control">
-            <label>Rehearsal start date and time
-              <input type="datetime-local" id="weekly-rehearsal-start-at" step="60" required />
-              <span class="field-help">The minute scheduler releases the actual batch at this time.</span>
-            </label>
             <label>Time to clear rehearsal polls
               <span class="rehearsal-duration-input">
                 <input type="number" id="weekly-rehearsal-clear-delay" min="1" max="60" step="1" value="5" />
@@ -1060,7 +1056,7 @@
           <div id="weekly-template-poll-preview" class="template-poll-preview">
             Save template shifts to preview the Telegram poll options.
           </div>
-          <p class="hint" style="margin: 0;">A rehearsal schedules the next actual batch at the rehearsal start time without changing its production release, cutoff, or confirmation timestamps.</p>
+          <p class="hint" style="margin: 0;">A rehearsal uses the saved template release time at its next occurrence without changing the batch's production release, cutoff, or confirmation timestamps.</p>
         </div>
       </div>
 
