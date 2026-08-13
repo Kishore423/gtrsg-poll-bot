@@ -430,8 +430,11 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   managed groups, weekly templates, and custom replacement polls remain scoped
   server-side to the bot assigned to that user.
   Successful **Save default** and **Review and schedule** actions show an in-page
-  completion dialog naming the selected Telegram group; API failures remain in
-  the shared status area and must not open the success dialog.
+  completion dialog naming the selected Telegram group. Weekly-template save
+  validates the selected release/cutoff/confirmation chronology before sending,
+  shows **Saving...** while busy, and opens an **Unable to save** dialog with the
+  exact validation or network error instead of leaving the failure only in the
+  shared status area.
   Weekly-template save is single-flight: its submit control is disabled and the
   form is marked busy until the save plus refresh completes, preventing repeated
   completion dialogs from concurrent submissions.
