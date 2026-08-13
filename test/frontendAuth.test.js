@@ -407,7 +407,11 @@ test('weekly default save allows only one in-flight submission and completion po
   assert.match(source, /let managedScheduleSavePending = false/);
   assert.match(source, /if \(managedScheduleSavePending\) return/);
   assert.match(source, /managedScheduleForm\.setAttribute\('aria-busy', 'true'\)/);
-  assert.match(source, /if \(submitButton\) submitButton\.disabled = true/);
+  assert.match(source, /submitButton\.disabled = true/);
+  assert.match(source, /submitButton\.textContent = 'Saving\.\.\.'/);
+  assert.match(source, /managedTimingForEvent\(\{[\s\S]*telegramGroupId: body\.telegram_group_id/);
+  assert.match(source, /showActionFeedback\(message, \{ title: 'Unable to save', tone: 'error' \}\)/);
+  assert.match(source, /catch \(error\) \{[\s\S]*The weekly default could not be saved/);
   assert.match(source, /finally \{[\s\S]*managedScheduleSavePending = false/);
   assert.equal((source.match(/showActionFeedback\(`Default template saved for/g) || []).length, 1);
 });

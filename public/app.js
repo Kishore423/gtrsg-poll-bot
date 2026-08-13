@@ -27,6 +27,7 @@ const groupActionTitle = document.getElementById('group-action-title');
 const groupActionSubtitle = document.getElementById('group-action-subtitle');
 const groupActionClose = document.getElementById('group-action-close');
 const actionFeedbackDialog = document.getElementById('action-feedback-dialog');
+const actionFeedbackTitle = document.getElementById('action-feedback-title');
 const actionFeedbackMessage = document.getElementById('action-feedback-message');
 const actionFeedbackClose = document.getElementById('action-feedback-close');
 const managedScheduleSection = document.getElementById('managed-schedule-section');
@@ -94,9 +95,11 @@ function closeGroupActionDialog() {
   if (groupActionDialog) groupActionDialog.hidden = true;
 }
 
-function showActionFeedback(message) {
+function showActionFeedback(message, { title = 'Completed', tone = 'success' } = {}) {
   if (!actionFeedbackDialog || !actionFeedbackMessage) return;
+  if (actionFeedbackTitle) actionFeedbackTitle.textContent = title;
   actionFeedbackMessage.textContent = message;
+  actionFeedbackDialog.dataset.tone = tone;
   actionFeedbackDialog.hidden = false;
   actionFeedbackClose?.focus();
 }
@@ -1326,9 +1329,13 @@ managedScheduleForm.addEventListener('submit', async (event) => {
   if (managedScheduleSavePending) return;
 
   const submitButton = event.submitter || managedScheduleForm.querySelector('[type="submit"]');
+  const submitButtonLabel = submitButton?.textContent;
   managedScheduleSavePending = true;
   managedScheduleForm.setAttribute('aria-busy', 'true');
-  if (submitButton) submitButton.disabled = true;
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = 'Saving...';
+  }
 
   try {
     const body = Object.fromEntries(new FormData(managedScheduleForm).entries());
@@ -1340,12 +1347,22 @@ managedScheduleForm.addEventListener('submit', async (event) => {
     body.confirmation_day_of_week = Number(body.confirmation_day_of_week);
     body.gap_weeks = Number(body.gap_weeks);
 
+    const releaseDate = nextReleaseDateForSchedule(body);
+    const eventDate = batchRangeForReleaseDate(releaseDate, body.gap_weeks)[0];
+    managedTimingForEvent({
+      telegramGroupId: body.telegram_group_id,
+      eventDateVal: eventDate,
+      schedule: body,
+    });
+
     setStatus('Saving weekly default...', 'pending');
     const response = await fetch('/api/weekly-schedules', { method: 'PUT',
       headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const result = await response.json();
     if (!response.ok) {
-      setStatus(`Error: ${result.error}`, 'error');
+      const message = result.error || 'The weekly default could not be saved.';
+      setStatus(`Error: ${message}`, 'error');
+      showActionFeedback(message, { title: 'Unable to save', tone: 'error' });
       return;
     }
     const savedSchedule = scheduleFromSaveResult(result, body);
@@ -1364,10 +1381,17 @@ managedScheduleForm.addEventListener('submit', async (event) => {
     setStatus('Weekly default saved.', 'success');
     const group = groupById(body.telegram_group_id);
     showActionFeedback(`Default template saved for ${group?.group_name || 'the selected Telegram group'}.`);
+  } catch (error) {
+    const message = error?.message || 'The weekly default could not be saved.';
+    setStatus(`Error: ${message}`, 'error');
+    showActionFeedback(message, { title: 'Unable to save', tone: 'error' });
   } finally {
     managedScheduleSavePending = false;
     managedScheduleForm.removeAttribute('aria-busy');
-    if (submitButton) submitButton.disabled = false;
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = submitButtonLabel || 'Save default';
+    }
   }
 });
 

@@ -32,6 +32,10 @@ See [Getting started](getting-started.md) for detail.
 4. Check the **Telegram poll preview** below the shifts.
 5. Click **Save default**.
 
+The button shows **Saving...** while the template is being stored. If the release,
+cutoff, or confirmation timing is not valid, the page shows an **Unable to save**
+dialog with the exact setting that needs to change.
+
 The system will generate and send the batch automatically on the release day. You
 do not create each week's polls by hand.
 
