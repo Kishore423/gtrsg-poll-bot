@@ -1404,9 +1404,8 @@ test('single scheduled poll removal requires the configured clear password', asy
   }
 });
 
-test('test batch reset is scoped to the selected batch and preserves its future release', async () => {
-  const stopped = [];
-  const deleted = [];
+test('test batch reset clears only website state and preserves its future release', async () => {
+  const telegramCalls = [];
   let resetIds;
   const futureRelease = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   const db = {
@@ -1423,8 +1422,8 @@ test('test batch reset is scoped to the selected batch and preserves its future 
     async resetPollBatchForProduction(ids) { resetIds = ids; },
   };
   const telegram = {
-    async stopPoll(...args) { stopped.push(args); },
-    async deleteMessages(...args) { deleted.push(args); return true; },
+    async stopPoll(...args) { telegramCalls.push(['stopPoll', ...args]); },
+    async deleteMessages(...args) { telegramCalls.push(['deleteMessages', ...args]); return true; },
   };
   const server = createServer(db, telegram, { enableLegacyWorkflow: false }).listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
@@ -1437,8 +1436,7 @@ test('test batch reset is scoped to the selected batch and preserves its future 
     const body = await response.json();
     assert.equal(body.poll_count, 1);
     assert.equal(body.actual_release_at, futureRelease);
-    assert.deepEqual(stopped, [['bot-1', '-1001', 11]]);
-    assert.deepEqual(deleted, [['bot-1', '-1001', [11, 12]]]);
+    assert.deepEqual(telegramCalls, []);
     assert.deepEqual(resetIds, ['poll-1']);
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));

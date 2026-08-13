@@ -506,20 +506,22 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   sees rehearsal rows as active, so it cannot duplicate the real batch.
   Rehearsal metadata never updates `resolved_release_at`, `close_at`, or the
   confirmation's `resolved_send_at`; production timing stays unchanged throughout.
-  At the clear deadline, the scheduler sends the rehearsal confirmation, closes
-  the rehearsal Telegram polls, and deletes both confirmation and poll messages.
-  Database message IDs and rehearsal state are retained for retry unless Telegram
-  confirms deletion. Successful cleanup transactionally deletes rehearsal response,
-  participant, and allocation-audit data, clears Telegram/message/claim state,
-  removes all rehearsal tags, and keeps the same rows on their original release,
-  cutoff, and confirmation timestamps. This finalizer runs inside
+  At the clear deadline, the scheduler sends the rehearsal confirmation and
+  resets the website records without stopping or deleting Telegram messages;
+  users remove the rehearsal polls and confirmation manually in Telegram.
+  Cleanup transactionally deletes rehearsal response, participant, and
+  allocation-audit data, clears Telegram/message/claim state, removes all
+  rehearsal tags, and keeps the same rows on their original release, cutoff, and
+  confirmation timestamps. This finalizer runs inside
   normal confirmation scheduling, so closing the page does not strand the batch.
   Due rehearsal sends use the same minute scheduler and poll claim path as
   production sends. Polls renders rehearsals as **Batch default** and has no
   separate Test filter/type. One-off **Send test poll** still uses the generic
   custom-poll smoke-test path but is rendered as Custom, not as another poll type.
   Home rehearsal callbacks must not call `loadScheduledPolls`; that loader exists
-  only on the Polls page, and the scheduler owns the server-side reset.
+  only on the Polls page, and the scheduler owns the server-side reset. While
+  visible, Polls refreshes this list every 15 seconds so completed rehearsal rows
+  disappear without a manual browser reload.
   Confirmation delivery is service-specific: PSA due confirmations are
   grouped into one Telegram message per group/resolved confirmation time, with
   each event date and its confirmed timeslots listed in date order. Wheelchair

@@ -209,6 +209,8 @@ test('Polls exposes an explicit production reset for test-sent batches', () => {
   assert.match(source, /Reset test batch/);
   assert.match(source, /reset-test-batch/);
   assert.match(source, /original production time/);
+  assert.match(source, /Delete its poll and confirmation messages manually in Telegram/);
+  assert.match(source, /setInterval\([\s\S]*loadScheduledPolls\(\)[\s\S]*15000/);
 });
 
 test('shared dimensional theme and icon runtime load on every application page', () => {

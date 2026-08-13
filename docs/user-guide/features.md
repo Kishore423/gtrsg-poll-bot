@@ -60,9 +60,10 @@ batch in Telegram before its real send time:
   next occurrence of the saved template release time plus a 1-60 minute clear
   duration. The minute scheduler releases the batch at that saved time; skipped event dates
   stay excluded.
-- After the rehearsal confirmation is sent, the confirmation and poll messages
-  are deleted from Telegram, rehearsal votes and allocations are cleared, and the same batch remains ready
-  for its real schedule.
+- After the rehearsal confirmation is sent, rehearsal votes and allocations are
+  cleared automatically from the Polls page, and the same batch remains ready
+  for its real schedule. Users delete the rehearsal poll and confirmation
+  messages manually in Telegram.
 - Production release, cutoff, and confirmation timestamps are never replaced by
   rehearsal timing.
 - The Polls page continues to show these rows as **Batch default**.
@@ -82,9 +83,10 @@ The Polls page is a **read-only monitoring view** of scheduled polls. Use
 - **Reset test batch:** available after a poll has been sent early while its
   saved production release is still in the future. For a weekly poll, the action
   resets the complete Monday-Sunday batch; for a custom poll, it resets only that
-  poll. The bot deletes its known poll and confirmation messages, clears test
-  responses, hides the records from Polls, and sends the same records again at
-  their original production time.
+  poll. It clears test responses, hides the records from Polls, and sends the
+  same records again at their original production time. Telegram messages are
+  deleted manually. The Polls list refreshes automatically every 15 seconds
+  while the page is visible.
 The Polls page has no permanent delete control. To stop a default poll from
 being sent, use **Skip days** on the Home page instead.
 

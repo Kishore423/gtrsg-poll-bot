@@ -183,79 +183,7 @@ function buildPsaBatchConfirmationMessage(items, { header = 'Confirmed slots', f
   return lines.join('\n').trim();
 }
 
-function groupTelegramMessages(rows) {
-  const groups = new Map();
-  for (const row of rows) {
-    const key = `${row.service}|${row.telegram_chat_id}`;
-    if (!groups.has(key)) {
-      groups.set(key, {
-        service: row.service,
-        telegramChatId: row.telegram_chat_id,
-        pollMessageIds: new Set(),
-        messageIds: new Set(),
-      });
-    }
-    const group = groups.get(key);
-    if (row.telegram_message_id) {
-      group.pollMessageIds.add(Number(row.telegram_message_id));
-      group.messageIds.add(Number(row.telegram_message_id));
-    }
-    if (row.confirmation_message_id) {
-      group.messageIds.add(Number(row.confirmation_message_id));
-    }
-  }
-  return [...groups.values()];
-}
-
-async function deleteTestMessages(telegram, rows) {
-  for (const group of groupTelegramMessages(rows)) {
-    for (const messageId of group.pollMessageIds) {
-      try {
-        await telegram.stopPoll(group.service, group.telegramChatId, messageId);
-      } catch {
-        // A manually deleted or already-closed poll cannot be stopped. Deleting
-        // the known message IDs below remains idempotent.
-      }
-    }
-    const ids = [...group.messageIds];
-    for (let offset = 0; offset < ids.length; offset += 100) {
-      const batch = ids.slice(offset, offset + 100);
-      let bulkDeleted = false;
-      if (telegram.deleteMessages) {
-        try {
-          bulkDeleted = await telegram.deleteMessages(
-            group.service,
-            group.telegramChatId,
-            batch
-          ) === true;
-        } catch {
-          // Fall back to one message at a time. This also handles a bulk request
-          // containing one message that was already removed manually.
-        }
-      }
-      if (bulkDeleted) continue;
-      if (!telegram.deleteMessage) {
-        throw new Error('Telegram did not confirm rehearsal message deletion');
-      }
-      for (const messageId of batch) {
-        try {
-          const deleted = await telegram.deleteMessage(
-            group.service,
-            group.telegramChatId,
-            messageId
-          );
-          if (deleted !== true) {
-            throw new Error(`Telegram did not delete rehearsal message ${messageId}`);
-          }
-        } catch (error) {
-          if (!/message to delete not found/i.test(String(error?.message || ''))) throw error;
-        }
-      }
-    }
-  }
-}
-
-async function resetTestPollBatch(db, telegram, pollId, now = new Date()) {
+async function resetTestPollBatch(db, _telegram, pollId, now = new Date()) {
   if (!db.getPollResetBatch || !db.resetPollBatchForProduction) {
     const error = new Error('Test batch reset requires the Supabase production database');
     error.statusCode = 501;
@@ -272,7 +200,6 @@ async function resetTestPollBatch(db, telegram, pollId, now = new Date()) {
     error.statusCode = 409;
     throw error;
   }
-  await deleteTestMessages(telegram, rows);
   await db.resetPollBatchForProduction(rows.map((row) => row.poll_id));
   const dates = rows.map((row) => String(row.event_date).slice(0, 10)).sort();
   return {
@@ -585,10 +512,9 @@ function rehearsalBatchIdFromTag(tag) {
     : null;
 }
 
-async function resetTemplateRehearsalBatch(db, telegram, batchId, rows = null) {
+async function resetTemplateRehearsalBatch(db, _telegram, batchId, rows = null) {
   const polls = rows || await db.listTemplateRehearsalPolls(batchId);
   if (!polls.length) return null;
-  await deleteTestMessages(telegram, polls);
   await db.resetTemplateRehearsal(batchId);
   return {
     batch_id: batchId,
@@ -743,6 +669,5 @@ module.exports = {
   finalizeReadyTemplateRehearsals,
   resetTemplateRehearsalBatch,
   resetTestPollBatch,
-  deleteTestMessages,
   templatePayloadForEvent,
 };

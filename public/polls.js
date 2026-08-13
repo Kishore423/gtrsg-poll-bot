@@ -329,7 +329,7 @@ function renderPollsTable(polls) {
     const poll = scheduledPolls.find((item) => String(item.id) === String(btn.dataset.id));
     const kind = poll?.is_custom ? 'poll' : 'weekly batch';
     if (!window.confirm(
-      `Reset this test ${kind}? Its Telegram poll and confirmation messages will be deleted. ` +
+      `Reset this test ${kind} in the website? Delete its poll and confirmation messages manually in Telegram. ` +
       'The saved records will disappear here and send again at their original production time.'
     )) return;
     btn.disabled = true;
@@ -362,6 +362,12 @@ async function loadScheduledPolls() {
 }
 
 document.getElementById('refresh-polls-btn').addEventListener('click', loadScheduledPolls);
+
+const pollsAutoRefresh = window.setInterval(() => {
+  if (document.hidden) return;
+  loadScheduledPolls().catch(() => {});
+}, 15000);
+window.addEventListener('pagehide', () => window.clearInterval(pollsAutoRefresh), { once: true });
 
 /* ── Bootstrap ──────────────────────────────────────────────────── */
 async function loadPollsPage() {

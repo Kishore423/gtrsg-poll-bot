@@ -64,24 +64,27 @@ been sent to Telegram, skipping cannot recall it.
 4. Click **Start batch rehearsal** beside **Save default** and confirm the
    summary. The polls remain queued until the saved release time.
 5. When the polls arrive in Telegram, vote normally.
-6. At the clear time, the confirmation is sent briefly, then both the
-   confirmation message and rehearsal poll messages are deleted automatically.
+6. At the clear time, the confirmation is sent and the rehearsal results are
+   cleared automatically from **Polls**. Delete the rehearsal polls and
+   confirmation message manually in Telegram.
 
 The next eligible batch is selected automatically. The rehearsal uses the actual
 batch rows, but it never changes their production release, cutoff, or confirmation
-timestamps. Once Telegram confirms message deletion, rehearsal votes are cleared and the
-same rows remain ready for their real scheduled send.
+timestamps. Rehearsal votes are cleared and the same rows remain ready for their
+real scheduled send. An open Polls page refreshes automatically, so cleared rows
+disappear within about 15 seconds.
 
 ### Reset a manually ended test
 
-If you end or delete test messages before rehearsal cleanup completes, open
-**Polls** and choose **Reset test batch** on any poll in that batch. Weekly polls
-reset as one Monday-Sunday batch; custom polls reset individually. The action is
-available only while the saved production release is still in the future.
+To clear the website before the scheduled cleanup, open **Polls** and choose
+**Reset test batch** on any poll in that batch. Weekly polls reset as one
+Monday-Sunday batch; custom polls reset individually. The action is available
+only while the saved production release is still in the future. It does not
+delete Telegram messages.
 
-Telegram does not send ordinary group-message deletion events to bots, so
-deleting a poll directly in Telegram cannot update the website automatically.
-Use **Reset test batch** to keep Telegram and the website synchronized.
+Telegram does not send ordinary group-message deletion events to bots. Deleting
+a message in Telegram therefore does not trigger the website reset; the saved
+clear time or **Reset test batch** performs that reset.
 
 ## Download the deployment sheet
 

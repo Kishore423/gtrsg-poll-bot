@@ -38,10 +38,12 @@ capacity. Voting earlier improves your chances for a limited shift.
 
 No. A weekly batch rehearsal queues the actual upcoming batch for the next
 occurrence of the saved template release time. The minute scheduler releases those same rows. After
-its confirmation and poll messages are deleted, rehearsal votes are cleared and the records are kept
-for their real release, cutoff, and confirmation times. Rehearsal timing is
-stored separately and never overwrites those production timestamps. The rows
-remain **Batch default** on the Polls page.
+the rehearsal confirmation is sent, rehearsal votes are cleared automatically
+from the website and the records are kept for their real release, cutoff, and
+confirmation times. Delete the rehearsal poll and confirmation messages
+manually in Telegram. Rehearsal timing is stored separately and never overwrites
+those production timestamps. The rows remain **Batch default** on the Polls page
+until cleanup runs.
 
 ## What is the deployment sheet?
 

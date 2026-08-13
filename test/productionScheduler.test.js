@@ -10,9 +10,8 @@ const {
   resetTestPollBatch,
 } = require('../src/productionScheduler');
 
-test('reset test batch removes Telegram polls and confirmations then restores production records', async () => {
-  const stopped = [];
-  const deleted = [];
+test('reset test batch clears website records without changing Telegram messages', async () => {
+  const telegramCalls = [];
   let resetIds;
   const rows = [1, 2].map((number) => ({
     poll_id: `poll-${number}`,
@@ -28,20 +27,18 @@ test('reset test batch removes Telegram polls and confirmations then restores pr
     async resetPollBatchForProduction(ids) { resetIds = ids; },
   };
   const telegram = {
-    async stopPoll(...args) { stopped.push(args); },
-    async deleteMessages(...args) { deleted.push(args); return true; },
+    async stopPoll(...args) { telegramCalls.push(['stopPoll', ...args]); },
+    async deleteMessages(...args) { telegramCalls.push(['deleteMessages', ...args]); return true; },
   };
 
   const result = await resetTestPollBatch(db, telegram, 'poll-1', new Date('2099-01-01T00:00:00Z'));
-  assert.deepEqual(stopped, [['bot-1', '-1001', 11], ['bot-1', '-1001', 12]]);
-  assert.deepEqual(deleted, [['bot-1', '-1001', [11, 20, 12]]]);
+  assert.deepEqual(telegramCalls, []);
   assert.deepEqual(resetIds, ['poll-1', 'poll-2']);
   assert.equal(result.poll_count, 2);
   assert.equal(result.actual_release_at, '2099-01-07T09:00:00.000Z');
 });
 
-test('rehearsal cleanup falls back to deleting each poll and confirmation message', async () => {
-  const individuallyDeleted = [];
+test('manual Telegram deletion is not required before resetting website records', async () => {
   let reset = false;
   const db = {
     async getPollResetBatch() {
@@ -55,42 +52,13 @@ test('rehearsal cleanup falls back to deleting each poll and confirmation messag
     async resetPollBatchForProduction() { reset = true; },
   };
   const telegram = {
-    async stopPoll() {},
-    async deleteMessages() { return false; },
-    async deleteMessage(...args) { individuallyDeleted.push(args); return true; },
+    async stopPoll() { throw new Error('Telegram cleanup must stay manual'); },
+    async deleteMessages() { throw new Error('Telegram cleanup must stay manual'); },
+    async deleteMessage() { throw new Error('Telegram cleanup must stay manual'); },
   };
 
   await resetTestPollBatch(db, telegram, 'poll-1', new Date('2099-01-01T00:00:00Z'));
-  assert.deepEqual(individuallyDeleted, [
-    ['bot-1', '-1001', 11],
-    ['bot-1', '-1001', 20],
-  ]);
   assert.equal(reset, true);
-});
-
-test('rehearsal cleanup keeps database message IDs when Telegram deletion fails', async () => {
-  let reset = false;
-  const db = {
-    async getPollResetBatch() {
-      return [{
-        poll_id: 'poll-1', event_date: '2099-01-11',
-        resolved_release_at: '2099-01-07T09:00:00.000Z',
-        service: 'bot-1', telegram_chat_id: '-1001', telegram_message_id: 11,
-      }];
-    },
-    async resetPollBatchForProduction() { reset = true; },
-  };
-  const telegram = {
-    async stopPoll() {},
-    async deleteMessages() { return false; },
-    async deleteMessage() { return false; },
-  };
-
-  await assert.rejects(
-    () => resetTestPollBatch(db, telegram, 'poll-1', new Date('2099-01-01T00:00:00Z')),
-    /did not delete rehearsal message/
-  );
-  assert.equal(reset, false);
 });
 
 test('reset test batch refuses a poll whose production release is not in the future', async () => {
@@ -202,8 +170,7 @@ test('poll scheduler releases a due rehearsal batch in event-date order', async 
   assert.deepEqual(sent.map((item) => item.question), ['poll-1', 'poll-2', 'poll-3']);
 });
 
-test('completed rehearsal closes Telegram polls and preserves stored production timings', async () => {
-  const stopped = [];
+test('completed rehearsal clears website records and preserves stored production timings', async () => {
   let reset;
   const db = {
     async listReadyTemplateRehearsals() {
@@ -227,15 +194,12 @@ test('completed rehearsal closes Telegram polls and preserves stored production 
     },
     async resetTemplateRehearsal(batchId) { reset = { batchId }; },
   };
-  const deleted = [];
   const telegram = {
-    async stopPoll(...args) { stopped.push(args); },
-    async deleteMessages(...args) { deleted.push(args); return true; },
+    async stopPoll() { throw new Error('Telegram cleanup must stay manual'); },
+    async deleteMessages() { throw new Error('Telegram cleanup must stay manual'); },
   };
 
   const result = await finalizeReadyTemplateRehearsals(db, telegram);
-  assert.deepEqual(stopped, [['PSA', '-1001', 77]]);
-  assert.deepEqual(deleted, [['PSA', '-1001', [77, 88]]]);
   assert.equal(reset.batchId, 'batch-1');
   assert.deepEqual(Object.keys(reset), ['batchId']);
   assert.equal(result[0].actual_release_at, '2099-01-07T09:00:00.000Z');
