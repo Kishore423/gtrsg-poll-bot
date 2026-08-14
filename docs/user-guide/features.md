@@ -38,6 +38,10 @@ options as they will appear. Click **Save default** to store the template. While
 the save is running, the button stays unavailable so one action produces one
 completion message.
 
+When **Testing mode** is off, the timing details and Telegram poll preview show
+the saved production weekly template. Turn Testing mode on to preview the
+temporary testing values you are editing before saving the test.
+
 Once saved, the system automatically generates and sends the poll batch on the
 configured release day — you do not create each week's batch by hand.
 

@@ -401,6 +401,36 @@ function syncConfirmationTypeFields() {
   }
 }
 
+function managedTemplateFormSchedule() {
+  return {
+    poll_release_day_of_week: Number(managedScheduleForm.elements.poll_release_day_of_week.value || DEFAULT_RELEASE_DAY),
+    poll_release_time: managedScheduleForm.elements.poll_release_time.value || DEFAULT_RELEASE_TIME,
+    confirmation_day_of_week: Number(managedScheduleForm.elements.confirmation_day_of_week.value ?? 5),
+    confirmation_time: managedScheduleForm.elements.confirmation_time.value || '12:00',
+    gap_weeks: Number(managedScheduleForm.elements.gap_weeks.value || 0),
+    confirmation_send_type: managedScheduleForm.elements.confirmation_send_type.value || 'weekly_summary',
+    confirmation_days_before_event: Number(managedScheduleForm.elements.confirmation_days_before_event.value || 1),
+  };
+}
+
+function previewUsesTestingTemplate() {
+  return Boolean(weeklyTestingMode?.checked);
+}
+
+function managedTemplatePreviewSchedule(telegramGroupId) {
+  const savedSchedule = scheduleForGroup(telegramGroupId);
+  if (!savedSchedule || previewUsesTestingTemplate()) return managedTemplateFormSchedule();
+  return savedSchedule;
+}
+
+function managedTemplatePreviewShifts(schedule) {
+  if (previewUsesTestingTemplate()) {
+    return normalizeShifts(shiftRowsFromContainer(weeklyShiftEditor)
+      .filter((shift) => shift.complete && Number.isFinite(shift.capacity)));
+  }
+  return Array.isArray(schedule?.shifts) ? normalizeShifts(schedule.shifts) : [];
+}
+
 function addDays(dateText, days) {
   return addLocalDays(dateText, days);
 }
@@ -934,15 +964,7 @@ addShiftRow();
 
 function updateTemplateTimingPreview() {
   const telegramGroupId = managedScheduleForm.elements.telegram_group_id.value;
-  const schedule = {
-    poll_release_day_of_week: Number(managedScheduleForm.elements.poll_release_day_of_week.value),
-    poll_release_time: managedScheduleForm.elements.poll_release_time.value,
-    confirmation_day_of_week: Number(managedScheduleForm.elements.confirmation_day_of_week.value),
-    confirmation_time: managedScheduleForm.elements.confirmation_time.value,
-    gap_weeks: Number(managedScheduleForm.elements.gap_weeks.value),
-    confirmation_send_type: managedScheduleForm.elements.confirmation_send_type.value,
-    confirmation_days_before_event: Number(managedScheduleForm.elements.confirmation_days_before_event.value || 1),
-  };
+  const schedule = managedTemplatePreviewSchedule(telegramGroupId);
   templateTimingPreview.innerHTML = timingSummaryHtml({ telegramGroupId, schedule });
 }
 
@@ -955,21 +977,8 @@ function updateTemplatePollPreview() {
     return;
   }
 
-  const savedSchedule = scheduleForGroup(telegramGroupId);
-  const formSchedule = {
-    poll_release_day_of_week: Number(managedScheduleForm.elements.poll_release_day_of_week.value || DEFAULT_RELEASE_DAY),
-    poll_release_time: managedScheduleForm.elements.poll_release_time.value || DEFAULT_RELEASE_TIME,
-    confirmation_day_of_week: Number(managedScheduleForm.elements.confirmation_day_of_week.value ?? 5),
-    confirmation_time: managedScheduleForm.elements.confirmation_time.value || '12:00',
-    gap_weeks: Number(managedScheduleForm.elements.gap_weeks.value || 0),
-    confirmation_send_type: managedScheduleForm.elements.confirmation_send_type.value || 'weekly_summary',
-    confirmation_days_before_event: Number(managedScheduleForm.elements.confirmation_days_before_event.value || 1),
-  };
-  const schedule = formSchedule;
-  const editorShifts = normalizeShifts(shiftRowsFromContainer(weeklyShiftEditor)
-    .filter((shift) => shift.complete && Number.isFinite(shift.capacity)));
-  const savedShifts = Array.isArray(savedSchedule?.shifts) ? normalizeShifts(savedSchedule.shifts) : [];
-  const shifts = editorShifts.length ? editorShifts : savedShifts;
+  const schedule = managedTemplatePreviewSchedule(telegramGroupId);
+  const shifts = managedTemplatePreviewShifts(schedule);
 
   if (!shifts.length) {
     weeklyTemplatePollPreview.innerHTML = 'Save template shifts to preview the Telegram poll options.';
@@ -1142,10 +1151,13 @@ managedScheduleForm.elements.gap_weeks.addEventListener('input', () => {
   updateTemplatePollPreview();
 });
 weeklyTestingMode?.addEventListener('change', () => {
-  if (!weeklyTestingStatus) return;
-  weeklyTestingStatus.textContent = weeklyTestingMode.checked
-    ? 'Testing mode will use these temporary settings for one cron-driven batch. The saved production template will remain unchanged.'
-    : 'Testing mode is off. Saving updates the production weekly default.';
+  if (weeklyTestingStatus) {
+    weeklyTestingStatus.textContent = weeklyTestingMode.checked
+      ? 'Testing mode will use these temporary settings for one cron-driven batch. The saved production template will remain unchanged.'
+      : 'Testing mode is off. Saving updates the production weekly default.';
+  }
+  updateTemplateTimingPreview();
+  updateTemplatePollPreview();
 });
 weeklyShiftEditor.addEventListener('input', updateTemplatePollPreview);
 weeklyShiftEditor.addEventListener('change', updateTemplatePollPreview);

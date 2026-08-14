@@ -172,6 +172,9 @@ test('managed workflows stay bound to the clicked group without duplicate select
   assert.match(source, /body\.testing_mode = Boolean\(weeklyTestingMode\?\.checked\)/);
   assert.match(source, /weeklyTestingMode\?\.addEventListener\('change'/);
   assert.match(source, /Testing mode will use these temporary settings for one cron-driven batch/);
+  assert.match(source, /function previewUsesTestingTemplate\(\)/);
+  assert.match(source, /if \(!savedSchedule \|\| previewUsesTestingTemplate\(\)\) return managedTemplateFormSchedule\(\)/);
+  assert.match(source, /updateTemplateTimingPreview\(\);\s*updateTemplatePollPreview\(\);/);
   assert.match(source, /The complete previous production template restores automatically/);
   assert.doesNotMatch(source, /Actual batch rehearsal sent/);
   assert.doesNotMatch(source, /release_date: releaseDate/);
