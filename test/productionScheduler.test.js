@@ -564,7 +564,7 @@ test('automatic template generation creates missing WHCL polls and skips exclude
     '2026-07-26',
   ]);
   assert.equal(created[0].resolved_release_at, '2026-07-15T09:00:00.000Z');
-  assert.equal(created[0].resolved_confirmation_at, '2026-07-16T02:30:00.000Z');
+  assert.equal(created[0].resolved_confirmation_at, '2026-07-19T02:30:00.000Z');
   const wedPoll = created.find((payload) => payload.event_date === '2026-07-22');
   assert.equal(wedPoll.resolved_release_at, '2026-07-15T09:00:00.000Z');
   assert.equal(wedPoll.close_at, '2026-07-21T00:00:00.000Z');
@@ -619,6 +619,42 @@ test('automatic PSA generation uses the group gap and creates only one event wee
   assert.equal(created[0].resolved_confirmation_at, '2026-08-14T04:00:00.000Z');
 });
 
+test('automatic generation can send confirmations one day before each event', async () => {
+  const created = [];
+  const db = {
+    async listManagedWeeklySchedules() {
+      return [{
+        id: 'schedule-day-before',
+        telegram_group_id: 'group-day-before',
+        group_name: 'Day Before group',
+        service: 'PSA',
+        enabled: true,
+        poll_release_day_of_week: 3,
+        poll_release_time: '17:00',
+        gap_weeks: 1,
+        confirmation_send_type: 'per_event_day',
+        confirmation_days_before_event: 1,
+        confirmation_time: '08:00',
+        timezone: 'Asia/Singapore',
+        shifts: [{ label: '0800-1700', start_time: '08:00', end_time: '17:00', capacity: 1 }],
+      }];
+    },
+    async getActivePollForDate() { return null; },
+    async isPollDateExcluded() { return false; },
+    async createScheduledEvent(payload) {
+      created.push(payload);
+      return `poll-${created.length}`;
+    },
+  };
+
+  await generateScheduledPollsFromTemplates(db, new Date('2026-08-05T09:01:00Z'));
+
+  assert.equal(created[0].event_date, '2026-08-17');
+  assert.equal(created[0].resolved_release_at, '2026-08-05T09:00:00.000Z');
+  assert.equal(created[0].resolved_confirmation_at, '2026-08-16T00:00:00.000Z');
+  assert.equal(created[0].confirmation_send_type, 'per_event_day');
+});
+
 test('testing mode snapshots temporary poll content and spaces daily confirmations five minutes apart', async () => {
   const created = [];
   let markedRunning = null;
@@ -643,6 +679,8 @@ test('testing mode snapshots temporary poll content and spaces daily confirmatio
         testing_override: {
           poll_release_day_of_week: 3,
           poll_release_time: '17:00',
+          confirmation_send_type: 'per_event_day',
+          confirmation_days_before_event: 1,
           confirmation_day_of_week: 5,
           confirmation_time: '08:00',
           gap_weeks: 0,
@@ -682,9 +720,9 @@ test('testing mode snapshots temporary poll content and spaces daily confirmatio
   assert.deepEqual(created[0].operational_tags, [
     'template-testing:11111111-1111-4111-8111-111111111111',
   ]);
-  assert.equal(created[0].resolved_confirmation_at, '2026-08-07T00:00:00.000Z');
-  assert.equal(created[1].resolved_confirmation_at, '2026-08-07T00:05:00.000Z');
-  assert.equal(created[6].resolved_confirmation_at, '2026-08-07T00:30:00.000Z');
+  assert.equal(created[0].resolved_confirmation_at, '2026-08-09T00:00:00.000Z');
+  assert.equal(created[1].resolved_confirmation_at, '2026-08-09T00:05:00.000Z');
+  assert.equal(created[6].resolved_confirmation_at, '2026-08-09T00:30:00.000Z');
 });
 
 test('completed Testing mode batches are automatically removed and restored', async () => {

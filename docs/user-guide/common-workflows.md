@@ -27,10 +27,19 @@ See [Getting started](getting-started.md) for detail.
 
 1. On **Home**, click the group row, then **Weekly default template**.
 2. Choose the **release day** and **release time**.
-3. Add shift rows; for each, set the start and end time with the scroll-wheel
+3. Set **Gap weeks**. This controls how many full weeks sit between the release
+   week and the event week.
+4. Choose the **Confirmation send type**:
+   - **One big confirmation on a weekday and time** sends one combined
+     confirmation for the whole event week. Choose the confirmation day and time
+     in the week before the event week.
+   - **Day-by-day confirmation, one day before each poll** sends each event date
+     separately. Choose only the confirmation time; the date is always one day
+     before each poll's event date.
+5. Add shift rows; for each, set the start and end time with the scroll-wheel
    picker. The label fills in automatically from the times.
-4. Check the **Telegram poll preview** below the shifts.
-5. Click **Save default**.
+6. Check the **Telegram poll preview** below the shifts.
+7. Click **Save default**.
 
 The button shows **Saving...** while the template is being stored. If the release,
 cutoff, or confirmation timing is not valid, the page shows an **Unable to save**
@@ -62,9 +71,10 @@ been sent to Telegram, skipping cannot recall it.
 3. Turn on **Testing mode** beside **Save default**, then click **Save default**.
 4. Cron releases one temporary Monday-Sunday batch at its configured release
    weekday and time. Telegram text and options are identical to production.
-5. Wheelchair's first confirmation follows the configured confirmation time;
-   later event confirmations send five minutes apart. PSA's weekly summary sends
-   once at its configured weekday and time.
+5. For **Day-by-day confirmation, one day before each poll**, the first
+   confirmation follows the configured day-before time; the remaining
+   confirmations send five minutes apart. A weekly summary sends once at its
+   configured weekday/time.
 6. After the final confirmation succeeds, the website automatically removes the
    testing batch and votes, switches Testing mode off, and restores the complete
    previous production template.

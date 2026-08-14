@@ -1170,11 +1170,31 @@ function createServer(db, telegram, options = {}) {
     if (!db.upsertManagedWeeklySchedule) return res.status(501).json({ error: 'Supabase production database is required' });
     const body = req.body || {};
     body.testing_mode = body.testing_mode === true;
-    for (const key of ['poll_release_day_of_week', 'confirmation_day_of_week']) {
-      if (!Number.isInteger(Number(body[key])) || Number(body[key]) < 0 || Number(body[key]) > 6) {
-        return res.status(400).json({ error: `${key} must be 0 through 6` });
+    if (!Number.isInteger(Number(body.poll_release_day_of_week)) ||
+        Number(body.poll_release_day_of_week) < 0 || Number(body.poll_release_day_of_week) > 6) {
+      return res.status(400).json({ error: 'poll_release_day_of_week must be 0 through 6' });
+    }
+    body.poll_release_day_of_week = Number(body.poll_release_day_of_week);
+    body.confirmation_send_type = body.confirmation_send_type || 'weekly_summary';
+    if (!['weekly_summary', 'per_event_day'].includes(body.confirmation_send_type)) {
+      return res.status(400).json({ error: 'confirmation_send_type is invalid' });
+    }
+    if (body.confirmation_send_type === 'weekly_summary') {
+      if (!Number.isInteger(Number(body.confirmation_day_of_week)) ||
+          Number(body.confirmation_day_of_week) < 0 || Number(body.confirmation_day_of_week) > 6) {
+        return res.status(400).json({ error: 'confirmation_day_of_week must be 0 through 6' });
       }
-      body[key] = Number(body[key]);
+      body.confirmation_day_of_week = Number(body.confirmation_day_of_week);
+      body.confirmation_days_before_event = null;
+    } else {
+      body.confirmation_days_before_event = Number(body.confirmation_days_before_event ?? 1);
+      if (!Number.isInteger(body.confirmation_days_before_event) ||
+          body.confirmation_days_before_event < 0 || body.confirmation_days_before_event > 14) {
+        return res.status(400).json({ error: 'confirmation_days_before_event must be a whole number from 0 through 14' });
+      }
+      body.confirmation_day_of_week = Number.isInteger(Number(body.confirmation_day_of_week))
+        ? Number(body.confirmation_day_of_week)
+        : 5;
     }
     body.gap_weeks = Number(body.gap_weeks ?? 0);
     if (!Number.isInteger(body.gap_weeks) || body.gap_weeks < 0 || body.gap_weeks > 12) {
@@ -1210,6 +1230,8 @@ function createServer(db, telegram, options = {}) {
         releaseDay: body.poll_release_day_of_week,
         releaseTime: body.poll_release_time,
         gapWeeks: body.gap_weeks,
+        confirmationSendType: body.confirmation_send_type,
+        confirmationDaysBeforeEvent: body.confirmation_days_before_event,
         confirmationDay: body.confirmation_day_of_week,
         confirmationTime: body.confirmation_time,
       });
@@ -1245,6 +1267,8 @@ function createServer(db, telegram, options = {}) {
         releaseDay: body.poll_release_day_of_week,
         releaseTime: body.poll_release_time,
         gapWeeks: body.gap_weeks,
+        confirmationSendType: body.confirmation_send_type,
+        confirmationDaysBeforeEvent: body.confirmation_days_before_event,
         confirmationDay: body.confirmation_day_of_week,
         confirmationTime: body.confirmation_time,
       });
@@ -1254,7 +1278,7 @@ function createServer(db, telegram, options = {}) {
         confirmationTime,
         body.timezone
       );
-      const finalConfirmation = service === 'PSA'
+      const finalConfirmation = body.confirmation_send_type === 'weekly_summary'
         ? firstConfirmation
         : new Date(firstConfirmation.getTime() + Math.max(0, eventDates.length - 1) * 5 * 60 * 1000);
       const productionRelease = nextReleaseForWeeklySchedule(currentSchedule, now).releaseAt;
@@ -1382,6 +1406,8 @@ function createServer(db, telegram, options = {}) {
         releaseDay: weekly.poll_release_day_of_week,
         releaseTime: String(weekly.poll_release_time).slice(0, 5),
         gapWeeks: weekly.gap_weeks,
+        confirmationSendType: weekly.confirmation_send_type || body.confirmation_send_type || 'weekly_summary',
+        confirmationDaysBeforeEvent: weekly.confirmation_days_before_event ?? body.confirmation_days_before_event ?? 1,
         confirmationDay: weekly.confirmation_day_of_week,
         confirmationTime: String(weekly.confirmation_time).slice(0, 5),
         validateAfterRelease: !(isTest && body.send_immediately),
@@ -1448,6 +1474,7 @@ function createServer(db, telegram, options = {}) {
     const payload = { ...body, shifts, poll_title: body.poll_title || body.poll_question,
       resolved_release_at: resolved.releaseAt.toISOString(), close_at: resolved.closeAt.toISOString(),
       resolved_confirmation_at: resolved.confirmationAt.toISOString(), timezone: resolved.timezone,
+      confirmation_send_type: weekly?.confirmation_send_type || body.confirmation_send_type || 'weekly_summary',
       is_custom: isCustom,
       operational_tags: isTest ? ['test'] : (body.operational_tags || []) };
     const id = await db.createScheduledEvent(payload, req.adminUser?.id || null);

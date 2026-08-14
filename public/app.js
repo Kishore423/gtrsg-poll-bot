@@ -41,6 +41,8 @@ const adminManagedUserFilter = document.getElementById('admin-managed-user-filte
 const adminManagedUserSearch = document.getElementById('admin-managed-user-search');
 const adminManagedUserOptions = document.getElementById('admin-managed-user-options');
 const adminManagedUserSummary = document.getElementById('admin-managed-user-summary');
+const confirmationDayField = document.getElementById('confirmation-day-field');
+const confirmationDaysBeforeField = document.getElementById('confirmation-days-before-field');
 const weeklyTestingMode = document.getElementById('weekly-testing-mode');
 const weeklyTestingStatus = document.getElementById('weekly-testing-status');
 
@@ -179,6 +181,22 @@ function eventWeekDateTime(eventDate, targetDay, targetTime) {
   return `${date}T${String(targetTime).slice(0, 5)}`;
 }
 
+function confirmationDateTimeForEvent(eventDateVal, schedule, fallback) {
+  const sendType = schedule?.confirmation_send_type || 'weekly_summary';
+  const confirmationTime = String(schedule?.confirmation_time || '').slice(0, 5);
+  if (sendType === 'per_event_day') {
+    const daysBefore = Number.isInteger(Number(schedule?.confirmation_days_before_event))
+      ? Number(schedule.confirmation_days_before_event)
+      : 1;
+    return `${addLocalDays(eventDateVal, -daysBefore)}T${confirmationTime || '08:00'}`;
+  }
+  const hasConfiguredConfirmation = schedule?.confirmation_day_of_week !== undefined &&
+    Boolean(confirmationTime);
+  return hasConfiguredConfirmation
+    ? eventWeekDateTime(eventDateVal, Number(schedule.confirmation_day_of_week), confirmationTime)
+    : fallback;
+}
+
 function serviceForGroup(telegramGroupId) {
   const group = managedGroups.find((g) => g.id === telegramGroupId);
   return group?.service || group?.bot_id || 'WHCL';
@@ -190,16 +208,6 @@ function managedTimingForEvent({ telegramGroupId, eventDateVal, schedule }) {
   const releaseTime = (schedule?.poll_release_time || DEFAULT_RELEASE_TIME).slice(0, 5);
   const releaseDate = releaseDateForEvent(eventDateVal, releaseDay, schedule?.gap_weeks);
   const releaseAt = `${releaseDate}T${releaseTime}`;
-  const hasConfiguredConfirmation = schedule?.confirmation_day_of_week !== undefined &&
-    Boolean(schedule?.confirmation_time);
-  const configuredConfirmationAt = hasConfiguredConfirmation
-    ? eventWeekDateTime(
-      eventDateVal,
-      Number(schedule.confirmation_day_of_week),
-      String(schedule.confirmation_time),
-    )
-    : null;
-
   if (service === 'PSA') {
     const cutoffAt = eventWeekDateTime(
       eventDateVal,
@@ -210,7 +218,7 @@ function managedTimingForEvent({ telegramGroupId, eventDateVal, schedule }) {
       service,
       releaseAt,
       closeAt: cutoffAt,
-      confirmationAt: configuredConfirmationAt || `${cutoffAt.slice(0, 10)}T12:00`,
+      confirmationAt: confirmationDateTimeForEvent(eventDateVal, schedule, `${cutoffAt.slice(0, 10)}T12:00`),
     };
     if (timing.closeAt <= releaseAt) {
       throw new RangeError('PSA release must be before Friday 08:00 in the week before the event week');
@@ -226,7 +234,7 @@ function managedTimingForEvent({ telegramGroupId, eventDateVal, schedule }) {
     service,
     releaseAt,
     closeAt: `${cutoffDate}T08:00`,
-    confirmationAt: configuredConfirmationAt || `${cutoffDate}T08:00`,
+    confirmationAt: confirmationDateTimeForEvent(eventDateVal, schedule, `${cutoffDate}T08:00`),
   };
   if (timing.closeAt <= releaseAt) {
     throw new RangeError('Release date and time must be before the event cutoff');
@@ -355,6 +363,8 @@ function scheduleFromSaveResult(result, body) {
     confirmation_day_of_week: body.confirmation_day_of_week,
     confirmation_time: body.confirmation_time,
     gap_weeks: body.gap_weeks,
+    confirmation_send_type: body.confirmation_send_type,
+    confirmation_days_before_event: body.confirmation_days_before_event,
     timezone: body.timezone,
     enabled: body.enabled !== false,
     shifts: body.shifts,
@@ -362,16 +372,33 @@ function scheduleFromSaveResult(result, body) {
 }
 
 function defaultScheduleForGroup(telegramGroupId) {
+  const service = serviceForGroup(telegramGroupId);
+  const confirmationSendType = service === 'PSA' ? 'weekly_summary' : 'per_event_day';
   return {
     telegram_group_id: telegramGroupId,
     poll_release_day_of_week: DEFAULT_RELEASE_DAY,
     poll_release_time: DEFAULT_RELEASE_TIME,
     confirmation_day_of_week: 5,
-    confirmation_time: '12:00',
+    confirmation_time: confirmationSendType === 'per_event_day' ? '08:00' : '12:00',
     gap_weeks: 0,
+    confirmation_send_type: confirmationSendType,
+    confirmation_days_before_event: confirmationSendType === 'per_event_day' ? 1 : null,
     timezone: 'Asia/Singapore',
     enabled: true,
   };
+}
+
+function syncConfirmationTypeFields() {
+  const sendType = managedScheduleForm.elements.confirmation_send_type?.value || 'weekly_summary';
+  if (confirmationDayField) confirmationDayField.hidden = sendType !== 'weekly_summary';
+  if (confirmationDaysBeforeField) confirmationDaysBeforeField.hidden = sendType !== 'per_event_day';
+  if (managedScheduleForm.elements.confirmation_day_of_week) {
+    managedScheduleForm.elements.confirmation_day_of_week.required = sendType === 'weekly_summary';
+  }
+  if (managedScheduleForm.elements.confirmation_days_before_event) {
+    managedScheduleForm.elements.confirmation_days_before_event.value = '1';
+    managedScheduleForm.elements.confirmation_days_before_event.required = false;
+  }
 }
 
 function addDays(dateText, days) {
@@ -502,6 +529,7 @@ function buildScheduledPollPayload({
     timezone: 'Asia/Singapore',
     confirmation_header: isTest ? 'Confirmed slots (TEST)' : 'Confirmed slots',
     confirmation_footer: isTest ? 'take note pls (TEST)' : 'take note pls',
+    confirmation_send_type: schedule.confirmation_send_type || 'weekly_summary',
     show_waiting_list: false,
     show_empty_shifts: false,
     is_custom: Boolean(isCustom),
@@ -529,7 +557,10 @@ function timingSummaryHtml({ telegramGroupId, eventDateVal, schedule, confirmati
   const gapRule = gapWeeks === 0
     ? 'next Monday-Sunday event week'
     : `${gapWeeks} full gap ${gapWeeks === 1 ? 'week' : 'weeks'} before the Monday-Sunday event week`;
-  const confirmationRule = `Confirmation ${DAY_NAMES[effectiveSchedule.confirmation_day_of_week]} ${String(effectiveSchedule.confirmation_time).slice(0, 5)} in the week before the event week.`;
+  const sendType = effectiveSchedule.confirmation_send_type || 'weekly_summary';
+  const confirmationRule = sendType === 'per_event_day'
+    ? `Confirmation ${Number(effectiveSchedule.confirmation_days_before_event ?? 1)} day${Number(effectiveSchedule.confirmation_days_before_event ?? 1) === 1 ? '' : 's'} before each event at ${String(effectiveSchedule.confirmation_time).slice(0, 5)}.`
+    : `Confirmation ${DAY_NAMES[effectiveSchedule.confirmation_day_of_week]} ${String(effectiveSchedule.confirmation_time).slice(0, 5)} in the week before the event week.`;
   const rule = service === 'PSA'
     ? `Cutoff Friday before the event week at 08:00. ${confirmationRule}`
     : `Cutoff 1 day before each event at 08:00. ${confirmationRule}`;
@@ -798,6 +829,9 @@ function syncWeeklyTemplateFormFromSavedSchedule(telegramGroupId) {
   managedScheduleForm.elements.confirmation_day_of_week.value = String(schedule.confirmation_day_of_week ?? 5);
   managedScheduleForm.elements.confirmation_time.value = String(schedule.confirmation_time || '12:00').slice(0, 5);
   managedScheduleForm.elements.gap_weeks.value = String(schedule.gap_weeks ?? 0);
+  managedScheduleForm.elements.confirmation_send_type.value = schedule.confirmation_send_type || 'weekly_summary';
+  managedScheduleForm.elements.confirmation_days_before_event.value = String(schedule.confirmation_days_before_event ?? 1);
+  syncConfirmationTypeFields();
   if (weeklyTestingMode) {
     weeklyTestingMode.checked = Boolean(storedSchedule?.testing_mode);
     weeklyTestingMode.disabled = !storedSchedule || Boolean(storedSchedule.testing_mode);
@@ -906,6 +940,8 @@ function updateTemplateTimingPreview() {
     confirmation_day_of_week: Number(managedScheduleForm.elements.confirmation_day_of_week.value),
     confirmation_time: managedScheduleForm.elements.confirmation_time.value,
     gap_weeks: Number(managedScheduleForm.elements.gap_weeks.value),
+    confirmation_send_type: managedScheduleForm.elements.confirmation_send_type.value,
+    confirmation_days_before_event: Number(managedScheduleForm.elements.confirmation_days_before_event.value || 1),
   };
   templateTimingPreview.innerHTML = timingSummaryHtml({ telegramGroupId, schedule });
 }
@@ -926,6 +962,8 @@ function updateTemplatePollPreview() {
     confirmation_day_of_week: Number(managedScheduleForm.elements.confirmation_day_of_week.value ?? 5),
     confirmation_time: managedScheduleForm.elements.confirmation_time.value || '12:00',
     gap_weeks: Number(managedScheduleForm.elements.gap_weeks.value || 0),
+    confirmation_send_type: managedScheduleForm.elements.confirmation_send_type.value || 'weekly_summary',
+    confirmation_days_before_event: Number(managedScheduleForm.elements.confirmation_days_before_event.value || 1),
   };
   const schedule = formSchedule;
   const editorShifts = normalizeShifts(shiftRowsFromContainer(weeklyShiftEditor)
@@ -1087,6 +1125,15 @@ managedScheduleForm.elements.poll_release_day_of_week.addEventListener('change',
   updateTemplatePollPreview();
 });
 managedScheduleForm.elements.confirmation_day_of_week.addEventListener('change', () => {
+  updateTemplateTimingPreview();
+  updateTemplatePollPreview();
+});
+managedScheduleForm.elements.confirmation_send_type.addEventListener('change', () => {
+  syncConfirmationTypeFields();
+  updateTemplateTimingPreview();
+  updateTemplatePollPreview();
+});
+managedScheduleForm.elements.confirmation_days_before_event.addEventListener('input', () => {
   updateTemplateTimingPreview();
   updateTemplatePollPreview();
 });
@@ -1257,7 +1304,10 @@ async function loadManagedSchedules({ syncEditor = true } = {}) {
         const group = managedGroups.find((item) => item.id === s.telegram_group_id);
         const service = group?.service || group?.bot_id || 'WHCL';
         const groupLabel = group ? managedGroupOptionLabel(group) : s.group_name;
-        const confirmationDay = DAY_NAMES[s.confirmation_day_of_week];
+        const sendType = s.confirmation_send_type || 'weekly_summary';
+        const confirmationDescription = sendType === 'per_event_day'
+          ? `Confirmation: 1 day before each event at ${String(s.confirmation_time).slice(0, 5)}.`
+          : `Confirmation: one weekly message on ${DAY_NAMES[s.confirmation_day_of_week]} at ${String(s.confirmation_time).slice(0, 5)} in the week before events.`;
         const serviceRule = service === 'PSA'
           ? 'PSA cutoff Fri before event week at 08:00'
           : 'Wheelchair cutoff day-before 08:00';
@@ -1273,7 +1323,7 @@ async function loadManagedSchedules({ syncEditor = true } = {}) {
             <span>
               ${servicePill(service)} <strong>${escapeHtml(groupLabel)}</strong>: 
               Release: ${releaseDay} at ${String(s.poll_release_time).slice(0, 5)}<br>
-            <small style="color: var(--ink-soft);">${escapeHtml(gapDescription)}. Confirmation: ${confirmationDay} at ${String(s.confirmation_time).slice(0, 5)} in the week before events. ${escapeHtml(serviceRule)}.</small><br>
+            <small style="color: var(--ink-soft);">${escapeHtml(gapDescription)}. ${escapeHtml(confirmationDescription)} ${escapeHtml(serviceRule)}.</small><br>
             <small style="color: var(--ink-soft);">${escapeHtml(shiftsDesc)}</small>
           </span>
           <button type="button" class="danger-link delete-schedule" data-id="${s.id}">Delete</button>
@@ -1319,6 +1369,10 @@ managedScheduleForm.addEventListener('submit', async (event) => {
     body.shifts = shifts;
     body.poll_release_day_of_week = Number(body.poll_release_day_of_week);
     body.confirmation_day_of_week = Number(body.confirmation_day_of_week);
+    body.confirmation_send_type = body.confirmation_send_type || 'weekly_summary';
+    body.confirmation_days_before_event = body.confirmation_send_type === 'per_event_day'
+      ? Number(body.confirmation_days_before_event || 1)
+      : null;
     body.gap_weeks = Number(body.gap_weeks);
     body.testing_mode = Boolean(weeklyTestingMode?.checked);
 

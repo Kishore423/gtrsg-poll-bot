@@ -40,11 +40,15 @@ function createPostgresDb(sql = createSql()) {
     await sql`alter table telegram_groups add column if not exists bot_ref uuid references bots(id) on delete cascade`;
     await sql`alter table weekly_poll_schedules
       add column if not exists gap_weeks smallint not null default 0,
+      add column if not exists confirmation_send_type text not null default 'weekly_summary',
+      add column if not exists confirmation_days_before_event smallint,
       add column if not exists testing_mode boolean not null default false,
       add column if not exists testing_status text not null default 'off',
       add column if not exists testing_batch_id uuid,
       add column if not exists testing_override jsonb,
       add column if not exists testing_started_at timestamptz`;
+    await sql`alter table confirmation_messages
+      add column if not exists confirmation_send_type text not null default 'weekly_summary'`;
     await sql`create index if not exists telegram_groups_bot_ref_idx on telegram_groups(bot_ref)`;
     await sql`create unique index if not exists telegram_groups_chat_bot_ref_key
       on telegram_groups(telegram_chat_id, bot_ref) where bot_ref is not null`;
@@ -773,10 +777,12 @@ function createPostgresDb(sql = createSql()) {
     async upsertManagedWeeklySchedule(value) {
       const [row] = await sql`insert into weekly_poll_schedules
         (telegram_group_id,event_category,poll_release_day_of_week,poll_release_time,
-          confirmation_day_of_week,confirmation_time,gap_weeks,timezone,enabled,shifts)
+          confirmation_day_of_week,confirmation_time,gap_weeks,confirmation_send_type,
+          confirmation_days_before_event,timezone,enabled,shifts)
         values (${value.telegram_group_id}::uuid,${value.event_category || null},
           ${value.poll_release_day_of_week},${value.poll_release_time},
           ${value.confirmation_day_of_week},${value.confirmation_time},${value.gap_weeks},
+          ${value.confirmation_send_type},${value.confirmation_days_before_event},
           ${value.timezone},${value.enabled},
           ${sql.json(value.shifts || [])})
         on conflict (telegram_group_id,event_category) do update set
@@ -784,6 +790,8 @@ function createPostgresDb(sql = createSql()) {
           poll_release_time=excluded.poll_release_time,
           confirmation_day_of_week=excluded.confirmation_day_of_week,
           confirmation_time=excluded.confirmation_time,gap_weeks=excluded.gap_weeks,
+          confirmation_send_type=excluded.confirmation_send_type,
+          confirmation_days_before_event=excluded.confirmation_days_before_event,
           timezone=excluded.timezone,
           enabled=excluded.enabled,shifts=excluded.shifts,
           testing_mode=false,testing_status='off',testing_batch_id=null,
@@ -1335,7 +1343,7 @@ function createPostgresDb(sql = createSql()) {
         )
         select c.id, c.event_id, c.scheduled_poll_id, coalesce(g.bot_ref::text, g.bot_id) as service,
           g.telegram_chat_id, c.telegram_message_id, c.header_text, c.footer_text, c.resolved_send_at,
-          c.show_waiting_list, c.show_empty_shifts, c.claim_token
+          c.show_waiting_list, c.show_empty_shifts, c.confirmation_send_type, c.claim_token
         from claimed c join telegram_groups g on g.id=c.telegram_group_id and g.enabled
       `;
       return row || null;
@@ -1349,7 +1357,7 @@ function createPostgresDb(sql = createSql()) {
           where cm.scheduled_poll_id=${pollId}::uuid
             and cm.status in ('scheduled','failed')
             and cm.resolved_send_at <= now()
-            and coalesce(g.service, g.bot_id)='PSA'
+            and cm.confirmation_send_type='weekly_summary'
           limit 1
         ), claimed as (
           update confirmation_messages cm set status='sending', claim_token=gen_random_uuid(),
@@ -1357,12 +1365,13 @@ function createPostgresDb(sql = createSql()) {
           from target t
           where cm.telegram_group_id=t.telegram_group_id
             and cm.resolved_send_at=t.resolved_send_at
+            and cm.confirmation_send_type='weekly_summary'
             and cm.status in ('scheduled','failed')
           returning cm.*
         )
         select c.id, c.event_id, c.scheduled_poll_id, coalesce(g.bot_ref::text, g.bot_id) as service,
           g.telegram_chat_id, c.telegram_message_id, c.header_text, c.footer_text, c.resolved_send_at,
-          c.show_waiting_list, c.show_empty_shifts, c.claim_token
+          c.show_waiting_list, c.show_empty_shifts, c.confirmation_send_type, c.claim_token
         from claimed c join telegram_groups g on g.id=c.telegram_group_id and g.enabled
         order by c.resolved_send_at, c.id
       `;

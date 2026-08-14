@@ -27,8 +27,13 @@ after Telegram accepts that message. Use it if you're unsure a group is wired up
 ### Weekly default template
 
 The weekly template is the recurring poll for a group. You choose the release day
-and time and the shift options (each shift has a start and end time chosen with a
-scroll-wheel time picker). A live **Telegram poll preview** shows the question and
+and time, the gap weeks before the event week, the confirmation send type, and
+the shift options (each shift has a start and end time chosen with a scroll-wheel
+time picker).
+
+Confirmation can be sent as **one big confirmation on a weekday and time** for
+the whole event week, or as **day-by-day confirmation, one day before each poll**
+at the selected time. A live **Telegram poll preview** shows the question and
 options as they will appear. Click **Save default** to store the template. While
 the save is running, the button stays unavailable so one action produces one
 completion message.
@@ -58,9 +63,9 @@ Testing mode is a one-shot check of the complete weekly template:
   overwrite the production template.
 - Cron sends the temporary Monday-Sunday batch at the configured release time;
   Telegram poll and confirmation text has no testing label.
-- Wheelchair's first confirmation follows the configured time and later event
-  confirmations send five minutes apart. PSA's weekly summary remains one
-  message at its configured weekday and time.
+- A weekly summary follows its configured confirmation time. Per-event mode
+  follows the first event's configured confirmation time, then sends the
+  remaining event confirmations five minutes apart.
 - After the final confirmation, testing records and votes are removed and the
   complete production template is restored. Telegram messages are deleted
   manually.

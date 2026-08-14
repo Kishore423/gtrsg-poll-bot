@@ -455,6 +455,10 @@
       align-items: start;
     }
 
+    .confirmation-mode-field {
+      grid-column: 1 / -1;
+    }
+
     .template-release-grid > label,
     .one-off-timing-grid > label {
       align-self: start;
@@ -1023,14 +1027,25 @@
               <input name="gap_weeks" type="number" min="0" max="12" step="1" value="0" required />
               <span class="field-help">0 = next event week; 1 = leave one full week in between.</span>
             </label>
-            <label>Confirmation day
+            <label class="confirmation-mode-field">Confirmation mode
+              <select name="confirmation_send_type" id="confirmation-send-type" required>
+                <option value="weekly_summary" selected>One big confirmation on a weekday and time</option>
+                <option value="per_event_day">Day-by-day confirmation, one day before each poll</option>
+              </select>
+              <span class="field-help">Gap weeks controls the event week for both confirmation modes.</span>
+            </label>
+            <label id="confirmation-day-field">Weekly confirmation day
               <select name="confirmation_day_of_week" required>
                 <option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option>
                 <option value="4">Thursday</option><option value="5" selected>Friday</option><option value="6">Saturday</option><option value="0">Sunday</option>
               </select>
-              <span class="field-help">Always in the week before the event week.</span>
+              <span class="field-help">Used only for one big confirmation. Always in the week before the event week.</span>
             </label>
-            <label>Confirmation time<div class="time-wheel-picker" data-name="confirmation_time"></div></label>
+            <input name="confirmation_days_before_event" type="hidden" value="1" />
+            <label>Confirmation time
+              <div class="time-wheel-picker" data-name="confirmation_time"></div>
+              <span class="field-help" id="confirmation-time-help">For weekly mode, this is the weekday time. For day-by-day mode, this is the time one day before each poll date.</span>
+            </label>
           </div>
           <div id="template-timing-preview" class="timing-preview">Select a group to preview its release rule.</div>
 

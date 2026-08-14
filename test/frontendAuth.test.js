@@ -377,11 +377,16 @@ test('weekly and one-off forms expose editable confirmation timing', () => {
   assert.equal((html.match(/<h[23][^>]*>Weekly default template<\/h[23]>/g) || []).length, 1);
   assert.match(html, /\.template-release-grid[\s\S]*?align-items: start/);
   assert.match(html, /\.one-off-timing-grid[\s\S]*?align-items: start/);
+  assert.match(html, /Confirmation mode/);
+  assert.match(html, /One big confirmation on a weekday and time/);
+  assert.match(html, /Day-by-day confirmation, one day before each poll/);
   assert.match(html, /select name="confirmation_day_of_week"/);
   assert.match(html, /data-name="confirmation_time"/);
   assert.match(html, /input name="gap_weeks" type="number" min="0" max="12"/);
-  assert.match(html, /Confirmation day/);
+  assert.match(html, /Weekly confirmation day/);
   assert.match(html, /week before the event week/);
+  assert.match(html, /input name="confirmation_days_before_event" type="hidden" value="1"/);
+  assert.match(source, /confirmation_days_before_event\.value = '1'/);
   assert.match(html, /input type="date" name="confirmation_date" required/);
   assert.match(html, /data-name="one_off_confirmation_time"/);
   assert.doesNotMatch(source, /body\.confirmation_time = '12:00'/);

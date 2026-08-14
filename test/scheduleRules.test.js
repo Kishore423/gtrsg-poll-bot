@@ -69,6 +69,24 @@ test('managed timing keeps configured confirmation in the week before events', (
   }), /Confirmation date and time must be after release date and time/);
 });
 
+test('managed timing can confirm one day before each event', () => {
+  assert.deepEqual(managedTimingForEvent({
+    service: 'PSA',
+    eventDate: '2026-08-17',
+    releaseDate: '2026-08-05',
+    releaseDay: 3,
+    releaseTime: '17:00',
+    gapWeeks: 1,
+    confirmationSendType: 'per_event_day',
+    confirmationDaysBeforeEvent: 1,
+    confirmationTime: '08:00',
+  }), {
+    releaseAt: '2026-08-05T17:00',
+    closeAt: '2026-08-14T08:00',
+    confirmationAt: '2026-08-16T08:00',
+  });
+});
+
 test('legacy release ranges are limited to one event week', () => {
   assert.deepEqual(releaseRangeForService('PSA', new Date('2026-07-15T17:00:00+08:00')), {
     start: '2026-07-20',
