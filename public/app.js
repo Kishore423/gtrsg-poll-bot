@@ -45,6 +45,7 @@ const confirmationDayField = document.getElementById('confirmation-day-field');
 const confirmationDaysBeforeField = document.getElementById('confirmation-days-before-field');
 const weeklyTestingMode = document.getElementById('weekly-testing-mode');
 const weeklyTestingStatus = document.getElementById('weekly-testing-status');
+const weeklyDisarmTesting = document.getElementById('weekly-disarm-testing');
 
 const SERVICE_ORDER = ['WHCL', 'PSA'];
 const SERVICE_NAMES = { WHCL: 'Wheelchair', PSA: 'Passenger Service Associate' };
@@ -889,6 +890,10 @@ function syncWeeklyTemplateFormFromSavedSchedule(telegramGroupId) {
     weeklyTestingMode.checked = Boolean(storedSchedule?.testing_mode);
     weeklyTestingMode.disabled = !storedSchedule || Boolean(storedSchedule.testing_mode);
   }
+  if (weeklyDisarmTesting) {
+    weeklyDisarmTesting.hidden = storedSchedule?.testing_status !== 'armed';
+    weeklyDisarmTesting.disabled = false;
+  }
   const saveButton = managedScheduleForm.querySelector('[type="submit"]');
   if (saveButton && !managedScheduleSavePending) {
     saveButton.disabled = Boolean(storedSchedule?.testing_mode);
@@ -1477,6 +1482,43 @@ managedScheduleForm.addEventListener('submit', async (event) => {
       submitButton.disabled = Boolean(scheduleForGroup(selectedManagedGroupId)?.testing_mode);
       submitButton.textContent = submitButtonLabel || 'Save default';
     }
+  }
+});
+
+weeklyDisarmTesting?.addEventListener('click', async () => {
+  const schedule = scheduleForGroup(selectedManagedGroupId);
+  if (!schedule || schedule.testing_status !== 'armed') return;
+  if (!window.confirm(
+    'Disarm this Testing batch?\n\nThe temporary testing fields will be discarded. The saved production weekly template will remain unchanged.'
+  )) return;
+
+  weeklyDisarmTesting.disabled = true;
+  setStatus('Disarming Testing mode...', 'pending');
+  try {
+    const response = await fetch(`/api/weekly-schedules/${schedule.id}/disarm-testing`, {
+      method: 'POST',
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      const message = result.error || 'Testing mode could not be disarmed.';
+      setStatus(`Error: ${message}`, 'error');
+      showActionFeedback(message, { title: 'Unable to disarm', tone: 'error' });
+      return;
+    }
+    await loadManagedSchedules();
+    setStatus('Testing mode disarmed.', 'success');
+    showActionFeedback(
+      'The temporary Testing batch was cancelled. The saved production weekly template is active and unchanged.',
+      { title: 'Testing mode disarmed' }
+    );
+  } catch (error) {
+    const message = error?.message || 'Testing mode could not be disarmed.';
+    setStatus(`Error: ${message}`, 'error');
+    showActionFeedback(message, { title: 'Unable to disarm', tone: 'error' });
+  } finally {
+    const current = scheduleForGroup(selectedManagedGroupId);
+    weeklyDisarmTesting.disabled = false;
+    weeklyDisarmTesting.hidden = current?.testing_status !== 'armed';
   }
 });
 

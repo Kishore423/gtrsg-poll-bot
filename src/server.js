@@ -1335,6 +1335,29 @@ function createServer(db, telegram, options = {}) {
     res.status(204).end();
   }));
 
+  app.post('/api/weekly-schedules/:id/disarm-testing', wrap(async (req, res) => {
+    if (!db.getWeeklySchedule || !db.clearManagedWeeklyScheduleTest) {
+      return res.status(501).json({ error: 'Testing mode requires the Supabase production database' });
+    }
+    const schedule = await db.getWeeklySchedule(req.params.id);
+    if (!schedule) return res.status(404).json({ error: 'Weekly schedule not found' });
+    await assertGroupAccess(db, req.appUser, schedule.telegram_group_id);
+    if (!schedule.testing_mode || schedule.testing_status !== 'armed' || !schedule.testing_batch_id) {
+      return res.status(409).json({
+        error: schedule.testing_status === 'running'
+          ? 'Testing has already started and cannot be disarmed. It will restore automatically after the final confirmation.'
+          : 'Testing mode is not armed for this weekly template.',
+      });
+    }
+    const cleared = await db.clearManagedWeeklyScheduleTest(schedule.id, schedule.testing_batch_id);
+    if (!cleared) {
+      return res.status(409).json({
+        error: 'Testing has already started or changed. Refresh the weekly template to see its current status.',
+      });
+    }
+    res.json(cleared);
+  }));
+
   app.get('/api/poll-exclusions', wrap(async (req, res) => {
     if (!db.listPollExclusions) return res.status(501).json({ error: 'Supabase production database is required' });
     const groupId = req.query.telegram_group_id || null;

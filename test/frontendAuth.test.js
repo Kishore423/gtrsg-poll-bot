@@ -163,6 +163,7 @@ test('managed workflows stay bound to the clicked group without duplicate select
   assert.match(html, /id="weekly-testing-mode"/);
   assert.match(html, /Testing mode/);
   assert.match(html, /id="weekly-testing-status"/);
+  assert.match(html, /id="weekly-disarm-testing"[^>]*hidden>Disarm Testing/);
   assert.doesNotMatch(html, /id="weekly-start-rehearsal"/);
   assert.doesNotMatch(html, /Start batch rehearsal/);
   assert.doesNotMatch(html, /id="weekly-rehearsal-start-at"/);
@@ -176,6 +177,9 @@ test('managed workflows stay bound to the clicked group without duplicate select
   assert.match(source, /if \(!savedSchedule \|\| previewUsesTestingTemplate\(\)\) return managedTemplateFormSchedule\(\)/);
   assert.match(source, /updateTemplateTimingPreview\(\);\s*updateTemplatePollPreview\(\);/);
   assert.match(source, /The complete previous production template restores automatically/);
+  assert.match(source, /storedSchedule\?\.testing_status !== 'armed'/);
+  assert.match(source, /\/api\/weekly-schedules\/\$\{schedule\.id\}\/disarm-testing/);
+  assert.match(source, /The saved production weekly template will remain unchanged/);
   assert.doesNotMatch(source, /Actual batch rehearsal sent/);
   assert.doesNotMatch(source, /release_date: releaseDate/);
   assert.match(html, /id="send-test-poll"/);

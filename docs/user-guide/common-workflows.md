@@ -72,6 +72,9 @@ been sent to Telegram, skipping cannot recall it.
 4. Review the confirmation message before arming the test. It lists the release
    date/time and every non-skipped poll date. Weekly-summary mode also shows its
    confirmation date/time; day-by-day mode shows only its confirmation time.
+   If the temporary fields are wrong, select **Disarm Testing** before cron
+   starts the batch. This discards only the temporary testing fields and leaves
+   the saved production weekly template unchanged.
 5. Cron releases one temporary Monday-Sunday batch at its configured release
    weekday and time. Telegram text and options are identical to production.
 6. For **Day-by-day confirmation, one day before each poll**, the first testing

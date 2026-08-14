@@ -1477,6 +1477,60 @@ test('weekly Testing mode arms a temporary override without replacing production
   }
 });
 
+test('weekly Testing mode can be disarmed only before the batch starts', async () => {
+  const groupId = '11111111-1111-4111-8111-111111111111';
+  const scheduleId = '22222222-2222-4222-8222-222222222222';
+  const batchId = '33333333-3333-4333-8333-333333333333';
+  let testingStatus = 'running';
+  let cleared = 0;
+  const db = {
+    async getTelegramGroup(id) {
+      return id === groupId ? {
+        id: groupId, telegram_chat_id: '-1001', group_name: 'Wheelchair group',
+        service: 'WHCL', bot_id: 'WHCL', enabled: true,
+      } : null;
+    },
+    async getWeeklySchedule(id) {
+      return id === scheduleId ? {
+        id: scheduleId,
+        telegram_group_id: groupId,
+        testing_mode: true,
+        testing_status: testingStatus,
+        testing_batch_id: batchId,
+      } : null;
+    },
+    async clearManagedWeeklyScheduleTest(id, batch) {
+      cleared += 1;
+      assert.equal(id, scheduleId);
+      assert.equal(batch, batchId);
+      return { id, telegram_group_id: groupId, testing_mode: false, testing_status: 'off' };
+    },
+  };
+  const server = createServer(db, makeTelegram(), { enableLegacyWorkflow: false }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const running = await fetch(
+      `${baseUrl}/api/weekly-schedules/${scheduleId}/disarm-testing`,
+      { method: 'POST' }
+    );
+    assert.equal(running.status, 409);
+    assert.match((await running.json()).error, /already started/);
+    assert.equal(cleared, 0);
+
+    testingStatus = 'armed';
+    const armed = await fetch(
+      `${baseUrl}/api/weekly-schedules/${scheduleId}/disarm-testing`,
+      { method: 'POST' }
+    );
+    assert.equal(armed.status, 200);
+    assert.equal((await armed.json()).testing_mode, false);
+    assert.equal(cleared, 1);
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
+});
+
 test('weekly Testing mode overlap guard allows using the saved production release slot', () => {
   const production = {
     poll_release_day_of_week: 5,
