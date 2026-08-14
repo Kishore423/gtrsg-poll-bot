@@ -3,7 +3,11 @@ const {
   managedMention,
   CONFIRMATION_NOTIFY_HANDLES,
 } = require('./pollBuilder');
-const { eventDatesForReleaseDate, managedTimingForEvent } = require('./scheduleRules');
+const {
+  eventDatesForReleaseDate,
+  managedTimingForEvent,
+  testingConfirmationDateTime,
+} = require('./scheduleRules');
 const { zonedDateTimeToUtc } = require('./scheduleResolver');
 
 const SERVICE_LABELS = { WHCL: 'Wheelchair', PSA: 'PSA', PRIMARY: 'General' };
@@ -303,11 +307,21 @@ async function generateScheduledPollsFromTemplates(db, now = new Date()) {
     const confirmationSendType = effectiveSchedule.confirmation_send_type ||
       (service === 'PSA' ? 'weekly_summary' : 'per_event_day');
     if (testingBatchId && confirmationSendType === 'per_event_day' && payloads.length) {
-      const firstConfirmationAt = new Date(payloads[0].resolved_confirmation_at);
+      const [confirmationDate, confirmationTime] = testingConfirmationDateTime(
+        releaseDate,
+        releaseTime,
+        effectiveSchedule.confirmation_time
+      ).split('T');
+      const firstConfirmationAt = zonedDateTimeToUtc(
+        confirmationDate,
+        confirmationTime,
+        timezone
+      );
       payloads.forEach((payload, index) => {
         payload.resolved_confirmation_at = new Date(
           firstConfirmationAt.getTime() + index * 5 * 60 * 1000
         ).toISOString();
+        payload.close_at = payload.resolved_confirmation_at;
       });
     }
 

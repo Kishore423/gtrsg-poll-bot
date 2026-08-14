@@ -47,6 +47,13 @@ function confirmationDateTimeForEvent(eventDate, {
     : fallback;
 }
 
+function testingConfirmationDateTime(releaseDate, releaseTime, confirmationTime) {
+  const time = String(confirmationTime || '').slice(0, 5) || '08:00';
+  const release = String(releaseTime || '').slice(0, 5);
+  const confirmationDate = time > release ? releaseDate : addLocalDays(releaseDate, 1);
+  return `${confirmationDate}T${time}`;
+}
+
 function managedTimingForEvent({
   service,
   eventDate,
@@ -140,4 +147,5 @@ module.exports = {
   managedTimingForEvent,
   nextWeekRange,
   releaseRangeForService,
+  testingConfirmationDateTime,
 };

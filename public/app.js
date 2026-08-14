@@ -1396,11 +1396,13 @@ managedScheduleForm.addEventListener('submit', async (event) => {
 
     const releaseDate = nextReleaseDateForSchedule(body);
     const eventDate = batchRangeForReleaseDate(releaseDate, body.gap_weeks)[0];
-    managedTimingForEvent({
-      telegramGroupId: body.telegram_group_id,
-      eventDateVal: eventDate,
-      schedule: body,
-    });
+    if (!body.testing_mode || body.confirmation_send_type !== 'per_event_day') {
+      managedTimingForEvent({
+        telegramGroupId: body.telegram_group_id,
+        eventDateVal: eventDate,
+        schedule: body,
+      });
+    }
 
     if (body.testing_mode && !window.confirm(
       'Arm one Testing mode batch with these temporary settings?\n\n' +

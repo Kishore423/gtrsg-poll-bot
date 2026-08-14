@@ -501,8 +501,9 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   `template-testing:<uuid>` at the temporary release day/time and suppresses the
   production rows for that schedule while the test is armed or running. Telegram
   text is production-identical. PSA keeps its configured weekly confirmation;
-  Wheelchair sends its first configured confirmation normally and later event
-  confirmations five minutes apart. A test is rejected if confirmations would
+  Wheelchair anchors its first confirmation to the configured time immediately
+  after the test release (or the following day if that time has passed), then
+  sends later event confirmations five minutes apart. A test is rejected if confirmations would
   overlap the next production release. After every confirmation is sent, cleanup
   deletes the internal test events and their dependent website data, clears
   Testing mode, and exposes the untouched production template again. Telegram

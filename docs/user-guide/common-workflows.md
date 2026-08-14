@@ -71,8 +71,9 @@ been sent to Telegram, skipping cannot recall it.
 3. Turn on **Testing mode** beside **Save default**, then click **Save default**.
 4. Cron releases one temporary Monday-Sunday batch at its configured release
    weekday and time. Telegram text and options are identical to production.
-5. For **Day-by-day confirmation, one day before each poll**, the first
-   confirmation follows the configured day-before time; the remaining
+5. For **Day-by-day confirmation, one day before each poll**, the first testing
+   confirmation uses the configured time immediately after the testing release.
+   If that time has already passed, it uses the following day. The remaining
    confirmations send five minutes apart. A weekly summary sends once at its
    configured weekday/time.
 6. After the final confirmation succeeds, the website automatically removes the

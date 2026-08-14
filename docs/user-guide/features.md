@@ -67,9 +67,10 @@ Testing mode is a one-shot check of the complete weekly template:
   overwrite the production template.
 - Cron sends the temporary Monday-Sunday batch at the configured release time;
   Telegram poll and confirmation text has no testing label.
-- A weekly summary follows its configured confirmation time. Per-event mode
-  follows the first event's configured confirmation time, then sends the
-  remaining event confirmations five minutes apart.
+- A weekly summary follows its configured confirmation time. In per-event mode,
+  the first confirmation uses the configured time immediately after the test
+  release (or that time on the following day when it has already passed), then
+  the remaining event confirmations follow five minutes apart.
 - After the final confirmation, testing records and votes are removed and the
   complete production template is restored. Telegram messages are deleted
   manually.

@@ -18,6 +18,7 @@ const {
   addLocalDays,
   eventDatesForReleaseDate,
   managedTimingForEvent,
+  testingConfirmationDateTime,
 } = require('./scheduleRules');
 const {
   runScheduledPolls,
@@ -1269,19 +1270,25 @@ function createServer(db, telegram, options = {}) {
       const now = new Date();
       const testRelease = nextReleaseForWeeklySchedule(body, now);
       const eventDates = eventDatesForReleaseDate(service, testRelease.releaseDate, body.gap_weeks);
-      const firstTiming = managedTimingForEvent({
-        service,
-        eventDate: eventDates[0],
-        releaseDate: testRelease.releaseDate,
-        releaseDay: body.poll_release_day_of_week,
-        releaseTime: body.poll_release_time,
-        gapWeeks: body.gap_weeks,
-        confirmationSendType: body.confirmation_send_type,
-        confirmationDaysBeforeEvent: body.confirmation_days_before_event,
-        confirmationDay: body.confirmation_day_of_week,
-        confirmationTime: body.confirmation_time,
-      });
-      const [confirmationDate, confirmationTime] = firstTiming.confirmationAt.split('T');
+      const firstConfirmationLocal = body.confirmation_send_type === 'per_event_day'
+        ? testingConfirmationDateTime(
+          testRelease.releaseDate,
+          body.poll_release_time,
+          body.confirmation_time
+        )
+        : managedTimingForEvent({
+          service,
+          eventDate: eventDates[0],
+          releaseDate: testRelease.releaseDate,
+          releaseDay: body.poll_release_day_of_week,
+          releaseTime: body.poll_release_time,
+          gapWeeks: body.gap_weeks,
+          confirmationSendType: body.confirmation_send_type,
+          confirmationDaysBeforeEvent: body.confirmation_days_before_event,
+          confirmationDay: body.confirmation_day_of_week,
+          confirmationTime: body.confirmation_time,
+        }).confirmationAt;
+      const [confirmationDate, confirmationTime] = firstConfirmationLocal.split('T');
       const firstConfirmation = zonedDateTimeToUtc(
         confirmationDate,
         confirmationTime,

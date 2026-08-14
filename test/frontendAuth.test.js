@@ -424,6 +424,12 @@ test('weekly default save allows only one in-flight submission and completion po
   assert.equal((source.match(/showActionFeedback\(`Default template saved for/g) || []).length, 1);
 });
 
+test('per-event Testing mode bypasses production chronology validation', () => {
+  const source = readFileSync(join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(source,
+    /if \(!body\.testing_mode \|\| body\.confirmation_send_type !== 'per_event_day'\)/);
+});
+
 test('deployment sheets are downloaded only from the dedicated navbar page', () => {
   const home = readFileSync(join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const polls = readFileSync(join(__dirname, '..', 'public', 'polls.html'), 'utf8');

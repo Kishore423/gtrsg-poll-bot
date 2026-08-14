@@ -720,9 +720,11 @@ test('testing mode snapshots temporary poll content and spaces daily confirmatio
   assert.deepEqual(created[0].operational_tags, [
     'template-testing:11111111-1111-4111-8111-111111111111',
   ]);
-  assert.equal(created[0].resolved_confirmation_at, '2026-08-09T00:00:00.000Z');
-  assert.equal(created[1].resolved_confirmation_at, '2026-08-09T00:05:00.000Z');
-  assert.equal(created[6].resolved_confirmation_at, '2026-08-09T00:30:00.000Z');
+  assert.equal(created[0].resolved_confirmation_at, '2026-08-06T00:00:00.000Z');
+  assert.equal(created[1].resolved_confirmation_at, '2026-08-06T00:05:00.000Z');
+  assert.equal(created[6].resolved_confirmation_at, '2026-08-06T00:30:00.000Z');
+  assert.equal(created[0].close_at, created[0].resolved_confirmation_at);
+  assert.equal(created[6].close_at, created[6].resolved_confirmation_at);
 });
 
 test('completed Testing mode batches are automatically removed and restored', async () => {
