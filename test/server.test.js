@@ -1621,6 +1621,69 @@ test('weekly Testing mode can be disarmed only before the batch starts', async (
   }
 });
 
+test('each user can disarm armed Testing for every group owned by their bot', async () => {
+  const groupA = '11111111-1111-4111-8111-111111111111';
+  const groupB = '22222222-2222-4222-8222-222222222222';
+  const scheduleA = '33333333-3333-4333-8333-333333333333';
+  const scheduleB = '44444444-4444-4444-8444-444444444444';
+  const batchA = '55555555-5555-4555-8555-555555555555';
+  const batchB = '66666666-6666-4666-8666-666666666666';
+  const groups = new Map([
+    [groupA, { id: groupA, bot_id: 'bot-a', enabled: true }],
+    [groupB, { id: groupB, bot_id: 'bot-b', enabled: true }],
+  ]);
+  const schedules = new Map([
+    [scheduleA, { id: scheduleA, telegram_group_id: groupA, testing_mode: true, testing_status: 'armed', testing_batch_id: batchA }],
+    [scheduleB, { id: scheduleB, telegram_group_id: groupB, testing_mode: true, testing_status: 'armed', testing_batch_id: batchB }],
+  ]);
+  const cleared = [];
+  const db = {
+    async getTelegramGroup(id) { return groups.get(id) || null; },
+    async getWeeklySchedule(id) { return schedules.get(id) || null; },
+    async clearManagedWeeklyScheduleTest(id, batchId) {
+      const schedule = schedules.get(id);
+      if (!schedule || schedule.testing_batch_id !== batchId || schedule.testing_status !== 'armed') return null;
+      const result = { ...schedule, testing_mode: false, testing_status: 'off', testing_batch_id: null };
+      schedules.set(id, result);
+      cleared.push(id);
+      return result;
+    },
+  };
+  const server = createServer(db, makeTelegram(), {
+    enableLegacyWorkflow: false,
+    requireAdminAuth: true,
+    verifyUser: async (req) => {
+      if (req.headers.authorization === 'Bearer user-a') {
+        return { id: 'user-a', telegram_user_id: '1001', role: 'user', bot_id: 'bot-a' };
+      }
+      if (req.headers.authorization === 'Bearer user-b') {
+        return { id: 'user-b', telegram_user_id: '1002', role: 'user', bot_id: 'bot-b' };
+      }
+      return null;
+    },
+  }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const crossTenant = await fetch(`${baseUrl}/api/weekly-schedules/${scheduleB}/disarm-testing`, {
+      method: 'POST', headers: { Authorization: 'Bearer user-a' },
+    });
+    assert.equal(crossTenant.status, 404);
+
+    const ownA = await fetch(`${baseUrl}/api/weekly-schedules/${scheduleA}/disarm-testing`, {
+      method: 'POST', headers: { Authorization: 'Bearer user-a' },
+    });
+    const ownB = await fetch(`${baseUrl}/api/weekly-schedules/${scheduleB}/disarm-testing`, {
+      method: 'POST', headers: { Authorization: 'Bearer user-b' },
+    });
+    assert.equal(ownA.status, 200);
+    assert.equal(ownB.status, 200);
+    assert.deepEqual(cleared, [scheduleA, scheduleB]);
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
+});
+
 test('weekly Testing mode overlap guard allows using the saved production release slot', () => {
   const production = {
     poll_release_day_of_week: 5,

@@ -178,6 +178,10 @@ test('managed workflows stay bound to the clicked group without duplicate select
   assert.match(source, /updateTemplateTimingPreview\(\);\s*updateTemplatePollPreview\(\);/);
   assert.match(source, /The complete previous production template restores automatically/);
   assert.match(source, /storedSchedule\?\.testing_status !== 'armed'/);
+  assert.match(source, /function syncManagedGroupTestingActions\(\)/);
+  assert.match(source, /button\.className = 'danger-link disarm-group-testing'/);
+  assert.match(source, /function disarmTestingSchedule\(schedule\)/);
+  assert.match(source, /await disarmTestingSchedule\(schedule\)/);
   assert.match(source, /\/api\/weekly-schedules\/\$\{schedule\.id\}\/disarm-testing/);
   assert.match(source, /The saved production weekly template will remain unchanged/);
   assert.doesNotMatch(source, /Actual batch rehearsal sent/);

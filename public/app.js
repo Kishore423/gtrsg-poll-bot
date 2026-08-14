@@ -338,6 +338,32 @@ function scheduleForGroup(telegramGroupId) {
   return managedSchedules.find((s) => s.telegram_group_id === telegramGroupId && s.enabled);
 }
 
+function syncManagedGroupTestingActions() {
+  managedGroupList.querySelectorAll('.managed-group-row').forEach((row) => {
+    const actions = row.querySelector(':scope > span:last-child');
+    if (!actions) return;
+    actions.querySelectorAll('.disarm-group-testing, .testing-running-status').forEach((item) => item.remove());
+    const schedule = scheduleForGroup(row.dataset.id);
+    if (schedule?.testing_status === 'armed') {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'danger-link disarm-group-testing';
+      button.dataset.scheduleId = schedule.id;
+      button.textContent = 'Disarm Testing';
+      button.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        await disarmTestingSchedule(schedule);
+      });
+      actions.prepend(button);
+    } else if (schedule?.testing_status === 'running') {
+      const status = document.createElement('span');
+      status.className = 'status-pill testing-running-status';
+      status.textContent = 'Testing running';
+      actions.prepend(status);
+    }
+  });
+}
+
 function replaceManagedSchedule(schedule) {
   const index = managedSchedules.findIndex((item) =>
     item.id === schedule.id ||
@@ -1322,6 +1348,7 @@ async function loadManagedGroups() {
       ? `Verification message sent to ${result.group_name}.`
       : `Error: ${result.error}`, response.ok && result.message_sent ? 'success' : 'error');
   }));
+  syncManagedGroupTestingActions();
 }
 
 managedGroupForm.addEventListener('submit', async (event) => {
@@ -1379,6 +1406,7 @@ async function loadManagedSchedules({ syncEditor = true } = {}) {
   if (syncEditor) syncWeeklyTemplateFormFromSavedSchedule(managedScheduleForm.elements.telegram_group_id.value);
   syncOneOffPollFormFromSavedSchedule(advancePollForm.elements.telegram_group_id.value);
   refreshManagedPreviews();
+  syncManagedGroupTestingActions();
   if (managedScheduleList) {
     managedScheduleList.querySelectorAll('.delete-schedule').forEach((button) => button.addEventListener('click', async () => {
       if (!window.confirm('Delete this weekly default schedule?')) return;
@@ -1485,14 +1513,17 @@ managedScheduleForm.addEventListener('submit', async (event) => {
   }
 });
 
-weeklyDisarmTesting?.addEventListener('click', async () => {
-  const schedule = scheduleForGroup(selectedManagedGroupId);
+async function disarmTestingSchedule(schedule) {
   if (!schedule || schedule.testing_status !== 'armed') return;
+  const group = groupById(schedule.telegram_group_id);
+  const groupName = group?.group_name || schedule.group_name || 'this Telegram group';
   if (!window.confirm(
-    'Disarm this Testing batch?\n\nThe temporary testing fields will be discarded. The saved production weekly template will remain unchanged.'
+    `Disarm the Testing batch for ${groupName}?\n\nThe temporary testing fields will be discarded. The saved production weekly template will remain unchanged.`
   )) return;
 
-  weeklyDisarmTesting.disabled = true;
+  if (weeklyDisarmTesting && schedule.telegram_group_id === selectedManagedGroupId) {
+    weeklyDisarmTesting.disabled = true;
+  }
   setStatus('Disarming Testing mode...', 'pending');
   try {
     const response = await fetch(`/api/weekly-schedules/${schedule.id}/disarm-testing`, {
@@ -1517,9 +1548,15 @@ weeklyDisarmTesting?.addEventListener('click', async () => {
     showActionFeedback(message, { title: 'Unable to disarm', tone: 'error' });
   } finally {
     const current = scheduleForGroup(selectedManagedGroupId);
-    weeklyDisarmTesting.disabled = false;
-    weeklyDisarmTesting.hidden = current?.testing_status !== 'armed';
+    if (weeklyDisarmTesting) {
+      weeklyDisarmTesting.disabled = false;
+      weeklyDisarmTesting.hidden = current?.testing_status !== 'armed';
+    }
   }
+}
+
+weeklyDisarmTesting?.addEventListener('click', async () => {
+  await disarmTestingSchedule(scheduleForGroup(selectedManagedGroupId));
 });
 
 // renderScheduledPolls and loadScheduledPolls moved to polls.js
