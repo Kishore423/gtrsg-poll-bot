@@ -170,6 +170,8 @@ test('managed workflows stay bound to the clicked group without duplicate select
   assert.doesNotMatch(html, /id="weekly-send-event-date"/);
   assert.doesNotMatch(html, /id="weekly-send-confirmation-delay"/);
   assert.match(source, /body\.testing_mode = Boolean\(weeklyTestingMode\?\.checked\)/);
+  assert.match(source, /weeklyTestingMode\?\.addEventListener\('change'/);
+  assert.match(source, /Testing mode will use these temporary settings for one cron-driven batch/);
   assert.match(source, /The complete previous production template restores automatically/);
   assert.doesNotMatch(source, /Actual batch rehearsal sent/);
   assert.doesNotMatch(source, /release_date: releaseDate/);

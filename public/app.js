@@ -1141,6 +1141,12 @@ managedScheduleForm.elements.gap_weeks.addEventListener('input', () => {
   updateTemplateTimingPreview();
   updateTemplatePollPreview();
 });
+weeklyTestingMode?.addEventListener('change', () => {
+  if (!weeklyTestingStatus) return;
+  weeklyTestingStatus.textContent = weeklyTestingMode.checked
+    ? 'Testing mode will use these temporary settings for one cron-driven batch. The saved production template will remain unchanged.'
+    : 'Testing mode is off. Saving updates the production weekly default.';
+});
 weeklyShiftEditor.addEventListener('input', updateTemplatePollPreview);
 weeklyShiftEditor.addEventListener('change', updateTemplatePollPreview);
 
