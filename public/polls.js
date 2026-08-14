@@ -104,6 +104,24 @@ const filterGroupInput   = document.getElementById('filter-group');
 const filterTypeInput    = document.getElementById('filter-type');
 const filterDateOrderInput = document.getElementById('filter-date-order');
 const clearFiltersBtn    = document.getElementById('clear-filters-btn');
+const clearFilteredPollsBtn = document.getElementById('clear-filtered-polls-btn');
+const clearFilteredModal = document.getElementById('clear-filtered-modal');
+const clearFilteredCloseBtn = document.getElementById('clear-filtered-close-btn');
+const clearFilteredSummary = document.getElementById('clear-filtered-summary');
+const clearFilteredRequestStep = document.getElementById('clear-filtered-request-step');
+const clearFilteredCodeStep = document.getElementById('clear-filtered-code-step');
+const clearFilteredAuthBtn = document.getElementById('clear-filtered-auth-btn');
+const clearFilteredVerifyBtn = document.getElementById('clear-filtered-verify-btn');
+const clearFilteredOtp = document.getElementById('clear-filtered-otp');
+const clearFilteredStatus = document.getElementById('clear-filtered-status');
+let clearFilteredPollIds = [];
+let clearFilteredChallenge = null;
+
+function syncClearFilteredButton() {
+  if (!clearFilteredPollsBtn) return;
+  clearFilteredPollsBtn.hidden = currentUser?.role !== 'admin';
+  clearFilteredPollsBtn.disabled = visiblePolls.length === 0;
+}
 
 function botFilterLabel(user) {
   const bot = user.bot || {};
@@ -186,6 +204,7 @@ function applyFilters() {
   });
   visiblePolls = sortPollsByDate(filtered, dateOrder);
   renderPollsTable(visiblePolls);
+  syncClearFilteredButton();
 }
 
 filterDateInput.addEventListener('change', applyFilters);
@@ -207,6 +226,98 @@ clearFiltersBtn.addEventListener('click', () => {
   populateGroupFilter();
   visiblePolls = sortPollsByDate(scheduledPolls, 'asc');
   renderPollsTable(visiblePolls);
+  syncClearFilteredButton();
+});
+
+function closeClearFilteredModal() {
+  clearFilteredModal.hidden = true;
+  clearFilteredPollIds = [];
+  clearFilteredChallenge = null;
+  clearFilteredOtp.value = '';
+  clearFilteredStatus.textContent = '';
+}
+
+clearFilteredPollsBtn?.addEventListener('click', () => {
+  if (currentUser?.role !== 'admin' || !visiblePolls.length) return;
+  clearFilteredPollIds = visiblePolls.map((poll) => String(poll.id));
+  clearFilteredChallenge = null;
+  clearFilteredSummary.textContent = `Clear ${clearFilteredPollIds.length} poll${clearFilteredPollIds.length === 1 ? '' : 's'} matching the current filters?`;
+  clearFilteredRequestStep.hidden = false;
+  clearFilteredCodeStep.hidden = true;
+  clearFilteredOtp.value = '';
+  clearFilteredStatus.textContent = '';
+  clearFilteredModal.hidden = false;
+  clearFilteredAuthBtn.focus();
+});
+
+clearFilteredCloseBtn?.addEventListener('click', closeClearFilteredModal);
+clearFilteredModal?.addEventListener('click', (event) => {
+  if (event.target === clearFilteredModal) closeClearFilteredModal();
+});
+
+clearFilteredAuthBtn?.addEventListener('click', async () => {
+  clearFilteredAuthBtn.disabled = true;
+  clearFilteredStatus.textContent = 'Sending a code to the signed-in admin through Login bot...';
+  try {
+    const response = await fetch('/api/admin/scheduled-polls/clear-otp/request', {
+      method: 'POST',
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Unable to send the OTP');
+    clearFilteredChallenge = result;
+    clearFilteredRequestStep.hidden = true;
+    clearFilteredCodeStep.hidden = false;
+    clearFilteredStatus.textContent = result.bot_username
+      ? `Enter the six-digit code sent by @${result.bot_username}.`
+      : 'Enter the six-digit code sent by the Login bot.';
+    clearFilteredOtp.focus();
+  } catch (error) {
+    clearFilteredStatus.textContent = error.message;
+  } finally {
+    clearFilteredAuthBtn.disabled = false;
+  }
+});
+
+clearFilteredVerifyBtn?.addEventListener('click', async () => {
+  const code = clearFilteredOtp.value.trim();
+  if (!clearFilteredChallenge || !/^\d{6}$/.test(code)) {
+    clearFilteredStatus.textContent = 'Enter the six-digit code sent by the Login bot.';
+    return;
+  }
+  clearFilteredVerifyBtn.disabled = true;
+  clearFilteredStatus.textContent = 'Authenticating and clearing filtered polls...';
+  try {
+    const verifyResponse = await fetch('/api/admin/scheduled-polls/clear-otp/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        challenge_id: clearFilteredChallenge.challenge_id,
+        verifier: clearFilteredChallenge.verifier,
+        code,
+        poll_ids: clearFilteredPollIds,
+      }),
+    });
+    const authorization = await verifyResponse.json();
+    if (!verifyResponse.ok) throw new Error(authorization.error || 'OTP authentication failed');
+
+    const clearResponse = await fetch('/api/admin/scheduled-polls/clear-filtered', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        poll_ids: clearFilteredPollIds,
+        authorization_token: authorization.access_token,
+      }),
+    });
+    const result = await clearResponse.json();
+    if (!clearResponse.ok) throw new Error(result.error || 'Unable to clear filtered polls');
+    closeClearFilteredModal();
+    setStatus(`Cleared ${result.deleted} filtered poll${result.deleted === 1 ? '' : 's'}.`, 'success');
+    await loadScheduledPolls();
+  } catch (error) {
+    clearFilteredStatus.textContent = error.message;
+  } finally {
+    clearFilteredVerifyBtn.disabled = false;
+  }
 });
 
 /* ── Polls table ────────────────────────────────────────────────── */
@@ -239,6 +350,7 @@ detailsModal.addEventListener('click', (event) => {
 });
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !detailsModal.hidden) closeDetailsModal();
+  if (event.key === 'Escape' && !clearFilteredModal.hidden) closeClearFilteredModal();
 });
 
 function renderPollsTable(polls) {

@@ -111,6 +111,26 @@ test('numeric Telegram IDs can request OTPs without using mutable handles', asyn
   assert.equal(telegram.messages[0].chatId, '2132609363');
 });
 
+test('action authorization is identity-bound, filter-bound, and short-lived', async () => {
+  const context = await seeded({ nowMs: Date.parse('2026-08-14T00:00:00Z') });
+  const admin = await context.db.getAppUserByTelegramId('2132609363');
+  const issued = context.auth.issueActionAuthorization(admin, 'clear-filtered-polls', 'filter-a');
+  assert.equal(context.auth.verifyActionAuthorization(
+    issued.access_token, admin, 'clear-filtered-polls', 'filter-a'
+  ), true);
+  assert.equal(context.auth.verifyActionAuthorization(
+    issued.access_token, admin, 'clear-filtered-polls', 'filter-b'
+  ), false);
+  const other = await context.db.getAppUserByTelegramId('977476515');
+  assert.equal(context.auth.verifyActionAuthorization(
+    issued.access_token, other, 'clear-filtered-polls', 'filter-a'
+  ), false);
+  context.advance(5 * 60 * 1000 + 1);
+  assert.equal(context.auth.verifyActionAuthorization(
+    issued.access_token, admin, 'clear-filtered-polls', 'filter-a'
+  ), false);
+});
+
 test('a migrated Telegram ID is not Login_bot verified until the user presses Start', async () => {
   const { auth, db, telegram } = await seeded();
   const userId = await db.createAppUser({

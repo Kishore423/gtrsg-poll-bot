@@ -1408,6 +1408,96 @@ test('single scheduled poll removal requires the configured clear password', asy
   }
 });
 
+test('admins clear only filtered polls after OTP step-up authentication', async () => {
+  const id1 = '11111111-1111-4111-8111-111111111111';
+  const id2 = '22222222-2222-4222-8222-222222222222';
+  const admin = { id: 'admin-1', telegram_user_id: '2132609363', role: 'admin' };
+  let requestedIdentifier = null;
+  let issuedBinding = null;
+  let deletedIds = null;
+  const db = {
+    async deleteScheduledPollsByIds(ids) {
+      deletedIds = ids;
+      return ids.map((id) => ({ id }));
+    },
+  };
+  const verifyUser = async (req) => {
+    const token = req.headers.authorization;
+    if (token === 'Bearer admin-session' || token === 'Bearer otp-session') return admin;
+    if (token === 'Bearer user-session') {
+      return { id: 'user-1', telegram_user_id: '1001', role: 'user' };
+    }
+    return null;
+  };
+  const server = createServer(db, makeTelegram(), {
+    enableLegacyWorkflow: false,
+    requireAdminAuth: true,
+    verifyUser,
+    async requestTelegramOtp(identifier) {
+      requestedIdentifier = identifier;
+      return { challenge_id: 'challenge-1', verifier: 'verifier-1', bot_username: 'Login_bot' };
+    },
+    async verifyTelegramOtp(challengeId, verifier, code) {
+      assert.equal(challengeId, 'challenge-1');
+      assert.equal(verifier, 'verifier-1');
+      assert.equal(code, '123456');
+      return { access_token: 'otp-session' };
+    },
+    issueActionAuthorization(user, action, binding) {
+      assert.equal(user.id, admin.id);
+      assert.equal(action, 'clear-filtered-polls');
+      issuedBinding = binding;
+      return { access_token: 'clear-authorization', expires_at: 123 };
+    },
+    verifyActionAuthorization(token, user, action, binding) {
+      return token === 'clear-authorization' && user.id === admin.id &&
+        action === 'clear-filtered-polls' && binding === issuedBinding;
+    },
+  }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const denied = await fetch(`${baseUrl}/api/admin/scheduled-polls/clear-otp/request`, {
+      method: 'POST', headers: { Authorization: 'Bearer user-session' },
+    });
+    assert.equal(denied.status, 403);
+
+    const requested = await fetch(`${baseUrl}/api/admin/scheduled-polls/clear-otp/request`, {
+      method: 'POST', headers: { Authorization: 'Bearer admin-session' },
+    });
+    assert.equal(requested.status, 202);
+    assert.equal(requestedIdentifier, admin.telegram_user_id);
+
+    const verified = await fetch(
+      `${baseUrl}/api/admin/scheduled-polls/clear-otp/verify`,
+      json('POST', {
+        challenge_id: 'challenge-1', verifier: 'verifier-1', code: '123456', poll_ids: [id2, id1],
+      }, { Authorization: 'Bearer admin-session' })
+    );
+    assert.equal(verified.status, 200);
+    assert.equal((await verified.json()).access_token, 'clear-authorization');
+
+    const mismatched = await fetch(
+      `${baseUrl}/api/admin/scheduled-polls/clear-filtered`,
+      json('POST', { poll_ids: [id1], authorization_token: 'clear-authorization' },
+        { Authorization: 'Bearer admin-session' })
+    );
+    assert.equal(mismatched.status, 401);
+    assert.equal(deletedIds, null);
+
+    const cleared = await fetch(
+      `${baseUrl}/api/admin/scheduled-polls/clear-filtered`,
+      json('POST', { poll_ids: [id2, id1], authorization_token: 'clear-authorization' },
+        { Authorization: 'Bearer admin-session' })
+    );
+    assert.equal(cleared.status, 200);
+    assert.deepEqual(await cleared.json(), { deleted: 2, ids: [id1, id2] });
+    assert.deepEqual(deletedIds, [id1, id2]);
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
+});
+
 test('weekly Testing mode arms a temporary override without replacing production fields', async () => {
   const groupId = '11111111-1111-4111-8111-111111111111';
   const production = {

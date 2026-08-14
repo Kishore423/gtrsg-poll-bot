@@ -453,12 +453,15 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   not by bot-specific `telegram_groups.id`. When multiple managed bots share one
   chat, admins see one group option and selecting it includes matching poll rows
   from every bot still allowed by the bot filter.
-  The Polls page is a monitoring surface and intentionally exposes no bulk
-  **Clear all polls** or individual **Remove** controls. Default polls are
-  omitted through the template's persistent **Skip event dates** mechanism,
-  rather than deleted and recreated by the scheduler. Protected backend deletion
-  endpoints remain available for maintenance and accept `CLEAR_POLLS_PASSWORD`
-  only; `CRON_SECRET` must not be accepted as a fallback.
+  The Polls page exposes **Clear filtered polls** only to admins. It snapshots
+  the visible poll IDs, sends a fresh Login_bot OTP to the signed-in admin
+  without requesting their handle, and issues a five-minute action token bound
+  to that exact sorted ID set. A token cannot clear a changed filter result.
+  Clearing removes those website poll records and dependent responses and
+  confirmations, but not Telegram messages or weekly templates. Default polls
+  can still be omitted before release through persistent **Skip event dates**.
+  Protected maintenance deletion endpoints continue to accept
+  `CLEAR_POLLS_PASSWORD`; `CRON_SECRET` must not be accepted as a fallback.
   The weekly template form uses a dedicated vertical layout for release controls,
   shift rows, and Add/Save actions; do not put those controls back into the global
   `form` grid because it causes overlap with the custom time wheel pickers. Its

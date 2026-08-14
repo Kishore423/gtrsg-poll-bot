@@ -216,6 +216,20 @@ function safeEqual(a, b) {
   return crypto.timingSafeEqual(ab, bb);
 }
 
+function normalizePollIds(values) {
+  if (!Array.isArray(values)) return null;
+  const ids = [...new Set(values.map((id) => String(id)))];
+  if (!ids.length || ids.some((id) =>
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))) {
+    return null;
+  }
+  return ids.sort();
+}
+
+function pollClearBinding(ids) {
+  return crypto.createHash('sha256').update(ids.join(',')).digest('hex');
+}
+
 function resolveTelegramGroupService(group, fallback = 'PRIMARY') {
   if (ROUTED_SERVICES.includes(group?.service)) return group.service;
   if (ROUTED_SERVICES.includes(group?.bot_id)) return group.bot_id;
@@ -1020,6 +1034,60 @@ function createServer(db, telegram, options = {}) {
     return false;
   };
 
+  app.post('/api/admin/scheduled-polls/clear-otp/request', wrap(async (req, res) => {
+    if (!options.requestTelegramOtp) {
+      return res.status(501).json({ error: 'Telegram OTP authentication is unavailable' });
+    }
+    const identifier = req.appUser.telegram_user_id || req.appUser.telegram_username;
+    if (!identifier) return res.status(409).json({ error: 'The admin account is not linked to Telegram' });
+    res.status(202).json(await options.requestTelegramOtp(String(identifier)));
+  }));
+
+  app.post('/api/admin/scheduled-polls/clear-otp/verify', wrap(async (req, res) => {
+    const ids = normalizePollIds(req.body?.poll_ids);
+    if (!ids) return res.status(400).json({ error: 'At least one valid filtered poll is required' });
+    if (!options.verifyTelegramOtp || !options.verifyUser || !options.issueActionAuthorization) {
+      return res.status(501).json({ error: 'Telegram OTP authentication is unavailable' });
+    }
+    const verified = await options.verifyTelegramOtp(
+      req.body?.challenge_id,
+      req.body?.verifier,
+      req.body?.code
+    );
+    const verifiedUser = await options.verifyUser({
+      headers: { authorization: `Bearer ${verified.access_token}` },
+    });
+    if (!verifiedUser || String(verifiedUser.id) !== String(req.appUser.id)) {
+      return res.status(403).json({ error: 'The OTP must belong to the signed-in admin' });
+    }
+    res.json(options.issueActionAuthorization(
+      req.appUser,
+      'clear-filtered-polls',
+      pollClearBinding(ids)
+    ));
+  }));
+
+  app.post('/api/admin/scheduled-polls/clear-filtered', wrap(async (req, res) => {
+    const ids = normalizePollIds(req.body?.poll_ids);
+    if (!ids) return res.status(400).json({ error: 'At least one valid filtered poll is required' });
+    if (!db.deleteScheduledPollsByIds || !options.verifyActionAuthorization) {
+      return res.status(501).json({ error: 'Filtered poll clearing is unavailable' });
+    }
+    const authorized = options.verifyActionAuthorization(
+      req.body?.authorization_token,
+      req.appUser,
+      'clear-filtered-polls',
+      pollClearBinding(ids)
+    );
+    if (!authorized) {
+      return res.status(401).json({
+        error: 'OTP authentication has expired or does not match the current filtered polls',
+      });
+    }
+    const rows = await db.deleteScheduledPollsByIds(ids);
+    res.json({ deleted: rows.length, ids: rows.map((row) => row.id) });
+  }));
+
   app.delete('/api/scheduled-polls', wrap(async (req, res) => {
     if (!db.deleteAllScheduledPolls) return res.status(501).json({ error: 'Supabase production database is required' });
     if (!requireClearPollsPassword(req, res)) return;
@@ -1028,8 +1096,8 @@ function createServer(db, telegram, options = {}) {
       return res.status(403).json({ error: 'Admin access required to clear all scheduled polls' });
     }
     if (ids) {
-      const uniqueIds = [...new Set(ids.map((id) => String(id)))];
-      if (uniqueIds.length === 0 || uniqueIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))) {
+      const uniqueIds = normalizePollIds(ids);
+      if (!uniqueIds) {
         return res.status(400).json({ error: 'Valid poll IDs are required' });
       }
       if (!db.deleteScheduledPollsByIds) return res.status(501).json({ error: 'Supabase production database is required' });

@@ -77,7 +77,7 @@ Testing mode is a one-shot check of the complete weekly template:
 
 ## Polls page
 
-The Polls page is a **read-only monitoring view** of scheduled polls. Use
+The Polls page is the monitoring view for scheduled polls. Use
 **Date order** to show event dates in ascending (earliest first) or descending
 (latest first) order. The control is available to both users and admins.
 
@@ -89,7 +89,13 @@ The Polls page is a **read-only monitoring view** of scheduled polls. Use
   that poll.
 The Polls list refreshes automatically every 15 seconds, so completed Testing
 mode cleanup appears without a page reload.
-The Polls page has no permanent delete control. To stop a default poll from
+Admins can permanently clear the polls matching the current filters. The action
+requires a fresh six-digit OTP from the Login bot and does not ask for the
+Telegram username again. It deletes the matching website poll records,
+responses, and confirmations; it does not delete messages already visible in
+Telegram. Regular users cannot see or call this action.
+
+To stop a default poll from
 being sent, use **Skip days** on the Home page instead.
 
 ## Deployment sheets page

@@ -246,6 +246,20 @@ test('Polls page gives admins a bot filter backed by the Admin roster', () => {
   assert.match(source, /managedGroups\.filter\(\(group\) => String\(group\.bot_id\) === botFilter\)/);
 });
 
+test('Polls filtered clear is admin-only and requires Login bot OTP', () => {
+  const html = readFileSync(join(__dirname, '..', 'public', 'polls.html'), 'utf8');
+  const source = readFileSync(join(__dirname, '..', 'public', 'polls.js'), 'utf8');
+  assert.match(html, /id="clear-filtered-polls-btn"[^>]*hidden/);
+  assert.match(html, /Authenticate via OTP/);
+  assert.doesNotMatch(html, /clear-filtered[^\n]*username/i);
+  assert.match(source, /clearFilteredPollIds = visiblePolls\.map/);
+  assert.match(source, /currentUser\?\.role !== 'admin'/);
+  assert.match(source, /\/api\/admin\/scheduled-polls\/clear-otp\/request/);
+  assert.match(source, /\/api\/admin\/scheduled-polls\/clear-otp\/verify/);
+  assert.match(source, /\/api\/admin\/scheduled-polls\/clear-filtered/);
+  assert.match(source, /authorization_token: authorization\.access_token/);
+});
+
 test('Polls date order is selectable for both users and admins', () => {
   const html = readFileSync(join(__dirname, '..', 'public', 'polls.html'), 'utf8');
   const source = readFileSync(join(__dirname, '..', 'public', 'polls.js'), 'utf8');

@@ -573,6 +573,7 @@
       <div class="card-header">
         <h2>All polls</h2>
         <div class="card-actions">
+          <button type="button" id="clear-filtered-polls-btn" class="danger btn-sm" hidden><i data-lucide="trash-2" aria-hidden="true"></i> Clear filtered polls</button>
           <button type="button" id="refresh-polls-btn" class="secondary btn-sm"><i data-lucide="refresh-cw" aria-hidden="true"></i> Refresh</button>
         </div>
       </div>
@@ -620,6 +621,31 @@
         </button>
       </div>
       <div class="modal-body" id="details-modal-body"></div>
+    </section>
+  </div>
+
+  <div id="clear-filtered-modal" class="modal-backdrop" hidden>
+    <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="clear-filtered-title">
+      <div class="modal-header">
+        <h2 id="clear-filtered-title">Clear filtered polls</h2>
+        <button type="button" class="icon-button" id="clear-filtered-close-btn" aria-label="Close" title="Close">
+          <i data-lucide="x"></i><span class="icon-fallback" aria-hidden="true">x</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p id="clear-filtered-summary"></p>
+        <p class="hint">This deletes the matching website poll records, responses, and confirmations. Existing Telegram messages are not deleted.</p>
+        <div id="clear-filtered-request-step">
+          <button type="button" id="clear-filtered-auth-btn" class="primary"><i data-lucide="shield-check" aria-hidden="true"></i> Authenticate via OTP</button>
+        </div>
+        <div id="clear-filtered-code-step" hidden>
+          <label>Login bot OTP
+            <input type="text" id="clear-filtered-otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="6-digit code" />
+          </label>
+          <button type="button" id="clear-filtered-verify-btn" class="danger">Verify and clear polls</button>
+        </div>
+        <p id="clear-filtered-status" class="hint" aria-live="polite"></p>
+      </div>
     </section>
   </div>
 

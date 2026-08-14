@@ -109,6 +109,21 @@ shows the latest four confirmed event weeks across all groups available to your
 account. Admins see groups across all users; normal users see only groups
 belonging to their assigned bot.
 
+## Clear polls matching the current filters (admins only)
+
+1. On **Polls**, choose the bot, event date, Telegram group, and poll type filters.
+2. Review the displayed rows, then select **Clear filtered polls**.
+3. Confirm the displayed number of matching polls and select **Authenticate via OTP**.
+   The website uses the signed-in admin identity; do not enter the Telegram
+   username again.
+4. Enter the six-digit code sent by the Login bot and select **Verify and clear
+   polls**.
+
+The OTP authorization lasts five minutes and applies only to the poll IDs shown
+when the clear dialog was opened. The action deletes matching website poll
+records, responses, and confirmations. It does not delete existing Telegram
+messages or weekly templates.
+
 ## View a poll's details
 
 1. On the **Polls** page, find the poll (use the filters if needed).
