@@ -69,17 +69,20 @@ been sent to Telegram, skipping cannot recall it.
 2. Change the release, confirmation, gap-week, shift, and capacity fields to the
    temporary values you want to test.
 3. Turn on **Testing mode** beside **Save default**, then click **Save default**.
-4. Cron releases one temporary Monday-Sunday batch at its configured release
+4. Review the confirmation message before arming the test. It lists the release
+   date/time and every non-skipped poll date. Weekly-summary mode also shows its
+   confirmation date/time; day-by-day mode shows only its confirmation time.
+5. Cron releases one temporary Monday-Sunday batch at its configured release
    weekday and time. Telegram text and options are identical to production.
-5. For **Day-by-day confirmation, one day before each poll**, the first testing
+6. For **Day-by-day confirmation, one day before each poll**, the first testing
    confirmation uses the configured time immediately after the testing release.
    If that time has already passed, it uses the following day. The remaining
    confirmations send five minutes apart. A weekly summary sends once at its
    configured weekday/time.
-6. After the final confirmation succeeds, the website automatically removes the
+7. After the final confirmation succeeds, the website automatically removes the
    testing batch and votes, switches Testing mode off, and restores the complete
    previous production template.
-7. Delete the testing poll and confirmation messages manually in Telegram.
+8. Delete the testing poll and confirmation messages manually in Telegram.
 
 Testing mode is one-shot. It does not overwrite production release,
 confirmation, gap-week, shift, or capacity settings. A test is rejected if its

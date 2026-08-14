@@ -430,6 +430,16 @@ test('per-event Testing mode bypasses production chronology validation', () => {
     /if \(!body\.testing_mode \|\| body\.confirmation_send_type !== 'per_event_day'\)/);
 });
 
+test('Testing confirmation previews poll dates and mode-specific confirmation timing', () => {
+  const source = readFileSync(join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(source, /function testingArmConfirmationMessage\(schedule, releaseDate, eventDates\)/);
+  assert.match(source, /eventDates\.filter\(\(date\) => !excludedDates\.has\(date\)\)/);
+  assert.match(source, /`Poll dates:\\n\$\{pollDateLines\}/);
+  assert.match(source, /`Confirmation time: \$\{confirmationTime\}/);
+  assert.match(source, /`Confirmation: \$\{formatLocalDate\(confirmationDate\)\} at \$\{time\}`/);
+  assert.match(source, /testingArmConfirmationMessage\(body, releaseDate, eventDates\)/);
+});
+
 test('deployment sheets are downloaded only from the dedicated navbar page', () => {
   const home = readFileSync(join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const polls = readFileSync(join(__dirname, '..', 'public', 'polls.html'), 'utf8');

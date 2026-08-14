@@ -455,6 +455,29 @@ function batchRangeForReleaseDate(releaseDate, gapWeeks = 0) {
   return Array.from({ length: 7 }, (_, index) => addDays(start, index));
 }
 
+function testingArmConfirmationMessage(schedule, releaseDate, eventDates) {
+  const excludedDates = new Set(pollExclusions.map((item) =>
+    String(item.event_date).slice(0, 10)));
+  const pollDates = eventDates.filter((date) => !excludedDates.has(date));
+  const pollDateLines = pollDates.length
+    ? pollDates.map((date) => `- ${formatLocalDate(date)}`).join('\n')
+    : '- No poll dates; every date in this batch is skipped.';
+  const confirmationTime = String(schedule.confirmation_time || '').slice(0, 5);
+  const confirmationLine = schedule.confirmation_send_type === 'per_event_day'
+    ? `Confirmation time: ${confirmationTime}\nLater Testing confirmations: every 5 minutes`
+    : (() => {
+      const confirmationAt = confirmationDateTimeForEvent(eventDates[0], schedule, '');
+      const [confirmationDate, time] = confirmationAt.split('T');
+      return `Confirmation: ${formatLocalDate(confirmationDate)} at ${time}`;
+    })();
+
+  return 'Arm one Testing mode batch with these temporary settings?\n\n' +
+    `Poll release: ${formatLocalDate(releaseDate)} at ${String(schedule.poll_release_time).slice(0, 5)}\n\n` +
+    `Poll dates:\n${pollDateLines}\n\n` +
+    `${confirmationLine}\n\n` +
+    'Telegram poll and confirmation text will match production. The complete previous production template restores automatically after the final confirmation.';
+}
+
 function generatedShiftLabel(start, end) {
   return `${start.replace(':', '')}-${end.replace(':', '')}`;
 }
@@ -1395,7 +1418,8 @@ managedScheduleForm.addEventListener('submit', async (event) => {
     body.testing_mode = Boolean(weeklyTestingMode?.checked);
 
     const releaseDate = nextReleaseDateForSchedule(body);
-    const eventDate = batchRangeForReleaseDate(releaseDate, body.gap_weeks)[0];
+    const eventDates = batchRangeForReleaseDate(releaseDate, body.gap_weeks);
+    const eventDate = eventDates[0];
     if (!body.testing_mode || body.confirmation_send_type !== 'per_event_day') {
       managedTimingForEvent({
         telegramGroupId: body.telegram_group_id,
@@ -1405,8 +1429,7 @@ managedScheduleForm.addEventListener('submit', async (event) => {
     }
 
     if (body.testing_mode && !window.confirm(
-      'Arm one Testing mode batch with these temporary settings?\n\n' +
-      'Telegram poll and confirmation text will match production. The first daily confirmation uses the configured time and later daily confirmations send five minutes apart. The complete previous production template restores automatically after the final confirmation.'
+      testingArmConfirmationMessage(body, releaseDate, eventDates)
     )) return;
 
     setStatus(body.testing_mode ? 'Arming Testing mode...' : 'Saving weekly default...', 'pending');
