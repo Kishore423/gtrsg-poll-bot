@@ -60,6 +60,15 @@ function nextReleaseForWeeklySchedule(schedule, now = new Date()) {
   return { releaseDate, releaseAt };
 }
 
+function nextProductionReleaseAfterTestingRelease(schedule, now, testingReleaseAt) {
+  const nextProduction = nextReleaseForWeeklySchedule(schedule, now).releaseAt;
+  if (nextProduction > testingReleaseAt) return nextProduction;
+  return nextReleaseForWeeklySchedule(
+    schedule,
+    new Date(testingReleaseAt.getTime() + 1000)
+  ).releaseAt;
+}
+
 // RFC-4180 CSV cell: quote when it contains a comma, quote, or newline.
 function csvCell(value) {
   const str = String(value ?? '');
@@ -1281,7 +1290,11 @@ function createServer(db, telegram, options = {}) {
       const finalConfirmation = body.confirmation_send_type === 'weekly_summary'
         ? firstConfirmation
         : new Date(firstConfirmation.getTime() + Math.max(0, eventDates.length - 1) * 5 * 60 * 1000);
-      const productionRelease = nextReleaseForWeeklySchedule(currentSchedule, now).releaseAt;
+      const productionRelease = nextProductionReleaseAfterTestingRelease(
+        currentSchedule,
+        now,
+        testRelease.releaseAt
+      );
       if (finalConfirmation >= productionRelease) {
         return res.status(409).json({
           error: 'Testing confirmations must finish before the next saved production release. Choose an earlier Testing release or confirmation time.',
@@ -1636,4 +1649,10 @@ function createServer(db, telegram, options = {}) {
   return app;
 }
 
-module.exports = { createServer, resolveTelegramGroupService };
+module.exports = {
+  createServer,
+  resolveTelegramGroupService,
+  _private: {
+    nextProductionReleaseAfterTestingRelease,
+  },
+};

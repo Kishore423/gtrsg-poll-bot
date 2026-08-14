@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const ExcelJS = require('exceljs');
 const { createMemoryDb } = require('../src/db/memory');
-const { createServer } = require('../src/server');
+const { createServer, _private: serverPrivate } = require('../src/server');
 
 function makeTelegram() {
   const polls = [];
@@ -1463,6 +1463,21 @@ test('weekly Testing mode arms a temporary override without replacing production
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   }
+});
+
+test('weekly Testing mode overlap guard allows using the saved production release slot', () => {
+  const production = {
+    poll_release_day_of_week: 5,
+    poll_release_time: '11:30',
+  };
+  const now = new Date('2026-08-14T02:00:00.000Z'); // Friday 10:00 SGT.
+  const testingReleaseAt = new Date('2026-08-14T03:30:00.000Z'); // Friday 11:30 SGT.
+  const nextProductionRelease = serverPrivate.nextProductionReleaseAfterTestingRelease(
+    production,
+    now,
+    testingReleaseAt
+  );
+  assert.equal(nextProductionRelease.toISOString(), '2026-08-21T03:30:00.000Z');
 });
 
 test('test batch reset clears only website state and preserves its future release', async () => {
