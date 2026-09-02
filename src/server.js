@@ -84,6 +84,17 @@ function formatSheetDate(iso) {
   return `${Number(match[3])}-${SHEET_MONTHS[Number(match[2]) - 1]}`;
 }
 
+function isoDateText(value) {
+  if (!value) return '';
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  const text = String(value);
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 10);
+}
+
 async function collectDeploymentRoster(
   db,
   appUser,
@@ -97,10 +108,10 @@ async function collectDeploymentRoster(
     rows = rows.filter((row) => String(row.telegram_group_id) === requestedGroupId);
   }
   if (startDate) {
-    rows = rows.filter((row) => String(row.event_date || '').slice(0, 10) >= startDate);
+    rows = rows.filter((row) => isoDateText(row.event_date) >= startDate);
   }
   if (endDate) {
-    rows = rows.filter((row) => String(row.event_date || '').slice(0, 10) <= endDate);
+    rows = rows.filter((row) => isoDateText(row.event_date) <= endDate);
   }
 
   const seenEvents = new Set();
@@ -108,7 +119,7 @@ async function collectDeploymentRoster(
   for (const row of rows) {
     if (!row.event_id || seenEvents.has(row.event_id)) continue;
     seenEvents.add(row.event_id);
-    events.push({ event_id: row.event_id, event_date: String(row.event_date || '').slice(0, 10) });
+    events.push({ event_id: row.event_id, event_date: isoDateText(row.event_date) });
   }
   const dates = [...new Set(events.map((event) => event.event_date).filter(Boolean))].sort();
 
@@ -190,7 +201,7 @@ async function confirmedDeploymentBatches(db, rows, now = new Date()) {
   const batches = new Map();
   const today = singaporeDateText(now);
   for (const row of rows) {
-    const eventDate = String(row.event_date || '').slice(0, 10);
+    const eventDate = isoDateText(row.event_date);
     if (!row.telegram_group_id || !row.event_id || !isIsoDate(eventDate)) continue;
     const startDate = mondayOfIsoWeek(eventDate);
     if (startDate > today) continue;

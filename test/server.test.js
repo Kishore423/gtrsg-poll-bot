@@ -2125,7 +2125,7 @@ test('deployment panel retains only the latest four fully confirmed event weeks'
           event_id: `event-${index}`,
           telegram_group_id: 'group-A',
           bot_id: 'bot-A',
-          event_date,
+          event_date: index === 0 ? new Date(`${event_date}T00:00:00.000Z`) : event_date,
           group_name: 'Alpha Group',
           confirmation_status: index === starts.length - 1 ? 'scheduled' : 'sent',
         })),
