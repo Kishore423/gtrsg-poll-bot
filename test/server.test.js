@@ -2089,6 +2089,28 @@ test('deployment sheet exports a tenant-scoped person-by-date roster', async () 
     assert.equal(adminLines[0], 'Name,Telegram handle,21-Jul');
     assert.equal(adminLines[1], '"Carol, C",@carol,0800-1700');
     assert.doesNotMatch(adminCsv, /Alice/);
+
+    const adminSheetsForBotB = await fetch(
+      `${baseUrl}/api/deployment-sheets?bot_id=bot-B`,
+      { headers: { Authorization: 'Bearer admin' } }
+    );
+    assert.deepEqual(await adminSheetsForBotB.json(), [{
+      telegram_group_id: 'group-B',
+      group_name: 'Beta Group',
+      start_date: '2026-07-20',
+      end_date: '2026-07-26',
+    }]);
+
+    const userCannotChangeScope = await fetch(
+      `${baseUrl}/api/deployment-sheets?bot_id=bot-B`,
+      { headers: { Authorization: 'Bearer userA' } }
+    );
+    assert.deepEqual(await userCannotChangeScope.json(), [{
+      telegram_group_id: 'group-A',
+      group_name: 'Alpha Group',
+      start_date: '2026-07-20',
+      end_date: '2026-07-26',
+    }]);
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   }
@@ -2105,10 +2127,10 @@ test('deployment panel retains only the latest four fully confirmed event weeks'
           bot_id: 'bot-A',
           event_date,
           group_name: 'Alpha Group',
-          confirmation_status: 'sent',
+          confirmation_status: index === starts.length - 1 ? 'scheduled' : 'sent',
         })),
         {
-          event_id: 'event-incomplete',
+          event_id: 'event-no-confirmed-deployment',
           telegram_group_id: 'group-A',
           bot_id: 'bot-A',
           event_date: '2026-08-03',
@@ -2116,6 +2138,19 @@ test('deployment panel retains only the latest four fully confirmed event weeks'
           confirmation_status: 'scheduled',
         },
       ];
+    },
+    async getAllocation(eventId) {
+      if (eventId === 'event-no-confirmed-deployment') return [];
+      return [{
+        shift_id: 'shift-1',
+        label: '0800-1700',
+        display_order: 0,
+        status: 'confirmed',
+        confirmed_position: 1,
+        telegram_user_id: eventId,
+        telegram_username: eventId,
+        display_name: eventId,
+      }];
     },
   };
   const server = createServer(db, makeTelegram(), {
@@ -2166,6 +2201,13 @@ test('deployment panel retains only the latest four fully confirmed event weeks'
     assert.deepEqual((await adminResponse.json()).map((sheet) => sheet.start_date), [
       '2026-07-27', '2026-07-20', '2026-07-13', '2026-07-06',
     ]);
+
+    const filteredAdminResponse = await fetch(
+      `${baseUrl}/api/deployment-sheets?bot_id=bot-missing`,
+      { headers: { Authorization: 'Bearer admin' } }
+    );
+    assert.equal(filteredAdminResponse.status, 200);
+    assert.deepEqual(await filteredAdminResponse.json(), []);
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   }

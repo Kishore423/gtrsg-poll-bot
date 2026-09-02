@@ -92,8 +92,7 @@ async function collectDeploymentRoster(
   startDate = null,
   endDate = null
 ) {
-  let rows = filterRowsByUserBot(await db.listScheduledPolls(), appUser);
-  if (requestedBotId) rows = rows.filter((row) => String(row.bot_id) === requestedBotId);
+  let rows = deploymentRowsForScope(await db.listScheduledPolls(), appUser, requestedBotId);
   if (requestedGroupId) {
     rows = rows.filter((row) => String(row.telegram_group_id) === requestedGroupId);
   }
@@ -142,6 +141,18 @@ async function collectDeploymentRoster(
   };
 }
 
+function deploymentRowsForScope(rows, appUser, requestedBotId = null) {
+  const scoped = requestedBotId && appUser?.role === 'admin'
+    ? rows.filter((row) => String(row.bot_id) === requestedBotId)
+    : filterRowsByUserBot(rows, appUser);
+  return scoped.filter((row) => {
+    const tags = row.operational_tags || [];
+    return !tags.includes('test') &&
+      !tags.some((tag) => String(tag).startsWith('template-testing:') ||
+        String(tag).startsWith('rehearsal:'));
+  });
+}
+
 function addIsoDays(isoDate, days) {
   const date = new Date(`${isoDate}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
@@ -175,12 +186,14 @@ function requestedDeploymentRange(query) {
   return { startDate, endDate };
 }
 
-function confirmedDeploymentBatches(rows) {
+async function confirmedDeploymentBatches(db, rows, now = new Date()) {
   const batches = new Map();
+  const today = singaporeDateText(now);
   for (const row of rows) {
     const eventDate = String(row.event_date || '').slice(0, 10);
-    if (!row.telegram_group_id || !isIsoDate(eventDate)) continue;
+    if (!row.telegram_group_id || !row.event_id || !isIsoDate(eventDate)) continue;
     const startDate = mondayOfIsoWeek(eventDate);
+    if (startDate > today) continue;
     const key = `${row.telegram_group_id}:${startDate}`;
     if (!batches.has(key)) {
       batches.set(key, {
@@ -188,16 +201,24 @@ function confirmedDeploymentBatches(rows) {
         group_name: row.group_name || 'Telegram group',
         start_date: startDate,
         end_date: addIsoDays(startDate, 6),
-        rows: [],
+        event_ids: new Set(),
       });
     }
-    batches.get(key).rows.push(row);
+    batches.get(key).event_ids.add(row.event_id);
   }
 
-  const confirmed = [...batches.values()]
-    .filter((batch) => batch.rows.length > 0 && batch.rows.every((row) =>
-      ['sent', 'updated'].includes(String(row.confirmation_status || ''))
-    ));
+  const confirmed = [];
+  for (const batch of batches.values()) {
+    let hasConfirmedDeployment = false;
+    for (const eventId of batch.event_ids) {
+      const allocation = await db.getAllocation(eventId);
+      if (allocation.some((row) => row.status === 'confirmed')) {
+        hasConfirmedDeployment = true;
+        break;
+      }
+    }
+    if (hasConfirmedDeployment) confirmed.push(batch);
+  }
   const retainedWeeks = [...new Set(confirmed.map((batch) => batch.start_date))]
     .sort()
     .reverse()
@@ -206,7 +227,7 @@ function confirmedDeploymentBatches(rows) {
     .filter((batch) => retainedWeeks.includes(batch.start_date))
     .sort((a, b) => b.start_date.localeCompare(a.start_date)
       || a.group_name.localeCompare(b.group_name))
-    .map(({ rows: omittedRows, ...batch }) => batch);
+    .map(({ event_ids: omittedEventIds, ...batch }) => batch);
 }
 
 function safeEqual(a, b) {
@@ -380,12 +401,15 @@ function createServer(db, telegram, options = {}) {
         !req.appUser?.deployment_sheets_enabled) {
       return res.status(403).json({ error: 'Enable Deployment sheets from your account menu first' });
     }
-    if (!db.listScheduledPolls) {
+    if (!db.listScheduledPolls || !db.getAllocation) {
       if (!options.requireAdminAuth) return res.json([]);
       return res.status(501).json({ error: 'Supabase production database is required' });
     }
-    const rows = filterRowsByUserBot(await db.listScheduledPolls(), req.appUser);
-    res.json(confirmedDeploymentBatches(rows));
+    const requestedBotId = req.appUser?.role === 'admin' && req.query.bot_id
+      ? String(req.query.bot_id)
+      : null;
+    const rows = deploymentRowsForScope(await db.listScheduledPolls(), req.appUser, requestedBotId);
+    res.json(await confirmedDeploymentBatches(db, rows));
   }));
 
   function publicBot(bot) {
