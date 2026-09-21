@@ -396,12 +396,12 @@ The app currently ships BOTH, selected at runtime:
   sheets** navbar page downloads
   `GET /api/confirmed-slots.xlsx?telegram_group_id=<id>` as a formatted Excel
   roster with `Telegram handle`, `Name`, then chronological
-  event-date columns formatted `3-Aug`. Confirmed shifts are stacked as
-  `Shift: <label>` lines in bordered, wrapped cells; the header is frozen and
+  event-date columns formatted `3-Aug`. Confirmed shifts are comma-separated as
+  `<label>` values in bordered, wrapped cells; the header is frozen and
   print-ready in landscape. `GET /api/confirmed-slots.csv` remains for
   integrations. Confirmed only; waiting-list excluded. People are keyed by
   immutable Telegram id (fallback handle/name). OFF/RD and staff-number fields
-  are not in the current data model. Both export endpoints assert access to the
+  are not in the current data model. Excel derives light-purple OFF for empty date cells and dark-purple RD for the last empty date in each row; rows with every date worked have no OFF/RD. The Name column follows Telegram handle in Excel; both identity columns are frozen. CSV remains unchanged. Both export endpoints assert access to the
   requested group. The Home group command dialog and Polls page expose no
   deployment download. The navbar page uses auth-wrapped `fetch` and downloads
   `deployment-sheet-<group>-<start>-to-<end>.xlsx`.
@@ -620,3 +620,19 @@ cross-user controls only to admins. The shared readability floor is approximatel
 17px for body and control text, 14-15px for compact labels and table headers, and
 larger proportional headings; mobile navigation remains compact without dropping
 back to the former small-text scale.
+
+The local UI preview (`node scripts/dev-ui-preview.js`) binds to 127.0.0.1:4322
+ and includes synthetic 8B_KR_NX Flexi deployment data for 21–27 Sep 2026.
+Open /deployments.html and Download Excel to exercise the production exporter
+without a database or real Telegram calls.
+
+Excel matches the roster reference with grey headers, light green for one day shift
+(0730-1230 / 730-1230 or 1230-1630), darker green for both day shifts together, and blue for any 2000-0000 shift. Timings have no Shift: prefix.
+Actual-roster local preview: `node scripts/dev-ui-preview.js --actual-roster`
+requires DATABASE_URL in the ignored local .env. It reads only the exact
+PREVIEW_GROUP_NAME (default 8B_KR_NX Flexi) for 21–27 September 2026, using a
+read-only transaction without repository startup migrations, then disconnects.
+The roster stays in memory; restart to refresh it. Missing data fails explicitly
+rather than falling back to samples. Deployment visibility still requires all
+polls in the batch to have sent/updated confirmations, as in production.
+Excel exports include a Colour legend below the roster after a blank spacer, with matching green/blue shift swatches and purple OFF/RD explanations (RD is labelled "Rest day"); the legend is outside the roster filter.

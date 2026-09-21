@@ -1812,7 +1812,7 @@ test('deployment sheet exports a tenant-scoped person-by-date roster', async () 
       'Telegram handle', 'Name', '20-Jul', '22-Jul',
     ]);
     assert.deepEqual(sheet.getRow(2).values.slice(1), [
-      '@alice', 'Alice', 'Shift: 0800-1700', 'Shift: 1030-1830',
+      '@alice', 'Alice', '0800-1700', '1030-1830',
     ]);
     assert.equal(sheet.views[0].xSplit, 2);
     assert.equal(sheet.views[0].ySplit, 1);
