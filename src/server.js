@@ -1531,6 +1531,7 @@ function createServer(db, telegram, options = {}) {
       schedule,
       clearAfterMinutes: body.clear_after_minutes,
       createdBy: req.adminUser?.id || req.appUser?.id || null,
+      now: options.now || new Date(),
     });
     res.status(201).json(result);
   }));

@@ -544,7 +544,10 @@ test('weekly template rehearsal API queues the actual future batch for the saved
     async resetTemplateRehearsal() { throw new Error('unexpected reset'); },
   };
   const telegram = makeTelegram();
-  const server = createServer(db, telegram, { enableLegacyWorkflow: false }).listen(0);
+  const server = createServer(db, telegram, {
+    enableLegacyWorkflow: false,
+    now: new Date('2026-01-05T00:00:00.000Z'),
+  }).listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
   try {
@@ -1049,7 +1052,7 @@ test('full flow: link group, send poll, vote, results ranked, confirm', async ()
     }));
 
     // 2. Admin adds slots (2-slot option) and sends the poll.
-    await fetch(`${baseUrl}/api/slots`, json('POST', { slot_date: '2026-08-25', time_start: '17:00', time_end: '22:00', slot_count: 2, service: 'WHCL' }));
+    await fetch(`${baseUrl}/api/slots`, json('POST', { slot_date: '2099-08-25', time_start: '17:00', time_end: '22:00', slot_count: 2, service: 'WHCL' }));
     const trig = await fetch(`${baseUrl}/api/trigger-now`, json('POST', { service: 'WHCL' }));
     assert.equal((await trig.json()).sent, 1);
     assert.equal(telegram.polls[0].chatId, '-100999');
