@@ -294,7 +294,7 @@ Vercel Cron** for hosting/scheduling.
 - Use CommonJS + the Node built-in test runner. Run `npm test` and
   `npm run check` after behavior changes.
 - **Local read-only production-data view:** `npm run setup:local-readonly` creates
-  gitignored `.env.readonly`; `npm run start:readonly` serves the current UI on
+  gitignored `.env.readonly`; `npm start` (or `npm run start:readonly`) serves the current UI on
   port 3001 against live Supabase rows as a synthetic local admin. It skips
   Postgres startup schema patches, sets its sole DB session to
   `default_transaction_read_only=on`, and `src/server.js` rejects every unsafe
@@ -305,6 +305,9 @@ Vercel Cron** for hosting/scheduling.
   privileges, so the HTTP guard and transaction setting are required safeguards;
   it is not a production replica and must never be used for bot actions, OTP,
   cron, or save/delete tests.
+  `npm run start:memory` retains the isolated in-memory server for disposable UI
+  work. Never use `npm run dev-telegram` as a safe viewer: it clears live bot
+  webhooks to start Telegram long-polling.
 - After every code change, review both `CLAUDE.md` and `AGENTS.md` and keep them
   aligned. No artificial changelog entries.
 

@@ -576,7 +576,7 @@ live only in Vercel env + the local (gitignored) `.env`.
   translucent black backdrop, an X close control, and a self-only delete action.
   Bot tokens and immutable bot handles are intentionally never displayed.
 - **Local read-only production-data view:** `npm run setup:local-readonly` writes
-  a gitignored `.env.readonly`; `npm run start:readonly` serves the current UI on
+  a gitignored `.env.readonly`; `npm start` (or `npm run start:readonly`) serves the current UI on
   port 3001 against live Supabase rows as a synthetic local admin. It skips
   Postgres startup schema patches, sets its sole DB session to
   `default_transaction_read_only=on`, and `src/server.js` rejects unsafe API
@@ -584,7 +584,9 @@ live only in Vercel env + the local (gitignored) `.env`.
   viewing/filtering and Excel/CSV-export verification. The configured Supabase
   login can still have write privileges, so this relies on the HTTP guard and
   transaction setting; it must never be used for bot actions, OTP, cron, or
-  save/delete tests.
+  save/delete tests. `npm run start:memory` retains the isolated in-memory
+  server for disposable UI work. Never use `npm run dev-telegram` as a safe
+  viewer: it clears live bot webhooks to start Telegram long-polling.
 - `webhook_events` had traffic (20 rows) → both bots' production webhooks are
   registered and delivering.
 - PSA group's observed weekly schedule at the time: release Fri 17:00,

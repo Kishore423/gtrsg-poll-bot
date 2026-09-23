@@ -5,7 +5,8 @@
   "main": "src/localServer.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/localServer.js",
+    "start": "node scripts/local-readonly-server.js",
+    "start:memory": "node src/localServer.js",
     "start:readonly": "node scripts/local-readonly-server.js",
     "setup:local-readonly": "node scripts/setup-local-readonly.js",
     "verify:local-readonly": "node scripts/verify-local-readonly.js",

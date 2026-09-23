@@ -1,4 +1,5 @@
-// Starts the current app against the local-only, SELECT-only Supabase credential.
+// Starts the current app against live Supabase data in a transaction-read-only
+// local viewer. HTTP mutations are blocked by src/server.js.
 require('dotenv').config({ quiet: true });
 require('dotenv').config({ path: '.env.readonly', override: true, quiet: true });
 
