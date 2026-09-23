@@ -68,6 +68,37 @@ async function main() {
     return row ? { ...row } : null;
   };
 
+  // Synthetic deployment data exercises the same download route as production.
+  const previewDates = Array.from({ length: 7 }, (_, i) => `2026-09-${21 + i}`);
+  db.listScheduledPolls = async () => previewDates.map((date, i) => ({
+    id: `preview-deployment-${i}`, event_id: `preview-event-${i}`,
+    event_date: date, telegram_group_id: managedGroup.id,
+    group_name: '8B_KR_NX Flexi (sample)', bot_id: botId,
+    confirmation_status: 'sent', status: 'closed',
+  }));
+  const sampleWorkingDays = [[1, 2, 3], [3, 4, 5], [0, 4], [0, 1, 3, 6]];
+  db.getAllocation = async (eventId) => {
+    const day = Number(String(eventId).replace('preview-event-', ''));
+    return sampleWorkingDays.flatMap((days, i) => days.includes(day) ? [{
+      telegram_user_id: `sample-${i}`, telegram_username: `sample_staff_${i + 1}`,
+      display_name: `Sample staff ${i + 1}`, status: 'confirmed',
+      display_order: 0, confirmed_position: i + 1,
+      label: i === 3 && [1, 3].includes(day) ? '2000-0000'
+        : i === 2 ? '0730-1230' : '0730-1230, 1230-1630',
+    }] : []);
+  };
+
+  if (process.argv.includes('--actual-roster')) {
+    const { loadPreviewRoster } = require('./preview-roster');
+    const snapshot = await loadPreviewRoster();
+    db.listScheduledPolls = async () => structuredClone(snapshot.polls);
+    db.getAllocation = async (eventId) => structuredClone(snapshot.allocations[eventId] || []);
+    const getPreviewGroup = db.getTelegramGroup.bind(db);
+    db.getTelegramGroup = async (id) => structuredClone(snapshot.groups.find((g) => String(g.id) === String(id)))
+      || getPreviewGroup(id);
+    console.log(`Loaded actual roster snapshot: ${snapshot.polls.length} polls for 21–27 Sep 2026.`);
+  }
+
   let pollSeq = 0;
   const telegram = {
     async sendPoll() { pollSeq += 1; return { poll_id: `PREVIEW-${pollSeq}`, message_id: pollSeq }; },
@@ -91,7 +122,7 @@ async function main() {
     enableLegacyWorkflow: process.env.ENABLE_LEGACY_WORKFLOW !== 'false',
   });
   const port = process.env.PORT || 4322;
-  app.listen(port, () => console.log(`UI preview running at http://localhost:${port}`));
+  app.listen(port, '127.0.0.1', () => console.log(`UI preview running at http://localhost:${port}`));
 }
 
 main().catch((err) => {

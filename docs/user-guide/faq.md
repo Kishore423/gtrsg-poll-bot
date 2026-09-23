@@ -43,9 +43,10 @@ active again automatically.
 
 ## How are confirmations accelerated during Testing mode?
 
-For Wheelchair, the first confirmation follows its configured time and each
-remaining event confirmation sends five minutes after the previous one. PSA
-still sends one weekly summary at its configured weekday and time.
+For Wheelchair, the first confirmation uses the configured time immediately
+after the testing release. If that time has already passed, it uses the following
+day. Each remaining event confirmation sends five minutes after the previous
+one. PSA still sends one weekly summary at its configured weekday and time.
 
 ## What is the deployment sheet?
 

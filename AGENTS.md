@@ -293,6 +293,21 @@ Vercel Cron** for hosting/scheduling.
   not append bot/service text such as `(PSA bot)` to the group name.
 - Use CommonJS + the Node built-in test runner. Run `npm test` and
   `npm run check` after behavior changes.
+- **Local read-only production-data view:** `npm run setup:local-readonly` creates
+  gitignored `.env.readonly`; `npm start` (or `npm run start:readonly`) serves the current UI on
+  port 3001 against live Supabase rows as a synthetic local admin. It skips
+  Postgres startup schema patches, sets its sole DB session to
+  `default_transaction_read_only=on`, and `src/server.js` rejects every unsafe
+  API method before repository/Telegram code runs. Use it for viewing/filtering
+  and Excel/CSV export verification only; mutation buttons must remain blocked.
+  `npm run verify:local-readonly` confirms visible production rows and the
+  read-only transaction. The configured Supabase login can still have write
+  privileges, so the HTTP guard and transaction setting are required safeguards;
+  it is not a production replica and must never be used for bot actions, OTP,
+  cron, or save/delete tests.
+  `npm run start:memory` retains the isolated in-memory server for disposable UI
+  work. Never use `npm run dev-telegram` as a safe viewer: it clears live bot
+  webhooks to start Telegram long-polling.
 - After every code change, review both `CLAUDE.md` and `AGENTS.md` and keep them
   aligned. No artificial changelog entries.
 
@@ -324,12 +339,12 @@ Vercel Cron** for hosting/scheduling.
   sheets** navbar page downloads
   `GET /api/confirmed-slots.xlsx?telegram_group_id=<id>` as a formatted Excel
   roster with `Telegram handle`, `Name`, then chronological
-  event-date columns formatted `3-Aug`. Confirmed shifts are stacked as
-  `Shift: <label>` lines in bordered, wrapped cells; the header is frozen and
+  event-date columns formatted `3-Aug`. Confirmed shifts are comma-separated as
+  `<label>` values in bordered, wrapped cells; the header is frozen and
   print-ready in landscape. `GET /api/confirmed-slots.csv` remains for
   integrations. Confirmed only; waiting-list excluded. People are keyed by
   immutable Telegram id (fallback handle/name). OFF/RD and staff-number fields
-  are not in the current data model. Both export endpoints assert access to the
+  are not in the current data model. Excel derives light-purple OFF for empty date cells and dark-purple RD for the last empty date in each row; rows with every date worked have no OFF/RD. The Name column follows Telegram handle in Excel; both identity columns are frozen. CSV remains unchanged. Both export endpoints assert access to the
   requested group. The Home group command dialog and Polls page expose no
   deployment download. The navbar page uses auth-wrapped `fetch` and downloads
   `deployment-sheet-<group>-<start>-to-<end>.xlsx`.
@@ -453,12 +468,15 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   not by bot-specific `telegram_groups.id`. When multiple managed bots share one
   chat, admins see one group option and selecting it includes matching poll rows
   from every bot still allowed by the bot filter.
-  The Polls page is a monitoring surface and intentionally exposes no bulk
-  **Clear all polls** or individual **Remove** controls. Default polls are
-  omitted through the template's persistent **Skip event dates** mechanism,
-  rather than deleted and recreated by the scheduler. Protected backend deletion
-  endpoints remain available for maintenance and accept `CLEAR_POLLS_PASSWORD`
-  only; `CRON_SECRET` must not be accepted as a fallback.
+  The Polls page exposes **Clear filtered polls** only to admins. It snapshots
+  the visible poll IDs, sends a fresh Login_bot OTP to the signed-in admin
+  without requesting their handle, and issues a five-minute action token bound
+  to that exact sorted ID set. A token cannot clear a changed filter result.
+  Clearing removes those website poll records and dependent responses and
+  confirmations, but not Telegram messages or weekly templates. Default polls
+  can still be omitted before release through persistent **Skip event dates**.
+  Protected maintenance deletion endpoints continue to accept
+  `CLEAR_POLLS_PASSWORD`; `CRON_SECRET` must not be accepted as a fallback.
   The weekly template form uses a dedicated vertical layout for release controls,
   shift rows, and Add/Save actions; do not put those controls back into the global
   `form` grid because it causes overlap with the custom time wheel pickers. Its
@@ -501,14 +519,23 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   `template-testing:<uuid>` at the temporary release day/time and suppresses the
   production rows for that schedule while the test is armed or running. Telegram
   text is production-identical. PSA keeps its configured weekly confirmation;
-  Wheelchair sends its first configured confirmation normally and later event
-  confirmations five minutes apart. A test is rejected if confirmations would
+  Wheelchair anchors its first confirmation to the configured time immediately
+  after the test release (or the following day if that time has passed), then
+  sends later event confirmations five minutes apart. A test is rejected if confirmations would
   overlap the next production release. After every confirmation is sent, cleanup
   deletes the internal test events and their dependent website data, clears
   Testing mode, and exposes the untouched production template again. Telegram
   messages are deleted manually. Polls has no testing cleanup/reset button and
   refreshes every 15 seconds. Legacy rehearsal/reset endpoints remain only for
   compatibility and are not part of the primary UI.
+  Before arming Testing, the browser confirmation lists the resolved release
+  date/time and each non-skipped poll date. Weekly-summary mode also lists its
+  confirmation date/time; per-event mode lists only its confirmation time.
+  While a test remains `armed`, the selected template editor and its visible
+  Managed Telegram group row expose **Disarm Testing** for each authorized user.
+  It clears only the temporary override and restores the saved production
+  template. Running tests cannot be disarmed and still complete through the
+  automatic cleanup lifecycle.
   Confirmation delivery is service-specific: PSA due confirmations are
   grouped into one Telegram message per group/resolved confirmation time, with
   each event date and its confirmed timeslots listed in date order. Wheelchair
@@ -593,3 +620,19 @@ cross-user controls only to admins. The shared readability floor is approximatel
 17px for body and control text, 14-15px for compact labels and table headers, and
 larger proportional headings; mobile navigation remains compact without dropping
 back to the former small-text scale.
+
+The local UI preview (`node scripts/dev-ui-preview.js`) binds to 127.0.0.1:4322
+ and includes synthetic 8B_KR_NX Flexi deployment data for 21–27 Sep 2026.
+Open /deployments.html and Download Excel to exercise the production exporter
+without a database or real Telegram calls.
+
+Excel matches the roster reference with grey headers, light green for one day shift
+(0730-1230 / 730-1230 or 1230-1630), darker green for both day shifts together, and blue for any 2000-0000 shift. Timings have no Shift: prefix.
+Actual-roster local preview: `node scripts/dev-ui-preview.js --actual-roster`
+requires DATABASE_URL in the ignored local .env. It reads only the exact
+PREVIEW_GROUP_NAME (default 8B_KR_NX Flexi) for 21–27 September 2026, using a
+read-only transaction without repository startup migrations, then disconnects.
+The roster stays in memory; restart to refresh it. Missing data fails explicitly
+rather than falling back to samples. Deployment visibility still requires all
+polls in the batch to have sent/updated confirmations, as in production.
+Excel exports include a Colour legend below the roster after a blank spacer, with matching green/blue shift swatches and purple OFF/RD explanations (RD is labelled "Rest day"); the legend is outside the roster filter.

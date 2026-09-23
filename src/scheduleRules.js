@@ -32,6 +32,28 @@ function eventWeekDateTime(eventDate, targetDay, targetTime) {
   return `${date}T${String(targetTime).slice(0, 5)}`;
 }
 
+function confirmationDateTimeForEvent(eventDate, {
+  confirmationSendType = 'weekly_summary',
+  confirmationDaysBeforeEvent = 1,
+  confirmationDay,
+  confirmationTime,
+}, fallback) {
+  const time = String(confirmationTime || '').slice(0, 5);
+  if (confirmationSendType === 'per_event_day') {
+    return `${addLocalDays(eventDate, -Number(confirmationDaysBeforeEvent ?? 1))}T${time || '08:00'}`;
+  }
+  return confirmationDay !== undefined && time
+    ? eventWeekDateTime(eventDate, confirmationDay, time)
+    : fallback;
+}
+
+function testingConfirmationDateTime(releaseDate, releaseTime, confirmationTime) {
+  const time = String(confirmationTime || '').slice(0, 5) || '08:00';
+  const release = String(releaseTime || '').slice(0, 5);
+  const confirmationDate = time > release ? releaseDate : addLocalDays(releaseDate, 1);
+  return `${confirmationDate}T${time}`;
+}
+
 function managedTimingForEvent({
   service,
   eventDate,
@@ -39,6 +61,8 @@ function managedTimingForEvent({
   releaseTime = DEFAULT_RELEASE_TIME,
   releaseDate: explicitReleaseDate,
   gapWeeks = 0,
+  confirmationSendType = 'weekly_summary',
+  confirmationDaysBeforeEvent = 1,
   confirmationDay,
   confirmationTime,
   validateAfterRelease = true,
@@ -46,13 +70,6 @@ function managedTimingForEvent({
   const normalizedService = service === 'PSA' ? 'PSA' : 'WHCL';
   const releaseDate = explicitReleaseDate || releaseDateForEvent(eventDate, releaseDay, gapWeeks);
   const releaseAt = `${releaseDate}T${releaseTime}`;
-  const configuredConfirmationAt = confirmationDay !== undefined && confirmationTime
-    ? eventWeekDateTime(
-      eventDate,
-      confirmationDay,
-      confirmationTime
-    )
-    : null;
 
   if (normalizedService === 'PSA') {
     const cutoffAt = eventWeekDateTime(
@@ -63,7 +80,12 @@ function managedTimingForEvent({
     const timing = {
       releaseAt,
       closeAt: cutoffAt,
-      confirmationAt: configuredConfirmationAt || `${cutoffAt.slice(0, 10)}T${PSA_CONFIRMATION_TIME}`,
+      confirmationAt: confirmationDateTimeForEvent(eventDate, {
+        confirmationSendType,
+        confirmationDaysBeforeEvent,
+        confirmationDay,
+        confirmationTime,
+      }, `${cutoffAt.slice(0, 10)}T${PSA_CONFIRMATION_TIME}`),
     };
     if (validateAfterRelease && timing.closeAt <= releaseAt) {
       throw new RangeError('PSA release must be before Friday 08:00 in the week before the event week');
@@ -78,7 +100,12 @@ function managedTimingForEvent({
   const timing = {
     releaseAt,
     closeAt: `${cutoffDate}T${WHCL_CUTOFF_TIME}`,
-    confirmationAt: configuredConfirmationAt || `${cutoffDate}T${WHCL_CUTOFF_TIME}`,
+    confirmationAt: confirmationDateTimeForEvent(eventDate, {
+      confirmationSendType,
+      confirmationDaysBeforeEvent,
+      confirmationDay,
+      confirmationTime,
+    }, `${cutoffDate}T${WHCL_CUTOFF_TIME}`),
   };
   if (validateAfterRelease && timing.closeAt <= releaseAt) {
     throw new RangeError('Release date and time must be before the event cutoff');
@@ -120,4 +147,5 @@ module.exports = {
   managedTimingForEvent,
   nextWeekRange,
   releaseRangeForService,
+  testingConfirmationDateTime,
 };

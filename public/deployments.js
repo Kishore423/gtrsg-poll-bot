@@ -4,6 +4,9 @@ const nativeFetch = window.gtrsgAuth.nativeFetch;
 const list = document.getElementById('deployment-list');
 const status = document.getElementById('deployment-status');
 const refreshButton = document.getElementById('refresh-deployments');
+const adminFilter = document.getElementById('deployment-admin-filter');
+const userFilter = document.getElementById('deployment-user-filter');
+let selectedBotId = '';
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -73,7 +76,9 @@ async function loadDeploymentSheets() {
   refreshButton.disabled = true;
   setStatus('Loading confirmed deployment sheets...');
   try {
-    const response = await fetch('/api/deployment-sheets');
+    const params = new URLSearchParams();
+    if (userFilter?.value) params.set('bot_id', userFilter.value);
+    const response = await fetch(`/api/deployment-sheets${params.size ? `?${params}` : ''}`);
     const result = await response.json().catch(() => []);
     if (!response.ok) throw new Error(result.error || 'Unable to load deployment sheets');
     renderSheets(result);
@@ -92,6 +97,7 @@ async function downloadSheet(button) {
     start_date: button.dataset.startDate,
     end_date: button.dataset.endDate,
   });
+  if (selectedBotId) params.set('bot_id', selectedBotId);
   setStatus(`Building ${button.dataset.groupName} deployment sheet...`);
   try {
     const response = await fetch(`/api/confirmed-slots.xlsx?${params}`);
@@ -124,11 +130,39 @@ list.addEventListener('click', (event) => {
   if (button) void downloadSheet(button);
 });
 refreshButton.addEventListener('click', loadDeploymentSheets);
+userFilter?.addEventListener('change', () => {
+  selectedBotId = userFilter.value;
+  void loadDeploymentSheets();
+});
+
+function userLabel(user) {
+  const name = user.telegram_display_name || user.telegram_username || 'Unnamed user';
+  const bot = user.bot?.telegram_username
+    ? `@${user.bot.telegram_username}`
+    : user.bot?.bot_name || 'No bot assigned';
+  return `${name} - ${bot}`;
+}
+
+async function loadAdminUserFilter() {
+  if (!adminFilter || !userFilter) return;
+  const response = await fetch('/api/admin/users');
+  const users = await response.json().catch(() => []);
+  if (!response.ok) throw new Error(users.error || 'Unable to load users');
+  const assignedUsers = users
+    .filter((user) => user.enabled !== false && user.bot_id)
+    .sort((a, b) => userLabel(a).localeCompare(userLabel(b)));
+  userFilter.innerHTML = [
+    '<option value="">All users</option>',
+    ...assignedUsers.map((user) =>
+      `<option value="${escapeHtml(user.bot_id)}">${escapeHtml(userLabel(user))}</option>`),
+  ].join('');
+  adminFilter.hidden = false;
+}
 
 async function bootstrap() {
   window.gtrsgAuth.init();
   const config = await (await nativeFetch('/api/auth-config')).json();
-  if (config.required && !window.gtrsgAuth.hasSession()) {
+  if (config.required && !config.localReadOnly && !window.gtrsgAuth.hasSession()) {
     window.gtrsgAuth.showLogin();
     return;
   }
@@ -149,6 +183,7 @@ async function bootstrap() {
   document.querySelectorAll('[data-admin-nav]').forEach((item) => {
     item.hidden = user.role !== 'admin';
   });
+  if (user.role === 'admin') await loadAdminUserFilter();
   if (user.role !== 'admin' && !user.deployment_sheets_enabled) {
     window.location.replace('/');
     return;

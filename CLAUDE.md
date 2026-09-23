@@ -396,20 +396,20 @@ The app currently ships BOTH, selected at runtime:
   sheets** navbar page downloads
   `GET /api/confirmed-slots.xlsx?telegram_group_id=<id>` as a formatted Excel
   roster with `Telegram handle`, `Name`, then chronological
-  event-date columns formatted `3-Aug`. Confirmed shifts are stacked as
-  `Shift: <label>` lines in bordered, wrapped cells; the header is frozen and
+  event-date columns formatted `3-Aug`. Confirmed shifts are comma-separated as
+  `<label>` values in bordered, wrapped cells; the header is frozen and
   print-ready in landscape. `GET /api/confirmed-slots.csv` remains for
   integrations. Confirmed only; waiting-list excluded. People are keyed by
   immutable Telegram id (fallback handle/name). OFF/RD and staff-number fields
-  are not in the current data model. Both export endpoints assert access to the
+  are not in the current data model. Excel derives light-purple OFF for empty date cells and dark-purple RD for the last empty date in each row; rows with every date worked have no OFF/RD. The Name column follows Telegram handle in Excel; both identity columns are frozen. CSV remains unchanged. Both export endpoints assert access to the
   requested group. The Home group command dialog and Polls page expose no
   deployment download. The navbar page uses auth-wrapped `fetch` and downloads
   `deployment-sheet-<group>-<start>-to-<end>.xlsx`.
   Normal users enable the account-level panel from their navbar account menu;
   admins receive it by default and see groups across every user/bot. The panel
   lists one download per Telegram group and
-  Monday-Sunday event batch only after every existing poll in that batch has a
-  `sent` or `updated` confirmation. It retains the latest four distinct confirmed
+  Monday-Sunday event batch after that group has at least one `sent` or `updated`
+  confirmation; future unconfirmed dates remain blank in the export. It retains the latest four distinct confirmed
   event weeks dynamically; older sheets disappear without deleting poll history.
   Normal users remain scoped to all groups belonging to their one assigned bot.
 - Production requires `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
@@ -575,6 +575,18 @@ live only in Vercel env + the local (gitignored) `.env`.
   read-only. Clicking an existing avatar opens a full-screen profile viewer with a
   translucent black backdrop, an X close control, and a self-only delete action.
   Bot tokens and immutable bot handles are intentionally never displayed.
+- **Local read-only production-data view:** `npm run setup:local-readonly` writes
+  a gitignored `.env.readonly`; `npm start` (or `npm run start:readonly`) serves the current UI on
+  port 3001 against live Supabase rows as a synthetic local admin. It skips
+  Postgres startup schema patches, sets its sole DB session to
+  `default_transaction_read_only=on`, and `src/server.js` rejects unsafe API
+  methods before repository or Telegram code runs. Use it only for
+  viewing/filtering and Excel/CSV-export verification. The configured Supabase
+  login can still have write privileges, so this relies on the HTTP guard and
+  transaction setting; it must never be used for bot actions, OTP, cron, or
+  save/delete tests. `npm run start:memory` retains the isolated in-memory
+  server for disposable UI work. Never use `npm run dev-telegram` as a safe
+  viewer: it clears live bot webhooks to start Telegram long-polling.
 - `webhook_events` had traffic (20 rows) → both bots' production webhooks are
   registered and delivering.
 - PSA group's observed weekly schedule at the time: release Fri 17:00,
@@ -594,6 +606,13 @@ live only in Vercel env + the local (gitignored) `.env`.
 - `npm install` — install deps (Node 24.x).
 - `npm test` — Node test suite (47 tests; no DB/bots needed).
 - `DB_DRIVER=memory npm start` — local server, memory DB, legacy workflow on.
+- `npm run setup:local-readonly` then `npm run start:readonly` — local admin view
+  of live Supabase data on `http://localhost:3001`. It loads the gitignored
+  `.env.readonly`, uses one database session with `default_transaction_read_only`
+  enabled, skips repository startup schema patches, and rejects all non-GET/HEAD/
+  OPTIONS API requests before they can reach the database or Telegram. Verify it
+  with `npm run verify:local-readonly`. This is for reading, filters, details, and
+  export testing only; local mutation buttons intentionally return 403.
 - `npm run dev-telegram` — local long-polling harness to test the real WHCL/PSA
   bots end to end (memory DB; deletes webhooks; resets on restart).
 - `node scripts/dev-ui-preview.js` — seeded UI preview on port 4322.
@@ -620,3 +639,19 @@ cross-user controls only to admins. The shared readability floor is approximatel
 17px for body and control text, 14-15px for compact labels and table headers, and
 larger proportional headings; mobile navigation remains compact without dropping
 back to the former small-text scale.
+
+The local UI preview (`node scripts/dev-ui-preview.js`) binds to 127.0.0.1:4322
+ and includes synthetic 8B_KR_NX Flexi deployment data for 21–27 Sep 2026.
+Open /deployments.html and Download Excel to exercise the production exporter
+without a database or real Telegram calls.
+
+Excel matches the roster reference with grey headers, light green for one day shift
+(0730-1230 / 730-1230 or 1230-1630), darker green for both day shifts together, and blue for any 2000-0000 shift. Timings have no Shift: prefix.
+Actual-roster local preview: `node scripts/dev-ui-preview.js --actual-roster`
+requires DATABASE_URL in the ignored local .env. It reads only the exact
+PREVIEW_GROUP_NAME (default 8B_KR_NX Flexi) for 21–27 September 2026, using a
+read-only transaction without repository startup migrations, then disconnects.
+The roster stays in memory; restart to refresh it. Missing data fails explicitly
+rather than falling back to samples. Deployment visibility still requires all
+polls in the batch to have sent/updated confirmations, as in production.
+Excel exports include a Colour legend below the roster after a blank spacer, with matching green/blue shift swatches and purple OFF/RD explanations (RD is labelled "Rest day"); the legend is outside the roster filter.

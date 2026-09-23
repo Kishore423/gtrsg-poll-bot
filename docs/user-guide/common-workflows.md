@@ -27,10 +27,19 @@ See [Getting started](getting-started.md) for detail.
 
 1. On **Home**, click the group row, then **Weekly default template**.
 2. Choose the **release day** and **release time**.
-3. Add shift rows; for each, set the start and end time with the scroll-wheel
+3. Set **Gap weeks**. This controls how many full weeks sit between the release
+   week and the event week.
+4. Choose the **Confirmation send type**:
+   - **One big confirmation on a weekday and time** sends one combined
+     confirmation for the whole event week. Choose the confirmation day and time
+     in the week before the event week.
+   - **Day-by-day confirmation, one day before each poll** sends each event date
+     separately. Choose only the confirmation time; the date is always one day
+     before each poll's event date.
+5. Add shift rows; for each, set the start and end time with the scroll-wheel
    picker. The label fills in automatically from the times.
-4. Check the **Telegram poll preview** below the shifts.
-5. Click **Save default**.
+6. Check the **Telegram poll preview** below the shifts.
+7. Click **Save default**.
 
 The button shows **Saving...** while the template is being stored. If the release,
 cutoff, or confirmation timing is not valid, the page shows an **Unable to save**
@@ -60,15 +69,25 @@ been sent to Telegram, skipping cannot recall it.
 2. Change the release, confirmation, gap-week, shift, and capacity fields to the
    temporary values you want to test.
 3. Turn on **Testing mode** beside **Save default**, then click **Save default**.
-4. Cron releases one temporary Monday-Sunday batch at its configured release
+4. Review the confirmation message before arming the test. It lists the release
+   date/time and every non-skipped poll date. Weekly-summary mode also shows its
+   confirmation date/time; day-by-day mode shows only its confirmation time.
+   If the temporary fields are wrong, select **Disarm Testing** before cron
+   starts the batch. The action appears in the selected template editor and on
+   every armed Telegram group visible to your account. This discards
+   only the temporary testing fields and leaves the saved production weekly
+   template unchanged.
+5. Cron releases one temporary Monday-Sunday batch at its configured release
    weekday and time. Telegram text and options are identical to production.
-5. Wheelchair's first confirmation follows the configured confirmation time;
-   later event confirmations send five minutes apart. PSA's weekly summary sends
-   once at its configured weekday and time.
-6. After the final confirmation succeeds, the website automatically removes the
+6. For **Day-by-day confirmation, one day before each poll**, the first testing
+   confirmation uses the configured time immediately after the testing release.
+   If that time has already passed, it uses the following day. The remaining
+   confirmations send five minutes apart. A weekly summary sends once at its
+   configured weekday/time.
+7. After the final confirmation succeeds, the website automatically removes the
    testing batch and votes, switches Testing mode off, and restores the complete
    previous production template.
-7. Delete the testing poll and confirmation messages manually in Telegram.
+8. Delete the testing poll and confirmation messages manually in Telegram.
 
 Testing mode is one-shot. It does not overwrite production release,
 confirmation, gap-week, shift, or capacity settings. A test is rejected if its
@@ -91,6 +110,21 @@ in that group's Monday-Sunday batch has had its confirmation sent. The panel
 shows the latest four confirmed event weeks across all groups available to your
 account. Admins see groups across all users; normal users see only groups
 belonging to their assigned bot.
+
+## Clear polls matching the current filters (admins only)
+
+1. On **Polls**, choose the bot, event date, Telegram group, and poll type filters.
+2. Review the displayed rows, then select **Clear filtered polls**.
+3. Confirm the displayed number of matching polls and select **Authenticate via OTP**.
+   The website uses the signed-in admin identity; do not enter the Telegram
+   username again.
+4. Enter the six-digit code sent by the Login bot and select **Verify and clear
+   polls**.
+
+The OTP authorization lasts five minutes and applies only to the poll IDs shown
+when the clear dialog was opened. The action deletes matching website poll
+records, responses, and confirmations. It does not delete existing Telegram
+messages or weekly templates.
 
 ## View a poll's details
 
