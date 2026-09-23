@@ -41,8 +41,11 @@ const adminManagedUserFilter = document.getElementById('admin-managed-user-filte
 const adminManagedUserSearch = document.getElementById('admin-managed-user-search');
 const adminManagedUserOptions = document.getElementById('admin-managed-user-options');
 const adminManagedUserSummary = document.getElementById('admin-managed-user-summary');
+const confirmationDayField = document.getElementById('confirmation-day-field');
+const confirmationDaysBeforeField = document.getElementById('confirmation-days-before-field');
 const weeklyTestingMode = document.getElementById('weekly-testing-mode');
 const weeklyTestingStatus = document.getElementById('weekly-testing-status');
+const weeklyDisarmTesting = document.getElementById('weekly-disarm-testing');
 
 const SERVICE_ORDER = ['WHCL', 'PSA'];
 const SERVICE_NAMES = { WHCL: 'Wheelchair', PSA: 'Passenger Service Associate' };
@@ -179,6 +182,22 @@ function eventWeekDateTime(eventDate, targetDay, targetTime) {
   return `${date}T${String(targetTime).slice(0, 5)}`;
 }
 
+function confirmationDateTimeForEvent(eventDateVal, schedule, fallback) {
+  const sendType = schedule?.confirmation_send_type || 'weekly_summary';
+  const confirmationTime = String(schedule?.confirmation_time || '').slice(0, 5);
+  if (sendType === 'per_event_day') {
+    const daysBefore = Number.isInteger(Number(schedule?.confirmation_days_before_event))
+      ? Number(schedule.confirmation_days_before_event)
+      : 1;
+    return `${addLocalDays(eventDateVal, -daysBefore)}T${confirmationTime || '08:00'}`;
+  }
+  const hasConfiguredConfirmation = schedule?.confirmation_day_of_week !== undefined &&
+    Boolean(confirmationTime);
+  return hasConfiguredConfirmation
+    ? eventWeekDateTime(eventDateVal, Number(schedule.confirmation_day_of_week), confirmationTime)
+    : fallback;
+}
+
 function serviceForGroup(telegramGroupId) {
   const group = managedGroups.find((g) => g.id === telegramGroupId);
   return group?.service || group?.bot_id || 'WHCL';
@@ -190,16 +209,6 @@ function managedTimingForEvent({ telegramGroupId, eventDateVal, schedule }) {
   const releaseTime = (schedule?.poll_release_time || DEFAULT_RELEASE_TIME).slice(0, 5);
   const releaseDate = releaseDateForEvent(eventDateVal, releaseDay, schedule?.gap_weeks);
   const releaseAt = `${releaseDate}T${releaseTime}`;
-  const hasConfiguredConfirmation = schedule?.confirmation_day_of_week !== undefined &&
-    Boolean(schedule?.confirmation_time);
-  const configuredConfirmationAt = hasConfiguredConfirmation
-    ? eventWeekDateTime(
-      eventDateVal,
-      Number(schedule.confirmation_day_of_week),
-      String(schedule.confirmation_time),
-    )
-    : null;
-
   if (service === 'PSA') {
     const cutoffAt = eventWeekDateTime(
       eventDateVal,
@@ -210,7 +219,7 @@ function managedTimingForEvent({ telegramGroupId, eventDateVal, schedule }) {
       service,
       releaseAt,
       closeAt: cutoffAt,
-      confirmationAt: configuredConfirmationAt || `${cutoffAt.slice(0, 10)}T12:00`,
+      confirmationAt: confirmationDateTimeForEvent(eventDateVal, schedule, `${cutoffAt.slice(0, 10)}T12:00`),
     };
     if (timing.closeAt <= releaseAt) {
       throw new RangeError('PSA release must be before Friday 08:00 in the week before the event week');
@@ -226,7 +235,7 @@ function managedTimingForEvent({ telegramGroupId, eventDateVal, schedule }) {
     service,
     releaseAt,
     closeAt: `${cutoffDate}T08:00`,
-    confirmationAt: configuredConfirmationAt || `${cutoffDate}T08:00`,
+    confirmationAt: confirmationDateTimeForEvent(eventDateVal, schedule, `${cutoffDate}T08:00`),
   };
   if (timing.closeAt <= releaseAt) {
     throw new RangeError('Release date and time must be before the event cutoff');
@@ -329,6 +338,32 @@ function scheduleForGroup(telegramGroupId) {
   return managedSchedules.find((s) => s.telegram_group_id === telegramGroupId && s.enabled);
 }
 
+function syncManagedGroupTestingActions() {
+  managedGroupList.querySelectorAll('.managed-group-row').forEach((row) => {
+    const actions = row.querySelector(':scope > span:last-child');
+    if (!actions) return;
+    actions.querySelectorAll('.disarm-group-testing, .testing-running-status').forEach((item) => item.remove());
+    const schedule = scheduleForGroup(row.dataset.id);
+    if (schedule?.testing_status === 'armed') {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'danger-link disarm-group-testing';
+      button.dataset.scheduleId = schedule.id;
+      button.textContent = 'Disarm Testing';
+      button.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        await disarmTestingSchedule(schedule);
+      });
+      actions.prepend(button);
+    } else if (schedule?.testing_status === 'running') {
+      const status = document.createElement('span');
+      status.className = 'status-pill testing-running-status';
+      status.textContent = 'Testing running';
+      actions.prepend(status);
+    }
+  });
+}
+
 function replaceManagedSchedule(schedule) {
   const index = managedSchedules.findIndex((item) =>
     item.id === schedule.id ||
@@ -355,6 +390,8 @@ function scheduleFromSaveResult(result, body) {
     confirmation_day_of_week: body.confirmation_day_of_week,
     confirmation_time: body.confirmation_time,
     gap_weeks: body.gap_weeks,
+    confirmation_send_type: body.confirmation_send_type,
+    confirmation_days_before_event: body.confirmation_days_before_event,
     timezone: body.timezone,
     enabled: body.enabled !== false,
     shifts: body.shifts,
@@ -362,16 +399,63 @@ function scheduleFromSaveResult(result, body) {
 }
 
 function defaultScheduleForGroup(telegramGroupId) {
+  const service = serviceForGroup(telegramGroupId);
+  const confirmationSendType = service === 'PSA' ? 'weekly_summary' : 'per_event_day';
   return {
     telegram_group_id: telegramGroupId,
     poll_release_day_of_week: DEFAULT_RELEASE_DAY,
     poll_release_time: DEFAULT_RELEASE_TIME,
     confirmation_day_of_week: 5,
-    confirmation_time: '12:00',
+    confirmation_time: confirmationSendType === 'per_event_day' ? '08:00' : '12:00',
     gap_weeks: 0,
+    confirmation_send_type: confirmationSendType,
+    confirmation_days_before_event: confirmationSendType === 'per_event_day' ? 1 : null,
     timezone: 'Asia/Singapore',
     enabled: true,
   };
+}
+
+function syncConfirmationTypeFields() {
+  const sendType = managedScheduleForm.elements.confirmation_send_type?.value || 'weekly_summary';
+  if (confirmationDayField) confirmationDayField.hidden = sendType !== 'weekly_summary';
+  if (confirmationDaysBeforeField) confirmationDaysBeforeField.hidden = sendType !== 'per_event_day';
+  if (managedScheduleForm.elements.confirmation_day_of_week) {
+    managedScheduleForm.elements.confirmation_day_of_week.required = sendType === 'weekly_summary';
+  }
+  if (managedScheduleForm.elements.confirmation_days_before_event) {
+    managedScheduleForm.elements.confirmation_days_before_event.value = '1';
+    managedScheduleForm.elements.confirmation_days_before_event.required = false;
+  }
+}
+
+function managedTemplateFormSchedule() {
+  return {
+    poll_release_day_of_week: Number(managedScheduleForm.elements.poll_release_day_of_week.value || DEFAULT_RELEASE_DAY),
+    poll_release_time: managedScheduleForm.elements.poll_release_time.value || DEFAULT_RELEASE_TIME,
+    confirmation_day_of_week: Number(managedScheduleForm.elements.confirmation_day_of_week.value ?? 5),
+    confirmation_time: managedScheduleForm.elements.confirmation_time.value || '12:00',
+    gap_weeks: Number(managedScheduleForm.elements.gap_weeks.value || 0),
+    confirmation_send_type: managedScheduleForm.elements.confirmation_send_type.value || 'weekly_summary',
+    confirmation_days_before_event: Number(managedScheduleForm.elements.confirmation_days_before_event.value || 1),
+  };
+}
+
+function previewUsesTestingTemplate() {
+  return Boolean(weeklyTestingMode?.checked);
+}
+
+function managedTemplatePreviewSchedule(telegramGroupId) {
+  const savedSchedule = scheduleForGroup(telegramGroupId);
+  if (!savedSchedule || previewUsesTestingTemplate()) return managedTemplateFormSchedule();
+  return savedSchedule;
+}
+
+function managedTemplatePreviewShifts(schedule) {
+  if (previewUsesTestingTemplate()) {
+    return normalizeShifts(shiftRowsFromContainer(weeklyShiftEditor)
+      .filter((shift) => shift.complete && Number.isFinite(shift.capacity)));
+  }
+  return Array.isArray(schedule?.shifts) ? normalizeShifts(schedule.shifts) : [];
 }
 
 function addDays(dateText, days) {
@@ -396,6 +480,29 @@ function batchRangeForReleaseDate(releaseDate, gapWeeks = 0) {
   const daysUntilMonday = ((1 - weekday(releaseDate) + 7) % 7) || 7;
   const start = addDays(releaseDate, daysUntilMonday + Number(gapWeeks || 0) * 7);
   return Array.from({ length: 7 }, (_, index) => addDays(start, index));
+}
+
+function testingArmConfirmationMessage(schedule, releaseDate, eventDates) {
+  const excludedDates = new Set(pollExclusions.map((item) =>
+    String(item.event_date).slice(0, 10)));
+  const pollDates = eventDates.filter((date) => !excludedDates.has(date));
+  const pollDateLines = pollDates.length
+    ? pollDates.map((date) => `- ${formatLocalDate(date)}`).join('\n')
+    : '- No poll dates; every date in this batch is skipped.';
+  const confirmationTime = String(schedule.confirmation_time || '').slice(0, 5);
+  const confirmationLine = schedule.confirmation_send_type === 'per_event_day'
+    ? `Confirmation time: ${confirmationTime}\nLater Testing confirmations: every 5 minutes`
+    : (() => {
+      const confirmationAt = confirmationDateTimeForEvent(eventDates[0], schedule, '');
+      const [confirmationDate, time] = confirmationAt.split('T');
+      return `Confirmation: ${formatLocalDate(confirmationDate)} at ${time}`;
+    })();
+
+  return 'Arm one Testing mode batch with these temporary settings?\n\n' +
+    `Poll release: ${formatLocalDate(releaseDate)} at ${String(schedule.poll_release_time).slice(0, 5)}\n\n` +
+    `Poll dates:\n${pollDateLines}\n\n` +
+    `${confirmationLine}\n\n` +
+    'Telegram poll and confirmation text will match production. The complete previous production template restores automatically after the final confirmation.';
 }
 
 function generatedShiftLabel(start, end) {
@@ -502,6 +609,7 @@ function buildScheduledPollPayload({
     timezone: 'Asia/Singapore',
     confirmation_header: isTest ? 'Confirmed slots (TEST)' : 'Confirmed slots',
     confirmation_footer: isTest ? 'take note pls (TEST)' : 'take note pls',
+    confirmation_send_type: schedule.confirmation_send_type || 'weekly_summary',
     show_waiting_list: false,
     show_empty_shifts: false,
     is_custom: Boolean(isCustom),
@@ -529,7 +637,10 @@ function timingSummaryHtml({ telegramGroupId, eventDateVal, schedule, confirmati
   const gapRule = gapWeeks === 0
     ? 'next Monday-Sunday event week'
     : `${gapWeeks} full gap ${gapWeeks === 1 ? 'week' : 'weeks'} before the Monday-Sunday event week`;
-  const confirmationRule = `Confirmation ${DAY_NAMES[effectiveSchedule.confirmation_day_of_week]} ${String(effectiveSchedule.confirmation_time).slice(0, 5)} in the week before the event week.`;
+  const sendType = effectiveSchedule.confirmation_send_type || 'weekly_summary';
+  const confirmationRule = sendType === 'per_event_day'
+    ? `Confirmation ${Number(effectiveSchedule.confirmation_days_before_event ?? 1)} day${Number(effectiveSchedule.confirmation_days_before_event ?? 1) === 1 ? '' : 's'} before each event at ${String(effectiveSchedule.confirmation_time).slice(0, 5)}.`
+    : `Confirmation ${DAY_NAMES[effectiveSchedule.confirmation_day_of_week]} ${String(effectiveSchedule.confirmation_time).slice(0, 5)} in the week before the event week.`;
   const rule = service === 'PSA'
     ? `Cutoff Friday before the event week at 08:00. ${confirmationRule}`
     : `Cutoff 1 day before each event at 08:00. ${confirmationRule}`;
@@ -798,9 +909,16 @@ function syncWeeklyTemplateFormFromSavedSchedule(telegramGroupId) {
   managedScheduleForm.elements.confirmation_day_of_week.value = String(schedule.confirmation_day_of_week ?? 5);
   managedScheduleForm.elements.confirmation_time.value = String(schedule.confirmation_time || '12:00').slice(0, 5);
   managedScheduleForm.elements.gap_weeks.value = String(schedule.gap_weeks ?? 0);
+  managedScheduleForm.elements.confirmation_send_type.value = schedule.confirmation_send_type || 'weekly_summary';
+  managedScheduleForm.elements.confirmation_days_before_event.value = String(schedule.confirmation_days_before_event ?? 1);
+  syncConfirmationTypeFields();
   if (weeklyTestingMode) {
     weeklyTestingMode.checked = Boolean(storedSchedule?.testing_mode);
     weeklyTestingMode.disabled = !storedSchedule || Boolean(storedSchedule.testing_mode);
+  }
+  if (weeklyDisarmTesting) {
+    weeklyDisarmTesting.hidden = storedSchedule?.testing_status !== 'armed';
+    weeklyDisarmTesting.disabled = false;
   }
   const saveButton = managedScheduleForm.querySelector('[type="submit"]');
   if (saveButton && !managedScheduleSavePending) {
@@ -900,13 +1018,7 @@ addShiftRow();
 
 function updateTemplateTimingPreview() {
   const telegramGroupId = managedScheduleForm.elements.telegram_group_id.value;
-  const schedule = {
-    poll_release_day_of_week: Number(managedScheduleForm.elements.poll_release_day_of_week.value),
-    poll_release_time: managedScheduleForm.elements.poll_release_time.value,
-    confirmation_day_of_week: Number(managedScheduleForm.elements.confirmation_day_of_week.value),
-    confirmation_time: managedScheduleForm.elements.confirmation_time.value,
-    gap_weeks: Number(managedScheduleForm.elements.gap_weeks.value),
-  };
+  const schedule = managedTemplatePreviewSchedule(telegramGroupId);
   templateTimingPreview.innerHTML = timingSummaryHtml({ telegramGroupId, schedule });
 }
 
@@ -919,19 +1031,8 @@ function updateTemplatePollPreview() {
     return;
   }
 
-  const savedSchedule = scheduleForGroup(telegramGroupId);
-  const formSchedule = {
-    poll_release_day_of_week: Number(managedScheduleForm.elements.poll_release_day_of_week.value || DEFAULT_RELEASE_DAY),
-    poll_release_time: managedScheduleForm.elements.poll_release_time.value || DEFAULT_RELEASE_TIME,
-    confirmation_day_of_week: Number(managedScheduleForm.elements.confirmation_day_of_week.value ?? 5),
-    confirmation_time: managedScheduleForm.elements.confirmation_time.value || '12:00',
-    gap_weeks: Number(managedScheduleForm.elements.gap_weeks.value || 0),
-  };
-  const schedule = formSchedule;
-  const editorShifts = normalizeShifts(shiftRowsFromContainer(weeklyShiftEditor)
-    .filter((shift) => shift.complete && Number.isFinite(shift.capacity)));
-  const savedShifts = Array.isArray(savedSchedule?.shifts) ? normalizeShifts(savedSchedule.shifts) : [];
-  const shifts = editorShifts.length ? editorShifts : savedShifts;
+  const schedule = managedTemplatePreviewSchedule(telegramGroupId);
+  const shifts = managedTemplatePreviewShifts(schedule);
 
   if (!shifts.length) {
     weeklyTemplatePollPreview.innerHTML = 'Save template shifts to preview the Telegram poll options.';
@@ -1090,7 +1191,25 @@ managedScheduleForm.elements.confirmation_day_of_week.addEventListener('change',
   updateTemplateTimingPreview();
   updateTemplatePollPreview();
 });
+managedScheduleForm.elements.confirmation_send_type.addEventListener('change', () => {
+  syncConfirmationTypeFields();
+  updateTemplateTimingPreview();
+  updateTemplatePollPreview();
+});
+managedScheduleForm.elements.confirmation_days_before_event.addEventListener('input', () => {
+  updateTemplateTimingPreview();
+  updateTemplatePollPreview();
+});
 managedScheduleForm.elements.gap_weeks.addEventListener('input', () => {
+  updateTemplateTimingPreview();
+  updateTemplatePollPreview();
+});
+weeklyTestingMode?.addEventListener('change', () => {
+  if (weeklyTestingStatus) {
+    weeklyTestingStatus.textContent = weeklyTestingMode.checked
+      ? 'Testing mode will use these temporary settings for one cron-driven batch. The saved production template will remain unchanged.'
+      : 'Testing mode is off. Saving updates the production weekly default.';
+  }
   updateTemplateTimingPreview();
   updateTemplatePollPreview();
 });
@@ -1229,6 +1348,7 @@ async function loadManagedGroups() {
       ? `Verification message sent to ${result.group_name}.`
       : `Error: ${result.error}`, response.ok && result.message_sent ? 'success' : 'error');
   }));
+  syncManagedGroupTestingActions();
 }
 
 managedGroupForm.addEventListener('submit', async (event) => {
@@ -1257,7 +1377,10 @@ async function loadManagedSchedules({ syncEditor = true } = {}) {
         const group = managedGroups.find((item) => item.id === s.telegram_group_id);
         const service = group?.service || group?.bot_id || 'WHCL';
         const groupLabel = group ? managedGroupOptionLabel(group) : s.group_name;
-        const confirmationDay = DAY_NAMES[s.confirmation_day_of_week];
+        const sendType = s.confirmation_send_type || 'weekly_summary';
+        const confirmationDescription = sendType === 'per_event_day'
+          ? `Confirmation: 1 day before each event at ${String(s.confirmation_time).slice(0, 5)}.`
+          : `Confirmation: one weekly message on ${DAY_NAMES[s.confirmation_day_of_week]} at ${String(s.confirmation_time).slice(0, 5)} in the week before events.`;
         const serviceRule = service === 'PSA'
           ? 'PSA cutoff Fri before event week at 08:00'
           : 'Wheelchair cutoff day-before 08:00';
@@ -1273,7 +1396,7 @@ async function loadManagedSchedules({ syncEditor = true } = {}) {
             <span>
               ${servicePill(service)} <strong>${escapeHtml(groupLabel)}</strong>: 
               Release: ${releaseDay} at ${String(s.poll_release_time).slice(0, 5)}<br>
-            <small style="color: var(--ink-soft);">${escapeHtml(gapDescription)}. Confirmation: ${confirmationDay} at ${String(s.confirmation_time).slice(0, 5)} in the week before events. ${escapeHtml(serviceRule)}.</small><br>
+            <small style="color: var(--ink-soft);">${escapeHtml(gapDescription)}. ${escapeHtml(confirmationDescription)} ${escapeHtml(serviceRule)}.</small><br>
             <small style="color: var(--ink-soft);">${escapeHtml(shiftsDesc)}</small>
           </span>
           <button type="button" class="danger-link delete-schedule" data-id="${s.id}">Delete</button>
@@ -1283,6 +1406,7 @@ async function loadManagedSchedules({ syncEditor = true } = {}) {
   if (syncEditor) syncWeeklyTemplateFormFromSavedSchedule(managedScheduleForm.elements.telegram_group_id.value);
   syncOneOffPollFormFromSavedSchedule(advancePollForm.elements.telegram_group_id.value);
   refreshManagedPreviews();
+  syncManagedGroupTestingActions();
   if (managedScheduleList) {
     managedScheduleList.querySelectorAll('.delete-schedule').forEach((button) => button.addEventListener('click', async () => {
       if (!window.confirm('Delete this weekly default schedule?')) return;
@@ -1319,20 +1443,26 @@ managedScheduleForm.addEventListener('submit', async (event) => {
     body.shifts = shifts;
     body.poll_release_day_of_week = Number(body.poll_release_day_of_week);
     body.confirmation_day_of_week = Number(body.confirmation_day_of_week);
+    body.confirmation_send_type = body.confirmation_send_type || 'weekly_summary';
+    body.confirmation_days_before_event = body.confirmation_send_type === 'per_event_day'
+      ? Number(body.confirmation_days_before_event || 1)
+      : null;
     body.gap_weeks = Number(body.gap_weeks);
     body.testing_mode = Boolean(weeklyTestingMode?.checked);
 
     const releaseDate = nextReleaseDateForSchedule(body);
-    const eventDate = batchRangeForReleaseDate(releaseDate, body.gap_weeks)[0];
-    managedTimingForEvent({
-      telegramGroupId: body.telegram_group_id,
-      eventDateVal: eventDate,
-      schedule: body,
-    });
+    const eventDates = batchRangeForReleaseDate(releaseDate, body.gap_weeks);
+    const eventDate = eventDates[0];
+    if (!body.testing_mode || body.confirmation_send_type !== 'per_event_day') {
+      managedTimingForEvent({
+        telegramGroupId: body.telegram_group_id,
+        eventDateVal: eventDate,
+        schedule: body,
+      });
+    }
 
     if (body.testing_mode && !window.confirm(
-      'Arm one Testing mode batch with these temporary settings?\n\n' +
-      'Telegram poll and confirmation text will match production. The first daily confirmation uses the configured time and later daily confirmations send five minutes apart. The complete previous production template restores automatically after the final confirmation.'
+      testingArmConfirmationMessage(body, releaseDate, eventDates)
     )) return;
 
     setStatus(body.testing_mode ? 'Arming Testing mode...' : 'Saving weekly default...', 'pending');
@@ -1381,6 +1511,52 @@ managedScheduleForm.addEventListener('submit', async (event) => {
       submitButton.textContent = submitButtonLabel || 'Save default';
     }
   }
+});
+
+async function disarmTestingSchedule(schedule) {
+  if (!schedule || schedule.testing_status !== 'armed') return;
+  const group = groupById(schedule.telegram_group_id);
+  const groupName = group?.group_name || schedule.group_name || 'this Telegram group';
+  if (!window.confirm(
+    `Disarm the Testing batch for ${groupName}?\n\nThe temporary testing fields will be discarded. The saved production weekly template will remain unchanged.`
+  )) return;
+
+  if (weeklyDisarmTesting && schedule.telegram_group_id === selectedManagedGroupId) {
+    weeklyDisarmTesting.disabled = true;
+  }
+  setStatus('Disarming Testing mode...', 'pending');
+  try {
+    const response = await fetch(`/api/weekly-schedules/${schedule.id}/disarm-testing`, {
+      method: 'POST',
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      const message = result.error || 'Testing mode could not be disarmed.';
+      setStatus(`Error: ${message}`, 'error');
+      showActionFeedback(message, { title: 'Unable to disarm', tone: 'error' });
+      return;
+    }
+    await loadManagedSchedules();
+    setStatus('Testing mode disarmed.', 'success');
+    showActionFeedback(
+      'The temporary Testing batch was cancelled. The saved production weekly template is active and unchanged.',
+      { title: 'Testing mode disarmed' }
+    );
+  } catch (error) {
+    const message = error?.message || 'Testing mode could not be disarmed.';
+    setStatus(`Error: ${message}`, 'error');
+    showActionFeedback(message, { title: 'Unable to disarm', tone: 'error' });
+  } finally {
+    const current = scheduleForGroup(selectedManagedGroupId);
+    if (weeklyDisarmTesting) {
+      weeklyDisarmTesting.disabled = false;
+      weeklyDisarmTesting.hidden = current?.testing_status !== 'armed';
+    }
+  }
+}
+
+weeklyDisarmTesting?.addEventListener('click', async () => {
+  await disarmTestingSchedule(scheduleForGroup(selectedManagedGroupId));
 });
 
 // renderScheduledPolls and loadScheduledPolls moved to polls.js

@@ -51,6 +51,9 @@
     .empty-state i, .empty-state svg { width: 2rem; height: 2rem; margin-bottom: 0.6rem; color: var(--green); }
     .page-status { min-height: 1.5rem; margin: 0 0 1rem; color: var(--ink-soft); }
     .page-status.error { color: var(--red); }
+    .deployment-admin-filter { display: grid; gap: 0.45rem; margin: 0 0 1rem; padding: 1rem 1.25rem; }
+    .deployment-admin-filter label { font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; color: var(--ink-soft); }
+    .deployment-admin-filter select { min-height: 3rem; width: min(100%, 26rem); padding: 0.7rem 0.85rem; border: 1px solid var(--border); border-radius: 3px; background: #fff; color: var(--ink); font: inherit; }
     .auth-overlay { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 1.5rem; background: rgba(20,42,51,0.58); }
     .auth-dialog { width: min(32rem, 100%); padding: 1.8rem; border-radius: 4px; background: #fff; box-shadow: 0 26px 70px rgba(8,23,29,0.28); }
     .auth-dialog h2 { margin: 0 0 0.35rem; }
@@ -141,6 +144,10 @@
       <p>Confirmed weekly deployments across the Telegram groups available to your account.</p>
     </header>
     <p id="deployment-status" class="page-status" aria-live="polite"></p>
+    <section id="deployment-admin-filter" class="card deployment-admin-filter" hidden>
+      <label for="deployment-user-filter">User</label>
+      <select id="deployment-user-filter"></select>
+    </section>
     <section class="card deployment-ledger" aria-labelledby="deployment-ledger-title">
       <div class="card-header">
         <div>

@@ -163,6 +163,7 @@ test('managed workflows stay bound to the clicked group without duplicate select
   assert.match(html, /id="weekly-testing-mode"/);
   assert.match(html, /Testing mode/);
   assert.match(html, /id="weekly-testing-status"/);
+  assert.match(html, /id="weekly-disarm-testing"[^>]*hidden>Disarm Testing/);
   assert.doesNotMatch(html, /id="weekly-start-rehearsal"/);
   assert.doesNotMatch(html, /Start batch rehearsal/);
   assert.doesNotMatch(html, /id="weekly-rehearsal-start-at"/);
@@ -170,7 +171,19 @@ test('managed workflows stay bound to the clicked group without duplicate select
   assert.doesNotMatch(html, /id="weekly-send-event-date"/);
   assert.doesNotMatch(html, /id="weekly-send-confirmation-delay"/);
   assert.match(source, /body\.testing_mode = Boolean\(weeklyTestingMode\?\.checked\)/);
+  assert.match(source, /weeklyTestingMode\?\.addEventListener\('change'/);
+  assert.match(source, /Testing mode will use these temporary settings for one cron-driven batch/);
+  assert.match(source, /function previewUsesTestingTemplate\(\)/);
+  assert.match(source, /if \(!savedSchedule \|\| previewUsesTestingTemplate\(\)\) return managedTemplateFormSchedule\(\)/);
+  assert.match(source, /updateTemplateTimingPreview\(\);\s*updateTemplatePollPreview\(\);/);
   assert.match(source, /The complete previous production template restores automatically/);
+  assert.match(source, /storedSchedule\?\.testing_status !== 'armed'/);
+  assert.match(source, /function syncManagedGroupTestingActions\(\)/);
+  assert.match(source, /button\.className = 'danger-link disarm-group-testing'/);
+  assert.match(source, /function disarmTestingSchedule\(schedule\)/);
+  assert.match(source, /await disarmTestingSchedule\(schedule\)/);
+  assert.match(source, /\/api\/weekly-schedules\/\$\{schedule\.id\}\/disarm-testing/);
+  assert.match(source, /The saved production weekly template will remain unchanged/);
   assert.doesNotMatch(source, /Actual batch rehearsal sent/);
   assert.doesNotMatch(source, /release_date: releaseDate/);
   assert.match(html, /id="send-test-poll"/);
@@ -235,6 +248,20 @@ test('Polls page gives admins a bot filter backed by the Admin roster', () => {
   assert.match(source, /fetch\('\/api\/admin\/users'/);
   assert.match(source, /String\(poll\.bot_id\)\s*!== botFilter/);
   assert.match(source, /managedGroups\.filter\(\(group\) => String\(group\.bot_id\) === botFilter\)/);
+});
+
+test('Polls filtered clear is admin-only and requires Login bot OTP', () => {
+  const html = readFileSync(join(__dirname, '..', 'public', 'polls.html'), 'utf8');
+  const source = readFileSync(join(__dirname, '..', 'public', 'polls.js'), 'utf8');
+  assert.match(html, /id="clear-filtered-polls-btn"[^>]*hidden/);
+  assert.match(html, /Authenticate via OTP/);
+  assert.doesNotMatch(html, /clear-filtered[^\n]*username/i);
+  assert.match(source, /clearFilteredPollIds = visiblePolls\.map/);
+  assert.match(source, /currentUser\?\.role !== 'admin'/);
+  assert.match(source, /\/api\/admin\/scheduled-polls\/clear-otp\/request/);
+  assert.match(source, /\/api\/admin\/scheduled-polls\/clear-otp\/verify/);
+  assert.match(source, /\/api\/admin\/scheduled-polls\/clear-filtered/);
+  assert.match(source, /authorization_token: authorization\.access_token/);
 });
 
 test('Polls date order is selectable for both users and admins', () => {
@@ -377,11 +404,16 @@ test('weekly and one-off forms expose editable confirmation timing', () => {
   assert.equal((html.match(/<h[23][^>]*>Weekly default template<\/h[23]>/g) || []).length, 1);
   assert.match(html, /\.template-release-grid[\s\S]*?align-items: start/);
   assert.match(html, /\.one-off-timing-grid[\s\S]*?align-items: start/);
+  assert.match(html, /Confirmation mode/);
+  assert.match(html, /One big confirmation on a weekday and time/);
+  assert.match(html, /Day-by-day confirmation, one day before each poll/);
   assert.match(html, /select name="confirmation_day_of_week"/);
   assert.match(html, /data-name="confirmation_time"/);
   assert.match(html, /input name="gap_weeks" type="number" min="0" max="12"/);
-  assert.match(html, /Confirmation day/);
+  assert.match(html, /Weekly confirmation day/);
   assert.match(html, /week before the event week/);
+  assert.match(html, /input name="confirmation_days_before_event" type="hidden" value="1"/);
+  assert.match(source, /confirmation_days_before_event\.value = '1'/);
   assert.match(html, /input type="date" name="confirmation_date" required/);
   assert.match(html, /data-name="one_off_confirmation_time"/);
   assert.doesNotMatch(source, /body\.confirmation_time = '12:00'/);
@@ -412,6 +444,22 @@ test('weekly default save allows only one in-flight submission and completion po
   assert.match(source, /catch \(error\) \{[\s\S]*The weekly default could not be saved/);
   assert.match(source, /finally \{[\s\S]*managedScheduleSavePending = false/);
   assert.equal((source.match(/showActionFeedback\(`Default template saved for/g) || []).length, 1);
+});
+
+test('per-event Testing mode bypasses production chronology validation', () => {
+  const source = readFileSync(join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(source,
+    /if \(!body\.testing_mode \|\| body\.confirmation_send_type !== 'per_event_day'\)/);
+});
+
+test('Testing confirmation previews poll dates and mode-specific confirmation timing', () => {
+  const source = readFileSync(join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(source, /function testingArmConfirmationMessage\(schedule, releaseDate, eventDates\)/);
+  assert.match(source, /eventDates\.filter\(\(date\) => !excludedDates\.has\(date\)\)/);
+  assert.match(source, /`Poll dates:\\n\$\{pollDateLines\}/);
+  assert.match(source, /`Confirmation time: \$\{confirmationTime\}/);
+  assert.match(source, /`Confirmation: \$\{formatLocalDate\(confirmationDate\)\} at \$\{time\}`/);
+  assert.match(source, /testingArmConfirmationMessage\(body, releaseDate, eventDates\)/);
 });
 
 test('deployment sheets are downloaded only from the dedicated navbar page', () => {

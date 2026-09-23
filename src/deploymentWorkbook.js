@@ -7,34 +7,63 @@ const THIN_BORDER = {
   right: { style: 'thin', color: { argb: 'FF1F2937' } },
 };
 
+const DEPLOYMENT_FILLS = Object.freeze({
+  empty: 'FFA6A6A6',
+  regular: 'FF92D050',
+  shortDay: 'FFC6E0B4',
+  off: 'FFE4D7F5',
+  restDay: 'FF7030A0',
+  nineG: 'FFF4B183',
+  overnight: 'FF9DC3E6',
+  assessment: 'FFFFD966',
+});
+
 function shiftCellText(value) {
   const labels = String(value || '')
     .split(' ; ')
+    .map((label) => label.trim().replace(/^shift\s*:\s*/i, '').trim())
     .filter(Boolean);
   if (!labels.length) return null;
-  return labels.join(', ');
+  const text = labels.join(', ');
+  if (/assessment/i.test(text) && !text.includes('\n')) {
+    return text.replace(/\s+(?=\d{4}\s*-\s*\d{4})/, '\n');
+  }
+  return text;
 }
 
-function shiftCellColor(value) {
-  if (value === 'OFF') return 'FFE4D7F5';
-  if (value === 'RD') return 'FF7030A0';
-  const times = String(value || '').replace(/:/g, '').match(/\d{3,4}-\d{3,4}/g) || [];
-  const normalized = times.map((time) => time.split('-').map((part) => part.padStart(4, '0')).join('-'));
-  if (normalized.includes('2000-0000')) return 'FF9DC3E6';
-  const dayShifts = new Set(normalized.filter((time) => ['0730-1230', '1230-1630'].includes(time)));
-  if (dayShifts.size === 2) return 'FF92D050';
-  if (dayShifts.size === 1) return 'FFC6E0B4';
-  return null;
+function deploymentCellStyle(value) {
+  const text = String(value || '').trim();
+  const normalized = text.replace(/\s+/g, ' ').toUpperCase();
+  if (!normalized) return { category: 'empty', fill: DEPLOYMENT_FILLS.empty };
+  if (/^RD$/.test(normalized)) {
+    return { category: 'restDay', fill: DEPLOYMENT_FILLS.restDay };
+  }
+  if (/^OFF$/.test(normalized)) {
+    return { category: 'off', fill: DEPLOYMENT_FILLS.off };
+  }
+  if (/ASSESSMENT/.test(normalized)) {
+    return { category: 'assessment', fill: DEPLOYMENT_FILLS.assessment };
+  }
+  if (/(^|[^A-Z0-9])9G([^A-Z0-9]|$)/.test(normalized)) {
+    return { category: 'nineG', fill: DEPLOYMENT_FILLS.nineG };
+  }
+  if (/(^|[,\s])20\d{2}\s*-\s*(?:00|0[0-6])\d{2}/.test(normalized)) {
+    return { category: 'overnight', fill: DEPLOYMENT_FILLS.overnight };
+  }
+  if (/^0730\s*-\s*1230$/.test(normalized)) {
+    return { category: 'shortDay', fill: DEPLOYMENT_FILLS.shortDay };
+  }
+  return { category: 'regular', fill: DEPLOYMENT_FILLS.regular };
 }
 
-async function buildDeploymentWorkbook({ dates, people, formatDate }) {
+async function buildDeploymentWorkbook({ dates, people, formatDate, title = 'Deployment Sheet' }) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Gops poll';
   workbook.subject = 'Confirmed Telegram poll deployments';
   workbook.created = new Date();
 
   const sheet = workbook.addWorksheet('Deployment', {
-    views: [{ state: 'frozen', xSplit: 2, ySplit: 1 }],
+    views: [{ state: 'frozen', xSplit: 2, ySplit: 2 }],
     pageSetup: {
       orientation: 'landscape',
       fitToPage: true,
@@ -44,21 +73,31 @@ async function buildDeploymentWorkbook({ dates, people, formatDate }) {
       margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
     },
   });
-  sheet.pageSetup.printTitlesRow = '1:1';
+  sheet.views[0].showGridLines = false;
+  sheet.pageSetup.printTitlesRow = '1:2';
   sheet.properties.defaultRowHeight = 36;
 
   sheet.columns = [
-    { header: 'Telegram handle', key: 'handle', width: 20 },
-    { header: 'Name', key: 'name', width: 34 },
+    { key: 'handle', width: 20 },
+    { key: 'name', width: 34 },
     ...dates.map((date, index) => ({
-      header: formatDate(date),
       key: `date_${index}`,
       width: 27,
     })),
   ];
 
-  const header = sheet.getRow(1);
-  header.height = 36;
+  const finalColumn = 2 + dates.length;
+  sheet.mergeCells(1, 1, 1, finalColumn);
+  const titleCell = sheet.getCell(1, 1);
+  titleCell.value = title;
+  titleCell.font = { name: 'Arial', size: 14, bold: true, color: { argb: 'FF17202A' } };
+  titleCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
+  sheet.getRow(1).height = 40;
+
+  const header = sheet.getRow(2);
+  header.values = ['Telegram handle', 'Name', ...dates.map(formatDate)];
+  header.height = 34;
   header.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FF17202A' } };
   header.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
   header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } };
@@ -75,7 +114,7 @@ async function buildDeploymentWorkbook({ dates, people, formatDate }) {
     });
     const row = sheet.addRow(rowValues);
     const maxLines = Math.max(1, ...dates.map((date) =>
-      person.shifts[date] ? String(person.shifts[date]).split(' ; ').length : 0
+      shiftCellText(person.shifts[date])?.split('\n').length || 0
     ));
     row.height = Math.min(120, Math.max(36, 18 + (Math.ceil(maxLines / 2) * 16)));
   }
@@ -83,20 +122,27 @@ async function buildDeploymentWorkbook({ dates, people, formatDate }) {
   sheet.eachRow((row, rowNumber) => {
     row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
       cell.border = THIN_BORDER;
-      if (rowNumber === 1) return;
+      if (rowNumber <= 2) return;
+      if (columnNumber > 2) {
+        const style = deploymentCellStyle(cell.value);
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: style.fill },
+        };
+      } else {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFFFFFF' },
+        };
+      }
       cell.font = {
         name: 'Arial',
         size: columnNumber <= 2 ? 10 : 9,
         bold: columnNumber > 2 && Boolean(cell.value),
         color: { argb: columnNumber > 2 && cell.value === 'RD' ? 'FFFFFFFF' : 'FF17202A' },
       };
-      const fillColor = columnNumber > 2 ? shiftCellColor(cell.value) : null;
-      if (fillColor) {
-        cell.fill = {
-          type: 'pattern', pattern: 'solid',
-          fgColor: { argb: fillColor },
-        };
-      }
       cell.alignment = {
         horizontal: 'center',
         vertical: 'middle',
@@ -106,8 +152,8 @@ async function buildDeploymentWorkbook({ dates, people, formatDate }) {
   });
 
   sheet.autoFilter = {
-    from: { row: 1, column: 1 },
-    to: { row: 1, column: 2 + dates.length },
+    from: { row: 2, column: 1 },
+    to: { row: 2, column: finalColumn },
   };
 
   sheet.addRow([]).height = 12;
@@ -128,7 +174,7 @@ async function buildDeploymentWorkbook({ dates, people, formatDate }) {
     row.font = { name: 'Arial', size: 10, color: { argb: 'FF17202A' } };
     row.alignment = { vertical: 'middle', wrapText: true };
     const swatch = row.getCell(1);
-    swatch.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: shiftCellColor(label) } };
+    swatch.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: deploymentCellStyle(label).fill } };
     swatch.border = THIN_BORDER;
     swatch.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
     swatch.font = { name: 'Arial', size: 9, bold: true, color: { argb: label === 'RD' ? 'FFFFFFFF' : 'FF17202A' } };
@@ -138,4 +184,9 @@ async function buildDeploymentWorkbook({ dates, people, formatDate }) {
   return Buffer.from(buffer);
 }
 
-module.exports = { buildDeploymentWorkbook, shiftCellText };
+module.exports = {
+  DEPLOYMENT_FILLS,
+  buildDeploymentWorkbook,
+  deploymentCellStyle,
+  shiftCellText,
+};

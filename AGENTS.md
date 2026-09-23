@@ -453,12 +453,15 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   not by bot-specific `telegram_groups.id`. When multiple managed bots share one
   chat, admins see one group option and selecting it includes matching poll rows
   from every bot still allowed by the bot filter.
-  The Polls page is a monitoring surface and intentionally exposes no bulk
-  **Clear all polls** or individual **Remove** controls. Default polls are
-  omitted through the template's persistent **Skip event dates** mechanism,
-  rather than deleted and recreated by the scheduler. Protected backend deletion
-  endpoints remain available for maintenance and accept `CLEAR_POLLS_PASSWORD`
-  only; `CRON_SECRET` must not be accepted as a fallback.
+  The Polls page exposes **Clear filtered polls** only to admins. It snapshots
+  the visible poll IDs, sends a fresh Login_bot OTP to the signed-in admin
+  without requesting their handle, and issues a five-minute action token bound
+  to that exact sorted ID set. A token cannot clear a changed filter result.
+  Clearing removes those website poll records and dependent responses and
+  confirmations, but not Telegram messages or weekly templates. Default polls
+  can still be omitted before release through persistent **Skip event dates**.
+  Protected maintenance deletion endpoints continue to accept
+  `CLEAR_POLLS_PASSWORD`; `CRON_SECRET` must not be accepted as a fallback.
   The weekly template form uses a dedicated vertical layout for release controls,
   shift rows, and Add/Save actions; do not put those controls back into the global
   `form` grid because it causes overlap with the custom time wheel pickers. Its
@@ -501,14 +504,23 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   `template-testing:<uuid>` at the temporary release day/time and suppresses the
   production rows for that schedule while the test is armed or running. Telegram
   text is production-identical. PSA keeps its configured weekly confirmation;
-  Wheelchair sends its first configured confirmation normally and later event
-  confirmations five minutes apart. A test is rejected if confirmations would
+  Wheelchair anchors its first confirmation to the configured time immediately
+  after the test release (or the following day if that time has passed), then
+  sends later event confirmations five minutes apart. A test is rejected if confirmations would
   overlap the next production release. After every confirmation is sent, cleanup
   deletes the internal test events and their dependent website data, clears
   Testing mode, and exposes the untouched production template again. Telegram
   messages are deleted manually. Polls has no testing cleanup/reset button and
   refreshes every 15 seconds. Legacy rehearsal/reset endpoints remain only for
   compatibility and are not part of the primary UI.
+  Before arming Testing, the browser confirmation lists the resolved release
+  date/time and each non-skipped poll date. Weekly-summary mode also lists its
+  confirmation date/time; per-event mode lists only its confirmation time.
+  While a test remains `armed`, the selected template editor and its visible
+  Managed Telegram group row expose **Disarm Testing** for each authorized user.
+  It clears only the temporary override and restores the saved production
+  template. Running tests cannot be disarmed and still complete through the
+  automatic cleanup lifecycle.
   Confirmation delivery is service-specific: PSA due confirmations are
   grouped into one Telegram message per group/resolved confirmation time, with
   each event date and its confirmed timeslots listed in date order. Wheelchair

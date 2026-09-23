@@ -1,45 +1,99 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const ExcelJS = require('exceljs');
-const { buildDeploymentWorkbook } = require('../src/deploymentWorkbook');
+const {
+  DEPLOYMENT_FILLS,
+  buildDeploymentWorkbook,
+  deploymentCellStyle,
+  shiftCellText,
+} = require('../src/deploymentWorkbook');
 
-test('deployment export marks only the last empty day RD and retains working shifts', async () => {
-  const dates = ['2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24'];
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(await buildDeploymentWorkbook({
-    dates, formatDate: (date) => date,
-    people: [
-      { handle: '@mixed', name: 'Hidden name', shifts: { [dates[1]]: '0800-1200', [dates[3]]: '1200-1600' } },
-      { handle: '@full', shifts: Object.fromEntries(dates.map((date) => [date, '0800-1200'])) },
-      { handle: '@empty', shifts: {} },
-    ],
-  }));
-  const sheet = workbook.getWorksheet('Deployment');
-  assert.deepEqual(sheet.getRow(1).values.slice(1), ['Telegram handle', 'Name', ...dates]);
-  assert.deepEqual(sheet.getRow(2).values.slice(1), ['@mixed', 'Hidden name', 'OFF', '0800-1200', 'RD', '1200-1600']);
-  assert.equal(sheet.getCell('C2').fill.fgColor.argb, 'FFE4D7F5');
-  assert.equal(sheet.getCell('E2').fill.fgColor.argb, 'FF7030A0');
-  assert.equal(sheet.getCell('E2').font.color.argb, 'FFFFFFFF');
-  assert.ok(sheet.getRow(3).values.slice(3).every((value) => value === '0800-1200'));
-  assert.deepEqual(sheet.getRow(4).values.slice(3), ['OFF', 'OFF', 'OFF', 'RD']);
-  assert.equal(sheet.views[0].xSplit, 2);
-  assert.equal(sheet.autoFilter, 'A1:F1');
+test('deployment shift text matches the roster layout', () => {
+  assert.equal(shiftCellText('0730-1130 ; 1230-1630'), '0730-1130, 1230-1630');
+  assert.equal(shiftCellText('Shift: 0730-1130 ; Shift: 1230-1630'), '0730-1130, 1230-1630');
+  assert.equal(shiftCellText('8B ASSESSMENT 0730-1130'), '8B ASSESSMENT\n0730-1130');
+  assert.equal(shiftCellText(''), null);
 });
 
-test('deployment export preserves reference shift colours and plain comma-separated timings', async () => {
-  const dates = ['a', 'b', 'c', 'd', 'e', 'f'];
+test('deployment duty categories use the reference colour palette', () => {
+  assert.deepEqual(deploymentCellStyle(''), { category: 'empty', fill: DEPLOYMENT_FILLS.empty });
+  assert.deepEqual(deploymentCellStyle('0730-1130, 1230-1630'), {
+    category: 'regular', fill: DEPLOYMENT_FILLS.regular,
+  });
+  assert.deepEqual(deploymentCellStyle('0730-1230'), {
+    category: 'shortDay', fill: DEPLOYMENT_FILLS.shortDay,
+  });
+  assert.deepEqual(deploymentCellStyle('OFF'), { category: 'off', fill: DEPLOYMENT_FILLS.off });
+  assert.deepEqual(deploymentCellStyle('RD'), {
+    category: 'restDay', fill: DEPLOYMENT_FILLS.restDay,
+  });
+  assert.deepEqual(deploymentCellStyle('1100-1500 / 9G'), {
+    category: 'nineG', fill: DEPLOYMENT_FILLS.nineG,
+  });
+  assert.deepEqual(deploymentCellStyle('2000-0000'), {
+    category: 'overnight', fill: DEPLOYMENT_FILLS.overnight,
+  });
+  assert.deepEqual(deploymentCellStyle('8B ASSESSMENT\n0730-1130'), {
+    category: 'assessment', fill: DEPLOYMENT_FILLS.assessment,
+  });
+});
+
+test('deployment workbook applies the weekly roster colours to each date cell', async () => {
+  const dates = [
+    '2026-08-24', '2026-08-25', '2026-08-26', '2026-08-27',
+    '2026-08-28', '2026-08-29', '2026-08-30',
+  ];
+  const people = [{
+    handle: '@alice',
+    name: 'Alice',
+    shifts: {
+      '2026-08-24': 'Shift: 0730-1130 ; Shift: 1230-1630',
+      '2026-08-25': '0730-1230',
+      '2026-08-26': 'OFF',
+      '2026-08-27': 'RD',
+      '2026-08-28': '1100-1500 / 9G',
+      '2026-08-29': '2000-0000',
+      '2026-08-30': '8B ASSESSMENT 0730-1130',
+    },
+  }, {
+    handle: '@bob',
+    name: 'Bob',
+    shifts: {},
+  }];
+  const buffer = await buildDeploymentWorkbook({
+    dates,
+    people,
+    title: '8B_KR_NX Flexi - Deployment Sheet - 24 Aug 2026 to 30 Aug 2026',
+    formatDate: (value) => value.slice(8),
+  });
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(await buildDeploymentWorkbook({
-    dates, formatDate: (date) => date,
-    people: [{ handle: '@staff', shifts: {
-      a: '730-1230', b: '0730-1230 ; 1230-1630', c: '2000-0000',
-      d: '0730-1230 ; 1230-1630 ; 2000-0000', e: '1230-1630', f: '0730-1230',
-    } }],
-  }));
+  await workbook.xlsx.load(buffer);
   const sheet = workbook.getWorksheet('Deployment');
-  assert.equal(sheet.getCell('A1').fill.fgColor.argb, 'FFD9D9D9');
-  assert.equal(sheet.getCell('D2').value, '0730-1230, 1230-1630');
-  for (const [cell, colour] of Object.entries({ C2: 'FFC6E0B4', D2: 'FF92D050', E2: 'FF9DC3E6', F2: 'FF9DC3E6', G2: 'FFC6E0B4', H2: 'FFC6E0B4' })) {
-    assert.equal(sheet.getCell(cell).fill.fgColor.argb, colour);
-  }
+
+  assert.equal(
+    sheet.getCell('A1').value,
+    '8B_KR_NX Flexi - Deployment Sheet - 24 Aug 2026 to 30 Aug 2026'
+  );
+  assert.equal(sheet.getCell('A1').isMerged, true);
+  assert.deepEqual(sheet.getRow(3).values.slice(1), [
+    '@alice', 'Alice', '0730-1130, 1230-1630', '0730-1230', 'OFF', 'RD',
+    '1100-1500 / 9G', '2000-0000', '8B ASSESSMENT\n0730-1130',
+  ]);
+  assert.deepEqual(
+    ['C3', 'D3', 'E3', 'F3', 'G3', 'H3', 'I3'].map((address) =>
+      sheet.getCell(address).fill.fgColor.argb),
+    [
+      DEPLOYMENT_FILLS.regular,
+      DEPLOYMENT_FILLS.shortDay,
+      DEPLOYMENT_FILLS.off,
+      DEPLOYMENT_FILLS.restDay,
+      DEPLOYMENT_FILLS.nineG,
+      DEPLOYMENT_FILLS.overnight,
+      DEPLOYMENT_FILLS.assessment,
+    ]
+  );
+  assert.equal(sheet.getCell('C4').fill.fgColor.argb, DEPLOYMENT_FILLS.empty);
+  assert.equal(sheet.views[0].xSplit, 2);
+  assert.equal(sheet.views[0].ySplit, 2);
+  assert.equal(sheet.getColumn(3).width, 27);
 });

@@ -4,6 +4,7 @@ const {
   managedTimingForEvent,
   eventDatesForReleaseDate,
   releaseRangeForService,
+  testingConfirmationDateTime,
 } = require('../src/scheduleRules');
 
 test('managed PSA timing cuts off Friday 8am and confirms Friday noon', () => {
@@ -67,6 +68,39 @@ test('managed timing keeps configured confirmation in the week before events', (
     confirmationDay: 3,
     confirmationTime: '17:00',
   }), /Confirmation date and time must be after release date and time/);
+});
+
+test('managed timing can confirm one day before each event', () => {
+  assert.deepEqual(managedTimingForEvent({
+    service: 'PSA',
+    eventDate: '2026-08-17',
+    releaseDate: '2026-08-05',
+    releaseDay: 3,
+    releaseTime: '17:00',
+    gapWeeks: 1,
+    confirmationSendType: 'per_event_day',
+    confirmationDaysBeforeEvent: 1,
+    confirmationTime: '08:00',
+  }), {
+    releaseAt: '2026-08-05T17:00',
+    closeAt: '2026-08-14T08:00',
+    confirmationAt: '2026-08-16T08:00',
+  });
+});
+
+test('Testing confirmation uses the next configured time after its release', () => {
+  assert.equal(
+    testingConfirmationDateTime('2026-08-14', '11:30', '11:40'),
+    '2026-08-14T11:40'
+  );
+  assert.equal(
+    testingConfirmationDateTime('2026-08-14', '17:30', '08:00'),
+    '2026-08-15T08:00'
+  );
+  assert.equal(
+    testingConfirmationDateTime('2026-08-14', '17:30', '17:30'),
+    '2026-08-15T17:30'
+  );
 });
 
 test('legacy release ranges are limited to one event week', () => {

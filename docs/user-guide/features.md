@@ -27,11 +27,20 @@ after Telegram accepts that message. Use it if you're unsure a group is wired up
 ### Weekly default template
 
 The weekly template is the recurring poll for a group. You choose the release day
-and time and the shift options (each shift has a start and end time chosen with a
-scroll-wheel time picker). A live **Telegram poll preview** shows the question and
+and time, the gap weeks before the event week, the confirmation send type, and
+the shift options (each shift has a start and end time chosen with a scroll-wheel
+time picker).
+
+Confirmation can be sent as **one big confirmation on a weekday and time** for
+the whole event week, or as **day-by-day confirmation, one day before each poll**
+at the selected time. A live **Telegram poll preview** shows the question and
 options as they will appear. Click **Save default** to store the template. While
 the save is running, the button stays unavailable so one action produces one
 completion message.
+
+When **Testing mode** is off, the timing details and Telegram poll preview show
+the saved production weekly template. Turn Testing mode on to preview the
+temporary testing values you are editing before saving the test.
 
 Once saved, the system automatically generates and sends the poll batch on the
 configured release day — you do not create each week's batch by hand.
@@ -58,16 +67,17 @@ Testing mode is a one-shot check of the complete weekly template:
   overwrite the production template.
 - Cron sends the temporary Monday-Sunday batch at the configured release time;
   Telegram poll and confirmation text has no testing label.
-- Wheelchair's first confirmation follows the configured time and later event
-  confirmations send five minutes apart. PSA's weekly summary remains one
-  message at its configured weekday and time.
+- A weekly summary follows its configured confirmation time. In per-event mode,
+  the first confirmation uses the configured time immediately after the test
+  release (or that time on the following day when it has already passed), then
+  the remaining event confirmations follow five minutes apart.
 - After the final confirmation, testing records and votes are removed and the
   complete production template is restored. Telegram messages are deleted
   manually.
 
 ## Polls page
 
-The Polls page is a **read-only monitoring view** of scheduled polls. Use
+The Polls page is the monitoring view for scheduled polls. Use
 **Date order** to show event dates in ascending (earliest first) or descending
 (latest first) order. The control is available to both users and admins.
 
@@ -79,7 +89,13 @@ The Polls page is a **read-only monitoring view** of scheduled polls. Use
   that poll.
 The Polls list refreshes automatically every 15 seconds, so completed Testing
 mode cleanup appears without a page reload.
-The Polls page has no permanent delete control. To stop a default poll from
+Admins can permanently clear the polls matching the current filters. The action
+requires a fresh six-digit OTP from the Login bot and does not ask for the
+Telegram username again. It deletes the matching website poll records,
+responses, and confirmations; it does not delete messages already visible in
+Telegram. Regular users cannot see or call this action.
+
+To stop a default poll from
 being sent, use **Skip days** on the Home page instead.
 
 ## Deployment sheets page

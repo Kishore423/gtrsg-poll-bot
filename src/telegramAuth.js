@@ -6,6 +6,7 @@ const OTP_SEND_WINDOW_MS = 60 * 60 * 1000;
 const OTP_MAX_SENDS_PER_WINDOW = 5;
 const OTP_MAX_ATTEMPTS = 5;
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
+const ACTION_AUTH_TTL_SECONDS = 5 * 60;
 
 function base64url(value) {
   return Buffer.from(value).toString('base64url');
@@ -247,6 +248,31 @@ function createTelegramAuth({
     };
   }
 
+  function issueActionAuthorization(user, action, binding) {
+    if (!user?.telegram_user_id || !action || !binding) {
+      throw authError('Unable to authorize this action', 400);
+    }
+    const accessToken = signSession(
+      sessionSecret,
+      user.telegram_user_id,
+      now(),
+      ACTION_AUTH_TTL_SECONDS,
+      { action: String(action), binding: String(binding) }
+    );
+    return {
+      access_token: accessToken,
+      expires_at: Math.floor(now() / 1000) + ACTION_AUTH_TTL_SECONDS,
+    };
+  }
+
+  function verifyActionAuthorization(token, user, action, binding) {
+    const claims = verifySession(sessionSecret, token, now());
+    return Boolean(claims && user?.telegram_user_id &&
+      String(claims.sub) === String(user.telegram_user_id) &&
+      String(claims.action || '') === String(action || '') &&
+      String(claims.binding || '') === String(binding || ''));
+  }
+
   async function completeFromUpdate(service, update) {
     const start = parsePrivateStart(update);
     if (!start) return null;
@@ -361,6 +387,8 @@ function createTelegramAuth({
   return {
     requestOtp,
     verifyOtp,
+    issueActionAuthorization,
+    verifyActionAuthorization,
     completeFromUpdate,
     verifyUser,
     syncUserIdentity,

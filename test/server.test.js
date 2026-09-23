@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const ExcelJS = require('exceljs');
 const { createMemoryDb } = require('../src/db/memory');
-const { createServer } = require('../src/server');
+const { createServer, _private: serverPrivate } = require('../src/server');
 
 function makeTelegram() {
   const polls = [];
@@ -761,6 +761,8 @@ test('tenant scoping permits own templates and custom replacements but blocks ot
     poll_release_time: '17:00',
     confirmation_day_of_week: 5,
     confirmation_time: '12:00',
+    confirmation_send_type: 'per_event_day',
+    confirmation_days_before_event: 1,
     gap_weeks: 1,
     shifts: [{ label: '0800-1700', start_time: '08:00', end_time: '17:00', capacity: 1 }],
   };
@@ -772,6 +774,8 @@ test('tenant scoping permits own templates and custom replacements but blocks ot
     assert.equal(ownTemplate.status, 200);
     const scheduleA = await ownTemplate.json();
     assert.equal(scheduleA.gap_weeks, 1);
+    assert.equal(scheduleA.confirmation_send_type, 'per_event_day');
+    assert.equal(scheduleA.confirmation_days_before_event, 1);
 
     const invalidGap = await fetch(`${baseUrl}/api/weekly-schedules`, json('PUT', {
       ...template,
@@ -1404,6 +1408,96 @@ test('single scheduled poll removal requires the configured clear password', asy
   }
 });
 
+test('admins clear only filtered polls after OTP step-up authentication', async () => {
+  const id1 = '11111111-1111-4111-8111-111111111111';
+  const id2 = '22222222-2222-4222-8222-222222222222';
+  const admin = { id: 'admin-1', telegram_user_id: '2132609363', role: 'admin' };
+  let requestedIdentifier = null;
+  let issuedBinding = null;
+  let deletedIds = null;
+  const db = {
+    async deleteScheduledPollsByIds(ids) {
+      deletedIds = ids;
+      return ids.map((id) => ({ id }));
+    },
+  };
+  const verifyUser = async (req) => {
+    const token = req.headers.authorization;
+    if (token === 'Bearer admin-session' || token === 'Bearer otp-session') return admin;
+    if (token === 'Bearer user-session') {
+      return { id: 'user-1', telegram_user_id: '1001', role: 'user' };
+    }
+    return null;
+  };
+  const server = createServer(db, makeTelegram(), {
+    enableLegacyWorkflow: false,
+    requireAdminAuth: true,
+    verifyUser,
+    async requestTelegramOtp(identifier) {
+      requestedIdentifier = identifier;
+      return { challenge_id: 'challenge-1', verifier: 'verifier-1', bot_username: 'Login_bot' };
+    },
+    async verifyTelegramOtp(challengeId, verifier, code) {
+      assert.equal(challengeId, 'challenge-1');
+      assert.equal(verifier, 'verifier-1');
+      assert.equal(code, '123456');
+      return { access_token: 'otp-session' };
+    },
+    issueActionAuthorization(user, action, binding) {
+      assert.equal(user.id, admin.id);
+      assert.equal(action, 'clear-filtered-polls');
+      issuedBinding = binding;
+      return { access_token: 'clear-authorization', expires_at: 123 };
+    },
+    verifyActionAuthorization(token, user, action, binding) {
+      return token === 'clear-authorization' && user.id === admin.id &&
+        action === 'clear-filtered-polls' && binding === issuedBinding;
+    },
+  }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const denied = await fetch(`${baseUrl}/api/admin/scheduled-polls/clear-otp/request`, {
+      method: 'POST', headers: { Authorization: 'Bearer user-session' },
+    });
+    assert.equal(denied.status, 403);
+
+    const requested = await fetch(`${baseUrl}/api/admin/scheduled-polls/clear-otp/request`, {
+      method: 'POST', headers: { Authorization: 'Bearer admin-session' },
+    });
+    assert.equal(requested.status, 202);
+    assert.equal(requestedIdentifier, admin.telegram_user_id);
+
+    const verified = await fetch(
+      `${baseUrl}/api/admin/scheduled-polls/clear-otp/verify`,
+      json('POST', {
+        challenge_id: 'challenge-1', verifier: 'verifier-1', code: '123456', poll_ids: [id2, id1],
+      }, { Authorization: 'Bearer admin-session' })
+    );
+    assert.equal(verified.status, 200);
+    assert.equal((await verified.json()).access_token, 'clear-authorization');
+
+    const mismatched = await fetch(
+      `${baseUrl}/api/admin/scheduled-polls/clear-filtered`,
+      json('POST', { poll_ids: [id1], authorization_token: 'clear-authorization' },
+        { Authorization: 'Bearer admin-session' })
+    );
+    assert.equal(mismatched.status, 401);
+    assert.equal(deletedIds, null);
+
+    const cleared = await fetch(
+      `${baseUrl}/api/admin/scheduled-polls/clear-filtered`,
+      json('POST', { poll_ids: [id2, id1], authorization_token: 'clear-authorization' },
+        { Authorization: 'Bearer admin-session' })
+    );
+    assert.equal(cleared.status, 200);
+    assert.deepEqual(await cleared.json(), { deleted: 2, ids: [id1, id2] });
+    assert.deepEqual(deletedIds, [id1, id2]);
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
+});
+
 test('weekly Testing mode arms a temporary override without replacing production fields', async () => {
   const groupId = '11111111-1111-4111-8111-111111111111';
   const production = {
@@ -1443,7 +1537,9 @@ test('weekly Testing mode arms a temporary override without replacing production
       poll_release_day_of_week: 5,
       poll_release_time: '17:00',
       confirmation_day_of_week: 6,
-      confirmation_time: '12:00',
+      confirmation_time: '17:10',
+      confirmation_send_type: 'per_event_day',
+      confirmation_days_before_event: 1,
       gap_weeks: 0,
       testing_mode: true,
       shifts: [{ label: 'temporary', start_time: '09:00', end_time: '12:00', capacity: 2 }],
@@ -1456,9 +1552,151 @@ test('weekly Testing mode arms a temporary override without replacing production
     assert.equal(production.shifts[0].label, 'production');
     assert.ok(result.testing_release_at);
     assert.ok(result.testing_final_confirmation_at);
+    assert.equal(
+      new Date(result.testing_first_confirmation_at).getTime() -
+        new Date(result.testing_release_at).getTime(),
+      10 * 60 * 1000
+    );
+    assert.equal(
+      new Date(result.testing_final_confirmation_at).getTime() -
+        new Date(result.testing_first_confirmation_at).getTime(),
+      30 * 60 * 1000
+    );
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   }
+});
+
+test('weekly Testing mode can be disarmed only before the batch starts', async () => {
+  const groupId = '11111111-1111-4111-8111-111111111111';
+  const scheduleId = '22222222-2222-4222-8222-222222222222';
+  const batchId = '33333333-3333-4333-8333-333333333333';
+  let testingStatus = 'running';
+  let cleared = 0;
+  const db = {
+    async getTelegramGroup(id) {
+      return id === groupId ? {
+        id: groupId, telegram_chat_id: '-1001', group_name: 'Wheelchair group',
+        service: 'WHCL', bot_id: 'WHCL', enabled: true,
+      } : null;
+    },
+    async getWeeklySchedule(id) {
+      return id === scheduleId ? {
+        id: scheduleId,
+        telegram_group_id: groupId,
+        testing_mode: true,
+        testing_status: testingStatus,
+        testing_batch_id: batchId,
+      } : null;
+    },
+    async clearManagedWeeklyScheduleTest(id, batch) {
+      cleared += 1;
+      assert.equal(id, scheduleId);
+      assert.equal(batch, batchId);
+      return { id, telegram_group_id: groupId, testing_mode: false, testing_status: 'off' };
+    },
+  };
+  const server = createServer(db, makeTelegram(), { enableLegacyWorkflow: false }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const running = await fetch(
+      `${baseUrl}/api/weekly-schedules/${scheduleId}/disarm-testing`,
+      { method: 'POST' }
+    );
+    assert.equal(running.status, 409);
+    assert.match((await running.json()).error, /already started/);
+    assert.equal(cleared, 0);
+
+    testingStatus = 'armed';
+    const armed = await fetch(
+      `${baseUrl}/api/weekly-schedules/${scheduleId}/disarm-testing`,
+      { method: 'POST' }
+    );
+    assert.equal(armed.status, 200);
+    assert.equal((await armed.json()).testing_mode, false);
+    assert.equal(cleared, 1);
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
+});
+
+test('each user can disarm armed Testing for every group owned by their bot', async () => {
+  const groupA = '11111111-1111-4111-8111-111111111111';
+  const groupB = '22222222-2222-4222-8222-222222222222';
+  const scheduleA = '33333333-3333-4333-8333-333333333333';
+  const scheduleB = '44444444-4444-4444-8444-444444444444';
+  const batchA = '55555555-5555-4555-8555-555555555555';
+  const batchB = '66666666-6666-4666-8666-666666666666';
+  const groups = new Map([
+    [groupA, { id: groupA, bot_id: 'bot-a', enabled: true }],
+    [groupB, { id: groupB, bot_id: 'bot-b', enabled: true }],
+  ]);
+  const schedules = new Map([
+    [scheduleA, { id: scheduleA, telegram_group_id: groupA, testing_mode: true, testing_status: 'armed', testing_batch_id: batchA }],
+    [scheduleB, { id: scheduleB, telegram_group_id: groupB, testing_mode: true, testing_status: 'armed', testing_batch_id: batchB }],
+  ]);
+  const cleared = [];
+  const db = {
+    async getTelegramGroup(id) { return groups.get(id) || null; },
+    async getWeeklySchedule(id) { return schedules.get(id) || null; },
+    async clearManagedWeeklyScheduleTest(id, batchId) {
+      const schedule = schedules.get(id);
+      if (!schedule || schedule.testing_batch_id !== batchId || schedule.testing_status !== 'armed') return null;
+      const result = { ...schedule, testing_mode: false, testing_status: 'off', testing_batch_id: null };
+      schedules.set(id, result);
+      cleared.push(id);
+      return result;
+    },
+  };
+  const server = createServer(db, makeTelegram(), {
+    enableLegacyWorkflow: false,
+    requireAdminAuth: true,
+    verifyUser: async (req) => {
+      if (req.headers.authorization === 'Bearer user-a') {
+        return { id: 'user-a', telegram_user_id: '1001', role: 'user', bot_id: 'bot-a' };
+      }
+      if (req.headers.authorization === 'Bearer user-b') {
+        return { id: 'user-b', telegram_user_id: '1002', role: 'user', bot_id: 'bot-b' };
+      }
+      return null;
+    },
+  }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const crossTenant = await fetch(`${baseUrl}/api/weekly-schedules/${scheduleB}/disarm-testing`, {
+      method: 'POST', headers: { Authorization: 'Bearer user-a' },
+    });
+    assert.equal(crossTenant.status, 404);
+
+    const ownA = await fetch(`${baseUrl}/api/weekly-schedules/${scheduleA}/disarm-testing`, {
+      method: 'POST', headers: { Authorization: 'Bearer user-a' },
+    });
+    const ownB = await fetch(`${baseUrl}/api/weekly-schedules/${scheduleB}/disarm-testing`, {
+      method: 'POST', headers: { Authorization: 'Bearer user-b' },
+    });
+    assert.equal(ownA.status, 200);
+    assert.equal(ownB.status, 200);
+    assert.deepEqual(cleared, [scheduleA, scheduleB]);
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
+});
+
+test('weekly Testing mode overlap guard allows using the saved production release slot', () => {
+  const production = {
+    poll_release_day_of_week: 5,
+    poll_release_time: '11:30',
+  };
+  const now = new Date('2026-08-14T02:00:00.000Z'); // Friday 10:00 SGT.
+  const testingReleaseAt = new Date('2026-08-14T03:30:00.000Z'); // Friday 11:30 SGT.
+  const nextProductionRelease = serverPrivate.nextProductionReleaseAfterTestingRelease(
+    production,
+    now,
+    testingReleaseAt
+  );
+  assert.equal(nextProductionRelease.toISOString(), '2026-08-21T03:30:00.000Z');
 });
 
 test('test batch reset clears only website state and preserves its future release', async () => {
@@ -1851,6 +2089,28 @@ test('deployment sheet exports a tenant-scoped person-by-date roster', async () 
     assert.equal(adminLines[0], 'Name,Telegram handle,21-Jul');
     assert.equal(adminLines[1], '"Carol, C",@carol,0800-1700');
     assert.doesNotMatch(adminCsv, /Alice/);
+
+    const adminSheetsForBotB = await fetch(
+      `${baseUrl}/api/deployment-sheets?bot_id=bot-B`,
+      { headers: { Authorization: 'Bearer admin' } }
+    );
+    assert.deepEqual(await adminSheetsForBotB.json(), [{
+      telegram_group_id: 'group-B',
+      group_name: 'Beta Group',
+      start_date: '2026-07-20',
+      end_date: '2026-07-26',
+    }]);
+
+    const userCannotChangeScope = await fetch(
+      `${baseUrl}/api/deployment-sheets?bot_id=bot-B`,
+      { headers: { Authorization: 'Bearer userA' } }
+    );
+    assert.deepEqual(await userCannotChangeScope.json(), [{
+      telegram_group_id: 'group-A',
+      group_name: 'Alpha Group',
+      start_date: '2026-07-20',
+      end_date: '2026-07-26',
+    }]);
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   }
@@ -1865,12 +2125,12 @@ test('deployment panel retains only the latest four fully confirmed event weeks'
           event_id: `event-${index}`,
           telegram_group_id: 'group-A',
           bot_id: 'bot-A',
-          event_date,
+          event_date: index === 0 ? new Date(`${event_date}T00:00:00.000Z`) : event_date,
           group_name: 'Alpha Group',
-          confirmation_status: 'sent',
+          confirmation_status: index === starts.length - 1 ? 'scheduled' : 'sent',
         })),
         {
-          event_id: 'event-incomplete',
+          event_id: 'event-no-confirmed-deployment',
           telegram_group_id: 'group-A',
           bot_id: 'bot-A',
           event_date: '2026-08-03',
@@ -1878,6 +2138,19 @@ test('deployment panel retains only the latest four fully confirmed event weeks'
           confirmation_status: 'scheduled',
         },
       ];
+    },
+    async getAllocation(eventId) {
+      if (eventId === 'event-no-confirmed-deployment') return [];
+      return [{
+        shift_id: 'shift-1',
+        label: '0800-1700',
+        display_order: 0,
+        status: 'confirmed',
+        confirmed_position: 1,
+        telegram_user_id: eventId,
+        telegram_username: eventId,
+        display_name: eventId,
+      }];
     },
   };
   const server = createServer(db, makeTelegram(), {
@@ -1928,6 +2201,13 @@ test('deployment panel retains only the latest four fully confirmed event weeks'
     assert.deepEqual((await adminResponse.json()).map((sheet) => sheet.start_date), [
       '2026-07-27', '2026-07-20', '2026-07-13', '2026-07-06',
     ]);
+
+    const filteredAdminResponse = await fetch(
+      `${baseUrl}/api/deployment-sheets?bot_id=bot-missing`,
+      { headers: { Authorization: 'Bearer admin' } }
+    );
+    assert.equal(filteredAdminResponse.status, 200);
+    assert.deepEqual(await filteredAdminResponse.json(), []);
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   }

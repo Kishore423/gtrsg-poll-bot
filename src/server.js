@@ -18,6 +18,7 @@ const {
   addLocalDays,
   eventDatesForReleaseDate,
   managedTimingForEvent,
+  testingConfirmationDateTime,
 } = require('./scheduleRules');
 const {
   runScheduledPolls,
@@ -60,6 +61,15 @@ function nextReleaseForWeeklySchedule(schedule, now = new Date()) {
   return { releaseDate, releaseAt };
 }
 
+function nextProductionReleaseAfterTestingRelease(schedule, now, testingReleaseAt) {
+  const nextProduction = nextReleaseForWeeklySchedule(schedule, now).releaseAt;
+  if (nextProduction > testingReleaseAt) return nextProduction;
+  return nextReleaseForWeeklySchedule(
+    schedule,
+    new Date(testingReleaseAt.getTime() + 1000)
+  ).releaseAt;
+}
+
 // RFC-4180 CSV cell: quote when it contains a comma, quote, or newline.
 function csvCell(value) {
   const str = String(value ?? '');
@@ -74,6 +84,17 @@ function formatSheetDate(iso) {
   return `${Number(match[3])}-${SHEET_MONTHS[Number(match[2]) - 1]}`;
 }
 
+function isoDateText(value) {
+  if (!value) return '';
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  const text = String(value);
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 10);
+}
+
 async function collectDeploymentRoster(
   db,
   appUser,
@@ -82,16 +103,15 @@ async function collectDeploymentRoster(
   startDate = null,
   endDate = null
 ) {
-  let rows = filterRowsByUserBot(await db.listScheduledPolls(), appUser);
-  if (requestedBotId) rows = rows.filter((row) => String(row.bot_id) === requestedBotId);
+  let rows = deploymentRowsForScope(await db.listScheduledPolls(), appUser, requestedBotId);
   if (requestedGroupId) {
     rows = rows.filter((row) => String(row.telegram_group_id) === requestedGroupId);
   }
   if (startDate) {
-    rows = rows.filter((row) => String(row.event_date || '').slice(0, 10) >= startDate);
+    rows = rows.filter((row) => isoDateText(row.event_date) >= startDate);
   }
   if (endDate) {
-    rows = rows.filter((row) => String(row.event_date || '').slice(0, 10) <= endDate);
+    rows = rows.filter((row) => isoDateText(row.event_date) <= endDate);
   }
 
   const seenEvents = new Set();
@@ -99,7 +119,7 @@ async function collectDeploymentRoster(
   for (const row of rows) {
     if (!row.event_id || seenEvents.has(row.event_id)) continue;
     seenEvents.add(row.event_id);
-    events.push({ event_id: row.event_id, event_date: String(row.event_date || '').slice(0, 10) });
+    events.push({ event_id: row.event_id, event_date: isoDateText(row.event_date) });
   }
   const dates = [...new Set(events.map((event) => event.event_date).filter(Boolean))].sort();
 
@@ -130,6 +150,18 @@ async function collectDeploymentRoster(
     dates,
     people: [...people.values()].sort((a, b) => a.name.localeCompare(b.name)),
   };
+}
+
+function deploymentRowsForScope(rows, appUser, requestedBotId = null) {
+  const scoped = requestedBotId && appUser?.role === 'admin'
+    ? rows.filter((row) => String(row.bot_id) === requestedBotId)
+    : filterRowsByUserBot(rows, appUser);
+  return scoped.filter((row) => {
+    const tags = row.operational_tags || [];
+    return !tags.includes('test') &&
+      !tags.some((tag) => String(tag).startsWith('template-testing:') ||
+        String(tag).startsWith('rehearsal:'));
+  });
 }
 
 function addIsoDays(isoDate, days) {
@@ -165,12 +197,14 @@ function requestedDeploymentRange(query) {
   return { startDate, endDate };
 }
 
-function confirmedDeploymentBatches(rows) {
+async function confirmedDeploymentBatches(db, rows, now = new Date()) {
   const batches = new Map();
+  const today = singaporeDateText(now);
   for (const row of rows) {
-    const eventDate = String(row.event_date || '').slice(0, 10);
-    if (!row.telegram_group_id || !isIsoDate(eventDate)) continue;
+    const eventDate = isoDateText(row.event_date);
+    if (!row.telegram_group_id || !row.event_id || !isIsoDate(eventDate)) continue;
     const startDate = mondayOfIsoWeek(eventDate);
+    if (startDate > today) continue;
     const key = `${row.telegram_group_id}:${startDate}`;
     if (!batches.has(key)) {
       batches.set(key, {
@@ -178,16 +212,24 @@ function confirmedDeploymentBatches(rows) {
         group_name: row.group_name || 'Telegram group',
         start_date: startDate,
         end_date: addIsoDays(startDate, 6),
-        rows: [],
+        event_ids: new Set(),
       });
     }
-    batches.get(key).rows.push(row);
+    batches.get(key).event_ids.add(row.event_id);
   }
 
-  const confirmed = [...batches.values()]
-    .filter((batch) => batch.rows.length > 0 && batch.rows.every((row) =>
-      ['sent', 'updated'].includes(String(row.confirmation_status || ''))
-    ));
+  const confirmed = [];
+  for (const batch of batches.values()) {
+    let hasConfirmedDeployment = false;
+    for (const eventId of batch.event_ids) {
+      const allocation = await db.getAllocation(eventId);
+      if (allocation.some((row) => row.status === 'confirmed')) {
+        hasConfirmedDeployment = true;
+        break;
+      }
+    }
+    if (hasConfirmedDeployment) confirmed.push(batch);
+  }
   const retainedWeeks = [...new Set(confirmed.map((batch) => batch.start_date))]
     .sort()
     .reverse()
@@ -196,7 +238,7 @@ function confirmedDeploymentBatches(rows) {
     .filter((batch) => retainedWeeks.includes(batch.start_date))
     .sort((a, b) => b.start_date.localeCompare(a.start_date)
       || a.group_name.localeCompare(b.group_name))
-    .map(({ rows: omittedRows, ...batch }) => batch);
+    .map(({ event_ids: omittedEventIds, ...batch }) => batch);
 }
 
 function safeEqual(a, b) {
@@ -204,6 +246,20 @@ function safeEqual(a, b) {
   const bb = Buffer.from(String(b));
   if (ab.length !== bb.length) return false;
   return crypto.timingSafeEqual(ab, bb);
+}
+
+function normalizePollIds(values) {
+  if (!Array.isArray(values)) return null;
+  const ids = [...new Set(values.map((id) => String(id)))];
+  if (!ids.length || ids.some((id) =>
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))) {
+    return null;
+  }
+  return ids.sort();
+}
+
+function pollClearBinding(ids) {
+  return crypto.createHash('sha256').update(ids.join(',')).digest('hex');
 }
 
 function resolveTelegramGroupService(group, fallback = 'PRIMARY') {
@@ -356,12 +412,15 @@ function createServer(db, telegram, options = {}) {
         !req.appUser?.deployment_sheets_enabled) {
       return res.status(403).json({ error: 'Enable Deployment sheets from your account menu first' });
     }
-    if (!db.listScheduledPolls) {
+    if (!db.listScheduledPolls || !db.getAllocation) {
       if (!options.requireAdminAuth) return res.json([]);
       return res.status(501).json({ error: 'Supabase production database is required' });
     }
-    const rows = filterRowsByUserBot(await db.listScheduledPolls(), req.appUser);
-    res.json(confirmedDeploymentBatches(rows));
+    const requestedBotId = req.appUser?.role === 'admin' && req.query.bot_id
+      ? String(req.query.bot_id)
+      : null;
+    const rows = deploymentRowsForScope(await db.listScheduledPolls(), req.appUser, requestedBotId);
+    res.json(await confirmedDeploymentBatches(db, rows));
   }));
 
   function publicBot(bot) {
@@ -1010,6 +1069,60 @@ function createServer(db, telegram, options = {}) {
     return false;
   };
 
+  app.post('/api/admin/scheduled-polls/clear-otp/request', wrap(async (req, res) => {
+    if (!options.requestTelegramOtp) {
+      return res.status(501).json({ error: 'Telegram OTP authentication is unavailable' });
+    }
+    const identifier = req.appUser.telegram_user_id || req.appUser.telegram_username;
+    if (!identifier) return res.status(409).json({ error: 'The admin account is not linked to Telegram' });
+    res.status(202).json(await options.requestTelegramOtp(String(identifier)));
+  }));
+
+  app.post('/api/admin/scheduled-polls/clear-otp/verify', wrap(async (req, res) => {
+    const ids = normalizePollIds(req.body?.poll_ids);
+    if (!ids) return res.status(400).json({ error: 'At least one valid filtered poll is required' });
+    if (!options.verifyTelegramOtp || !options.verifyUser || !options.issueActionAuthorization) {
+      return res.status(501).json({ error: 'Telegram OTP authentication is unavailable' });
+    }
+    const verified = await options.verifyTelegramOtp(
+      req.body?.challenge_id,
+      req.body?.verifier,
+      req.body?.code
+    );
+    const verifiedUser = await options.verifyUser({
+      headers: { authorization: `Bearer ${verified.access_token}` },
+    });
+    if (!verifiedUser || String(verifiedUser.id) !== String(req.appUser.id)) {
+      return res.status(403).json({ error: 'The OTP must belong to the signed-in admin' });
+    }
+    res.json(options.issueActionAuthorization(
+      req.appUser,
+      'clear-filtered-polls',
+      pollClearBinding(ids)
+    ));
+  }));
+
+  app.post('/api/admin/scheduled-polls/clear-filtered', wrap(async (req, res) => {
+    const ids = normalizePollIds(req.body?.poll_ids);
+    if (!ids) return res.status(400).json({ error: 'At least one valid filtered poll is required' });
+    if (!db.deleteScheduledPollsByIds || !options.verifyActionAuthorization) {
+      return res.status(501).json({ error: 'Filtered poll clearing is unavailable' });
+    }
+    const authorized = options.verifyActionAuthorization(
+      req.body?.authorization_token,
+      req.appUser,
+      'clear-filtered-polls',
+      pollClearBinding(ids)
+    );
+    if (!authorized) {
+      return res.status(401).json({
+        error: 'OTP authentication has expired or does not match the current filtered polls',
+      });
+    }
+    const rows = await db.deleteScheduledPollsByIds(ids);
+    res.json({ deleted: rows.length, ids: rows.map((row) => row.id) });
+  }));
+
   app.delete('/api/scheduled-polls', wrap(async (req, res) => {
     if (!db.deleteAllScheduledPolls) return res.status(501).json({ error: 'Supabase production database is required' });
     if (!requireClearPollsPassword(req, res)) return;
@@ -1018,8 +1131,8 @@ function createServer(db, telegram, options = {}) {
       return res.status(403).json({ error: 'Admin access required to clear all scheduled polls' });
     }
     if (ids) {
-      const uniqueIds = [...new Set(ids.map((id) => String(id)))];
-      if (uniqueIds.length === 0 || uniqueIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))) {
+      const uniqueIds = normalizePollIds(ids);
+      if (!uniqueIds) {
         return res.status(400).json({ error: 'Valid poll IDs are required' });
       }
       if (!db.deleteScheduledPollsByIds) return res.status(501).json({ error: 'Supabase production database is required' });
@@ -1170,11 +1283,31 @@ function createServer(db, telegram, options = {}) {
     if (!db.upsertManagedWeeklySchedule) return res.status(501).json({ error: 'Supabase production database is required' });
     const body = req.body || {};
     body.testing_mode = body.testing_mode === true;
-    for (const key of ['poll_release_day_of_week', 'confirmation_day_of_week']) {
-      if (!Number.isInteger(Number(body[key])) || Number(body[key]) < 0 || Number(body[key]) > 6) {
-        return res.status(400).json({ error: `${key} must be 0 through 6` });
+    if (!Number.isInteger(Number(body.poll_release_day_of_week)) ||
+        Number(body.poll_release_day_of_week) < 0 || Number(body.poll_release_day_of_week) > 6) {
+      return res.status(400).json({ error: 'poll_release_day_of_week must be 0 through 6' });
+    }
+    body.poll_release_day_of_week = Number(body.poll_release_day_of_week);
+    body.confirmation_send_type = body.confirmation_send_type || 'weekly_summary';
+    if (!['weekly_summary', 'per_event_day'].includes(body.confirmation_send_type)) {
+      return res.status(400).json({ error: 'confirmation_send_type is invalid' });
+    }
+    if (body.confirmation_send_type === 'weekly_summary') {
+      if (!Number.isInteger(Number(body.confirmation_day_of_week)) ||
+          Number(body.confirmation_day_of_week) < 0 || Number(body.confirmation_day_of_week) > 6) {
+        return res.status(400).json({ error: 'confirmation_day_of_week must be 0 through 6' });
       }
-      body[key] = Number(body[key]);
+      body.confirmation_day_of_week = Number(body.confirmation_day_of_week);
+      body.confirmation_days_before_event = null;
+    } else {
+      body.confirmation_days_before_event = Number(body.confirmation_days_before_event ?? 1);
+      if (!Number.isInteger(body.confirmation_days_before_event) ||
+          body.confirmation_days_before_event < 0 || body.confirmation_days_before_event > 14) {
+        return res.status(400).json({ error: 'confirmation_days_before_event must be a whole number from 0 through 14' });
+      }
+      body.confirmation_day_of_week = Number.isInteger(Number(body.confirmation_day_of_week))
+        ? Number(body.confirmation_day_of_week)
+        : 5;
     }
     body.gap_weeks = Number(body.gap_weeks ?? 0);
     if (!Number.isInteger(body.gap_weeks) || body.gap_weeks < 0 || body.gap_weeks > 12) {
@@ -1210,6 +1343,8 @@ function createServer(db, telegram, options = {}) {
         releaseDay: body.poll_release_day_of_week,
         releaseTime: body.poll_release_time,
         gapWeeks: body.gap_weeks,
+        confirmationSendType: body.confirmation_send_type,
+        confirmationDaysBeforeEvent: body.confirmation_days_before_event,
         confirmationDay: body.confirmation_day_of_week,
         confirmationTime: body.confirmation_time,
       });
@@ -1238,26 +1373,38 @@ function createServer(db, telegram, options = {}) {
       const now = new Date();
       const testRelease = nextReleaseForWeeklySchedule(body, now);
       const eventDates = eventDatesForReleaseDate(service, testRelease.releaseDate, body.gap_weeks);
-      const firstTiming = managedTimingForEvent({
-        service,
-        eventDate: eventDates[0],
-        releaseDate: testRelease.releaseDate,
-        releaseDay: body.poll_release_day_of_week,
-        releaseTime: body.poll_release_time,
-        gapWeeks: body.gap_weeks,
-        confirmationDay: body.confirmation_day_of_week,
-        confirmationTime: body.confirmation_time,
-      });
-      const [confirmationDate, confirmationTime] = firstTiming.confirmationAt.split('T');
+      const firstConfirmationLocal = body.confirmation_send_type === 'per_event_day'
+        ? testingConfirmationDateTime(
+          testRelease.releaseDate,
+          body.poll_release_time,
+          body.confirmation_time
+        )
+        : managedTimingForEvent({
+          service,
+          eventDate: eventDates[0],
+          releaseDate: testRelease.releaseDate,
+          releaseDay: body.poll_release_day_of_week,
+          releaseTime: body.poll_release_time,
+          gapWeeks: body.gap_weeks,
+          confirmationSendType: body.confirmation_send_type,
+          confirmationDaysBeforeEvent: body.confirmation_days_before_event,
+          confirmationDay: body.confirmation_day_of_week,
+          confirmationTime: body.confirmation_time,
+        }).confirmationAt;
+      const [confirmationDate, confirmationTime] = firstConfirmationLocal.split('T');
       const firstConfirmation = zonedDateTimeToUtc(
         confirmationDate,
         confirmationTime,
         body.timezone
       );
-      const finalConfirmation = service === 'PSA'
+      const finalConfirmation = body.confirmation_send_type === 'weekly_summary'
         ? firstConfirmation
         : new Date(firstConfirmation.getTime() + Math.max(0, eventDates.length - 1) * 5 * 60 * 1000);
-      const productionRelease = nextReleaseForWeeklySchedule(currentSchedule, now).releaseAt;
+      const productionRelease = nextProductionReleaseAfterTestingRelease(
+        currentSchedule,
+        now,
+        testRelease.releaseAt
+      );
       if (finalConfirmation >= productionRelease) {
         return res.status(409).json({
           error: 'Testing confirmations must finish before the next saved production release. Choose an earlier Testing release or confirmation time.',
@@ -1289,6 +1436,29 @@ function createServer(db, telegram, options = {}) {
     }
     await db.deleteManagedWeeklySchedule(req.params.id);
     res.status(204).end();
+  }));
+
+  app.post('/api/weekly-schedules/:id/disarm-testing', wrap(async (req, res) => {
+    if (!db.getWeeklySchedule || !db.clearManagedWeeklyScheduleTest) {
+      return res.status(501).json({ error: 'Testing mode requires the Supabase production database' });
+    }
+    const schedule = await db.getWeeklySchedule(req.params.id);
+    if (!schedule) return res.status(404).json({ error: 'Weekly schedule not found' });
+    await assertGroupAccess(db, req.appUser, schedule.telegram_group_id);
+    if (!schedule.testing_mode || schedule.testing_status !== 'armed' || !schedule.testing_batch_id) {
+      return res.status(409).json({
+        error: schedule.testing_status === 'running'
+          ? 'Testing has already started and cannot be disarmed. It will restore automatically after the final confirmation.'
+          : 'Testing mode is not armed for this weekly template.',
+      });
+    }
+    const cleared = await db.clearManagedWeeklyScheduleTest(schedule.id, schedule.testing_batch_id);
+    if (!cleared) {
+      return res.status(409).json({
+        error: 'Testing has already started or changed. Refresh the weekly template to see its current status.',
+      });
+    }
+    res.json(cleared);
   }));
 
   app.get('/api/poll-exclusions', wrap(async (req, res) => {
@@ -1382,6 +1552,8 @@ function createServer(db, telegram, options = {}) {
         releaseDay: weekly.poll_release_day_of_week,
         releaseTime: String(weekly.poll_release_time).slice(0, 5),
         gapWeeks: weekly.gap_weeks,
+        confirmationSendType: weekly.confirmation_send_type || body.confirmation_send_type || 'weekly_summary',
+        confirmationDaysBeforeEvent: weekly.confirmation_days_before_event ?? body.confirmation_days_before_event ?? 1,
         confirmationDay: weekly.confirmation_day_of_week,
         confirmationTime: String(weekly.confirmation_time).slice(0, 5),
         validateAfterRelease: !(isTest && body.send_immediately),
@@ -1448,6 +1620,7 @@ function createServer(db, telegram, options = {}) {
     const payload = { ...body, shifts, poll_title: body.poll_title || body.poll_question,
       resolved_release_at: resolved.releaseAt.toISOString(), close_at: resolved.closeAt.toISOString(),
       resolved_confirmation_at: resolved.confirmationAt.toISOString(), timezone: resolved.timezone,
+      confirmation_send_type: weekly?.confirmation_send_type || body.confirmation_send_type || 'weekly_summary',
       is_custom: isCustom,
       operational_tags: isTest ? ['test'] : (body.operational_tags || []) };
     const id = await db.createScheduledEvent(payload, req.adminUser?.id || null);
@@ -1609,4 +1782,10 @@ function createServer(db, telegram, options = {}) {
   return app;
 }
 
-module.exports = { createServer, resolveTelegramGroupService };
+module.exports = {
+  createServer,
+  resolveTelegramGroupService,
+  _private: {
+    nextProductionReleaseAfterTestingRelease,
+  },
+};

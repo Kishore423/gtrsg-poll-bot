@@ -3,7 +3,11 @@ const {
   managedMention,
   CONFIRMATION_NOTIFY_HANDLES,
 } = require('./pollBuilder');
-const { eventDatesForReleaseDate, managedTimingForEvent } = require('./scheduleRules');
+const {
+  eventDatesForReleaseDate,
+  managedTimingForEvent,
+  testingConfirmationDateTime,
+} = require('./scheduleRules');
 const { zonedDateTimeToUtc } = require('./scheduleResolver');
 
 const SERVICE_LABELS = { WHCL: 'Wheelchair', PSA: 'PSA', PRIMARY: 'General' };
@@ -102,6 +106,8 @@ function utcIso(localDateTime, timeZone) {
 function templatePayloadForEvent(schedule, eventDate, releaseDate = null) {
   const shifts = normalizeShifts(schedule.shifts);
   const service = schedule.service || schedule.bot_id || 'WHCL';
+  const confirmationSendType = schedule.confirmation_send_type ||
+    (service === 'PSA' ? 'weekly_summary' : 'per_event_day');
   const timezone = schedule.timezone || 'Asia/Singapore';
   const releaseTime = String(schedule.poll_release_time || '17:00').slice(0, 5);
   const timing = managedTimingForEvent({
@@ -111,6 +117,8 @@ function templatePayloadForEvent(schedule, eventDate, releaseDate = null) {
     gapWeeks: schedule.gap_weeks,
     releaseDay: schedule.poll_release_day_of_week,
     releaseTime,
+    confirmationSendType,
+    confirmationDaysBeforeEvent: schedule.confirmation_days_before_event ?? 1,
     confirmationDay: schedule.confirmation_day_of_week,
     confirmationTime: String(schedule.confirmation_time || '').slice(0, 5),
   });
@@ -133,6 +141,7 @@ function templatePayloadForEvent(schedule, eventDate, releaseDate = null) {
     timezone,
     confirmation_header: 'Confirmed slots',
     confirmation_footer: 'take note pls',
+    confirmation_send_type: confirmationSendType,
     show_waiting_list: false,
     show_empty_shifts: false,
     is_custom: false,
@@ -295,12 +304,24 @@ async function generateScheduledPollsFromTemplates(db, now = new Date()) {
       }
       continue;
     }
-    if (testingBatchId && service !== 'PSA' && payloads.length) {
-      const firstConfirmationAt = new Date(payloads[0].resolved_confirmation_at);
+    const confirmationSendType = effectiveSchedule.confirmation_send_type ||
+      (service === 'PSA' ? 'weekly_summary' : 'per_event_day');
+    if (testingBatchId && confirmationSendType === 'per_event_day' && payloads.length) {
+      const [confirmationDate, confirmationTime] = testingConfirmationDateTime(
+        releaseDate,
+        releaseTime,
+        effectiveSchedule.confirmation_time
+      ).split('T');
+      const firstConfirmationAt = zonedDateTimeToUtc(
+        confirmationDate,
+        confirmationTime,
+        timezone
+      );
       payloads.forEach((payload, index) => {
         payload.resolved_confirmation_at = new Date(
           firstConfirmationAt.getTime() + index * 5 * 60 * 1000
         ).toISOString();
+        payload.close_at = payload.resolved_confirmation_at;
       });
     }
 
@@ -434,7 +455,7 @@ async function sendPsaBatchConfirmation(db, telegram, confirmations) {
   return completed;
 }
 
-function psaBatchKey(confirmation) {
+function batchKey(confirmation) {
   return [
     confirmation.service,
     confirmation.telegram_chat_id,
@@ -444,15 +465,20 @@ function psaBatchKey(confirmation) {
   ].join('|');
 }
 
+function confirmationSendTypeForClaim(confirmation) {
+  return confirmation.confirmation_send_type ||
+    (confirmation.service === 'PSA' ? 'weekly_summary' : 'per_event_day');
+}
+
 async function sendClaimedConfirmations(db, telegram, confirmations) {
   const completed = [];
-  const psaGroups = new Map();
+  const batchedGroups = new Map();
   const singles = [];
   for (const confirmation of confirmations) {
-    if (confirmation.service === 'PSA') {
-      const key = psaBatchKey(confirmation);
-      if (!psaGroups.has(key)) psaGroups.set(key, []);
-      psaGroups.get(key).push(confirmation);
+    if (confirmationSendTypeForClaim(confirmation) === 'weekly_summary') {
+      const key = batchKey(confirmation);
+      if (!batchedGroups.has(key)) batchedGroups.set(key, []);
+      batchedGroups.get(key).push(confirmation);
     } else {
       singles.push(confirmation);
     }
@@ -478,20 +504,20 @@ async function sendClaimedConfirmations(db, telegram, confirmations) {
     }
   }
 
-  // PSA groups by resolved send time, so a test batch whose per-poll send times
+  // Weekly summaries group by resolved send time, so a test batch whose per-poll send times
   // differ can split into several messages. Order those messages by their
   // earliest event date too, so the batches themselves are not jumbled.
-  const psaBatches = [];
-  for (const confirmations of psaGroups.values()) {
+  const weeklyBatches = [];
+  for (const confirmations of batchedGroups.values()) {
     let earliest = null;
     for (const confirmation of confirmations) {
       const eventDate = db.getEventDate ? await db.getEventDate(confirmation.event_id) : null;
       if (eventDate && (earliest === null || String(eventDate) < earliest)) earliest = String(eventDate);
     }
-    psaBatches.push({ confirmations, earliest: earliest || '' });
+    weeklyBatches.push({ confirmations, earliest: earliest || '' });
   }
-  psaBatches.sort((a, b) => a.earliest.localeCompare(b.earliest));
-  for (const { confirmations } of psaBatches) {
+  weeklyBatches.sort((a, b) => a.earliest.localeCompare(b.earliest));
+  for (const { confirmations } of weeklyBatches) {
     try {
       completed.push(...await sendPsaBatchConfirmation(db, telegram, confirmations));
     } catch (error) {
