@@ -6,6 +6,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["scripts/dev-ui-preview.js"],
       "port": 4322
+    },
+    {
+      "name": "readonly-prod",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/local-readonly-server.js"],
+      "port": 3001
     }
   ]
 }
