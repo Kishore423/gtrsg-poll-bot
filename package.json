@@ -6,6 +6,9 @@
   "type": "commonjs",
   "scripts": {
     "start": "node src/localServer.js",
+    "start:readonly": "node scripts/local-readonly-server.js",
+    "setup:local-readonly": "node scripts/setup-local-readonly.js",
+    "verify:local-readonly": "node scripts/verify-local-readonly.js",
     "dev-telegram": "node scripts/dev-telegram.js",
     "migrate": "node scripts/migrate.js",
     "migrate:multi-tenant": "node scripts/migrate-to-multi-tenant.js",

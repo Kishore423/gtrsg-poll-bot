@@ -2046,16 +2046,17 @@ test('deployment sheet exports a tenant-scoped person-by-date roster', async () 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(Buffer.from(await xlsx.arrayBuffer()));
     const sheet = workbook.getWorksheet('Deployment');
-    assert.deepEqual(sheet.getRow(1).values.slice(1), [
+    assert.match(String(sheet.getCell('A1').value), /Deployment Sheet/);
+    assert.deepEqual(sheet.getRow(2).values.slice(1), [
       'Telegram handle', 'Name', '20-Jul', '22-Jul',
     ]);
-    assert.deepEqual(sheet.getRow(2).values.slice(1), [
+    assert.deepEqual(sheet.getRow(3).values.slice(1), [
       '@alice', 'Alice', '0800-1700', '1030-1830',
     ]);
     assert.equal(sheet.views[0].xSplit, 2);
-    assert.equal(sheet.views[0].ySplit, 1);
-    assert.equal(sheet.getCell('C2').alignment.wrapText, true);
-    assert.equal(sheet.getCell('C2').border.top.style, 'thin');
+    assert.equal(sheet.views[0].ySplit, 2);
+    assert.equal(sheet.getCell('C3').alignment.wrapText, true);
+    assert.equal(sheet.getCell('C3').border.top.style, 'thin');
 
     const groupXlsx = await fetch(
       `${baseUrl}/api/confirmed-slots.xlsx?telegram_group_id=group-A`,
@@ -2064,7 +2065,7 @@ test('deployment sheet exports a tenant-scoped person-by-date roster', async () 
     assert.equal(groupXlsx.status, 200);
     const groupWorkbook = new ExcelJS.Workbook();
     await groupWorkbook.xlsx.load(Buffer.from(await groupXlsx.arrayBuffer()));
-    assert.deepEqual(groupWorkbook.getWorksheet('Deployment').getRow(1).values.slice(1), [
+    assert.deepEqual(groupWorkbook.getWorksheet('Deployment').getRow(2).values.slice(1), [
       'Telegram handle', 'Name', '20-Jul', '22-Jul',
     ]);
     assert.equal((await fetch(
@@ -2079,7 +2080,7 @@ test('deployment sheet exports a tenant-scoped person-by-date roster', async () 
     assert.equal(weekXlsx.status, 200);
     const weekWorkbook = new ExcelJS.Workbook();
     await weekWorkbook.xlsx.load(Buffer.from(await weekXlsx.arrayBuffer()));
-    assert.deepEqual(weekWorkbook.getWorksheet('Deployment').getRow(1).values.slice(1), [
+    assert.deepEqual(weekWorkbook.getWorksheet('Deployment').getRow(2).values.slice(1), [
       'Telegram handle', 'Name', '20-Jul', '22-Jul',
     ]);
 

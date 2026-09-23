@@ -92,7 +92,9 @@ test('deployment workbook applies the weekly roster colours to each date cell', 
       DEPLOYMENT_FILLS.assessment,
     ]
   );
-  assert.equal(sheet.getCell('C4').fill.fgColor.argb, DEPLOYMENT_FILLS.empty);
+  assert.deepEqual(sheet.getRow(4).values.slice(3), ['OFF', 'OFF', 'OFF', 'OFF', 'OFF', 'OFF', 'RD']);
+  assert.equal(sheet.getCell('C4').fill.fgColor.argb, DEPLOYMENT_FILLS.off);
+  assert.equal(sheet.getCell('I4').fill.fgColor.argb, DEPLOYMENT_FILLS.restDay);
   assert.equal(sheet.views[0].xSplit, 2);
   assert.equal(sheet.views[0].ySplit, 2);
   assert.equal(sheet.getColumn(3).width, 27);

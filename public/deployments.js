@@ -162,7 +162,7 @@ async function loadAdminUserFilter() {
 async function bootstrap() {
   window.gtrsgAuth.init();
   const config = await (await nativeFetch('/api/auth-config')).json();
-  if (config.required && !window.gtrsgAuth.hasSession()) {
+  if (config.required && !config.localReadOnly && !window.gtrsgAuth.hasSession()) {
     window.gtrsgAuth.showLogin();
     return;
   }

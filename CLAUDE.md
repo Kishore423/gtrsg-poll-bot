@@ -408,8 +408,8 @@ The app currently ships BOTH, selected at runtime:
   Normal users enable the account-level panel from their navbar account menu;
   admins receive it by default and see groups across every user/bot. The panel
   lists one download per Telegram group and
-  Monday-Sunday event batch only after every existing poll in that batch has a
-  `sent` or `updated` confirmation. It retains the latest four distinct confirmed
+  Monday-Sunday event batch after that group has at least one `sent` or `updated`
+  confirmation; future unconfirmed dates remain blank in the export. It retains the latest four distinct confirmed
   event weeks dynamically; older sheets disappear without deleting poll history.
   Normal users remain scoped to all groups belonging to their one assigned bot.
 - Production requires `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
@@ -575,6 +575,16 @@ live only in Vercel env + the local (gitignored) `.env`.
   read-only. Clicking an existing avatar opens a full-screen profile viewer with a
   translucent black backdrop, an X close control, and a self-only delete action.
   Bot tokens and immutable bot handles are intentionally never displayed.
+- **Local read-only production-data view:** `npm run setup:local-readonly` writes
+  a gitignored `.env.readonly`; `npm run start:readonly` serves the current UI on
+  port 3001 against live Supabase rows as a synthetic local admin. It skips
+  Postgres startup schema patches, sets its sole DB session to
+  `default_transaction_read_only=on`, and `src/server.js` rejects unsafe API
+  methods before repository or Telegram code runs. Use it only for
+  viewing/filtering and Excel/CSV-export verification. The configured Supabase
+  login can still have write privileges, so this relies on the HTTP guard and
+  transaction setting; it must never be used for bot actions, OTP, cron, or
+  save/delete tests.
 - `webhook_events` had traffic (20 rows) → both bots' production webhooks are
   registered and delivering.
 - PSA group's observed weekly schedule at the time: release Fri 17:00,
@@ -594,6 +604,13 @@ live only in Vercel env + the local (gitignored) `.env`.
 - `npm install` — install deps (Node 24.x).
 - `npm test` — Node test suite (47 tests; no DB/bots needed).
 - `DB_DRIVER=memory npm start` — local server, memory DB, legacy workflow on.
+- `npm run setup:local-readonly` then `npm run start:readonly` — local admin view
+  of live Supabase data on `http://localhost:3001`. It loads the gitignored
+  `.env.readonly`, uses one database session with `default_transaction_read_only`
+  enabled, skips repository startup schema patches, and rejects all non-GET/HEAD/
+  OPTIONS API requests before they can reach the database or Telegram. Verify it
+  with `npm run verify:local-readonly`. This is for reading, filters, details, and
+  export testing only; local mutation buttons intentionally return 403.
 - `npm run dev-telegram` — local long-polling harness to test the real WHCL/PSA
   bots end to end (memory DB; deletes webhooks; resets on restart).
 - `node scripts/dev-ui-preview.js` — seeded UI preview on port 4322.

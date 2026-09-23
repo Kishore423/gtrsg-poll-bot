@@ -290,6 +290,14 @@ function validateProfilePhotoData(value) {
 function createServer(db, telegram, options = {}) {
   const app = express();
   app.use(express.json({ limit: '300kb' }));
+  if (options.localReadOnly) {
+    app.use('/api', (req, res, next) => {
+      if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+      return res.status(403).json({
+        error: 'Local read-only mode: changes, Telegram actions, and scheduler runs are disabled.',
+      });
+    });
+  }
   app.use(express.static(path.join(__dirname, '..', 'public')));
 
   // Serve index.html for the root path. express.static handles /index.html and
@@ -311,7 +319,7 @@ function createServer(db, telegram, options = {}) {
 
   app.get('/api/auth-config', (req, res) => {
     res.json({ required: !!options.requireAdminAuth, legacyEnabled: options.enableLegacyWorkflow !== false,
-      demoPreview: !!options.demoPreview, provider: 'telegram' });
+      demoPreview: !!options.demoPreview, localReadOnly: !!options.localReadOnly, provider: 'telegram' });
   });
 
   app.post('/api/auth/telegram/otp/request', async (req, res) => {

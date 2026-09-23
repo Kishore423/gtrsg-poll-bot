@@ -1,13 +1,15 @@
 const postgres = require('postgres');
 
-function createSql(connectionString = process.env.DATABASE_URL) {
+function createSql(connectionString = process.env.DATABASE_URL, options = {}) {
   if (!connectionString) throw new Error('DATABASE_URL is required for Supabase PostgreSQL.');
-  return postgres(connectionString, { ssl: 'require', max: 2, idle_timeout: 20 });
+  return postgres(connectionString, { ssl: 'require', max: 2, idle_timeout: 20, ...options });
 }
 
-function createPostgresDb(sql = createSql()) {
+function createPostgresDb({ sql = createSql(), readOnly = false } = {}) {
   // Alter unique constraint on telegram_groups to allow duplicate chat_ids with different bot_ids
-  const initPromise = (async () => {
+  // A local read-only connection must never run the production startup patches.
+  // Those patches are useful for the deployed app, but are writes.
+  const initPromise = readOnly ? sql`set default_transaction_read_only = on` : (async () => {
     await sql`alter table app_users
       add column if not exists telegram_user_id bigint,
       add column if not exists telegram_username text,

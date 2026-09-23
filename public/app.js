@@ -1897,7 +1897,7 @@ async function bootstrap() {
   }
   if (!config.legacyEnabled) document.querySelectorAll('.legacy-workflow').forEach((element) => element.remove());
 
-  if (config.required && !window.gtrsgAuth.hasSession()) {
+  if (config.required && !config.localReadOnly && !window.gtrsgAuth.hasSession()) {
     window.gtrsgAuth.showLogin();
     return;
   }
