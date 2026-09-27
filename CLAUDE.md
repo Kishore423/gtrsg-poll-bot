@@ -470,6 +470,11 @@ live only in Vercel env + the local (gitignored) `.env`.
 - **Footgun**: never run `npm run dev-telegram` after webhooks are live — it calls
   `deleteWebhook` and long-polls, wiping the production webhooks. Re-run `set-webhook`
   to restore.
+- **Webhook recovery:** `POST /api/admin/bots/webhooks/restore` is admin-only and
+  re-registers every enabled dedicated bot from inside the deployed runtime. It
+  uses encrypted database tokens and per-bot webhook secrets without exposing
+  either to the browser or local environment. Use **Verify bot** afterwards to
+  confirm the bot can still post to the intended group.
 
 ### Live-DB findings (2026-07-12, verified by querying the session pooler)
 

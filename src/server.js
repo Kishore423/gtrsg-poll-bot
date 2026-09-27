@@ -675,6 +675,43 @@ function createServer(db, telegram, options = {}) {
     res.json(synced);
   }));
 
+  // Recovery operation for a polling bot whose Telegram webhook was cleared
+  // (for example, by a local long-polling session). This deliberately runs in
+  // the deployed app: the encrypted BotFather tokens and per-bot webhook
+  // secrets never need to leave the production environment.
+  app.post('/api/admin/bots/webhooks/restore', wrap(async (req, res) => {
+    if (!db.listBots) {
+      return res.status(501).json({ error: 'Supabase production database is required' });
+    }
+    if (!options.appUrl) {
+      return res.status(409).json({ error: 'APP_URL is required to restore webhooks' });
+    }
+    if (!telegram.setWebhook) {
+      return res.status(501).json({ error: 'Telegram webhook registration is unavailable' });
+    }
+
+    const baseUrl = String(options.appUrl).replace(/\/$/, '');
+    const restored = [];
+    const failures = [];
+    const bots = (await db.listBots()).filter((bot) => bot.enabled !== false);
+    for (const bot of bots) {
+      if (!bot.webhook_secret) {
+        failures.push({ id: bot.id, error: 'Bot has no webhook secret' });
+        continue;
+      }
+      const url = `${baseUrl}/api/telegram/${bot.id}`;
+      try {
+        await telegram.setWebhook(bot.id, url, bot.webhook_secret);
+        restored.push({ id: bot.id, url });
+      } catch (error) {
+        failures.push({ id: bot.id, error: error.message || 'Telegram rejected webhook registration' });
+      }
+    }
+
+    res.set('Cache-Control', 'no-store');
+    res.status(failures.length ? 502 : 200).json({ restored, failures });
+  }));
+
   app.post('/api/admin/bots/inspect-token', wrap(async (req, res) => {
     const inspected = await inspectBotToken(req.body?.bot_token);
     const existingBot = await findBotByTelegramIdentity(inspected.identity);

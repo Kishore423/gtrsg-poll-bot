@@ -574,6 +574,11 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   generation skips active existing polls by default.
 - **Footgun**: don't run `npm run dev-telegram` after webhooks are live — it deletes
   the production webhooks (long-polls). Re-run `set-webhook` to restore.
+- **Webhook recovery:** `POST /api/admin/bots/webhooks/restore` is admin-only and
+  re-registers every enabled dedicated bot from inside the deployed runtime. It
+  uses encrypted database tokens and per-bot webhook secrets without exposing
+  either to the browser or local environment. Use **Verify bot** afterwards to
+  confirm the bot can still post to the intended group.
 - **Telegram auth configuration:** the identity migration is applied and
   existing users are mapped by immutable Telegram ID. Vercel Production requires
   `APP_SESSION_SECRET`, `TELEGRAM_LOGIN_BOT_TOKEN`, and

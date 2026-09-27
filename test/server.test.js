@@ -70,6 +70,57 @@ test('admin-only routes reject a provisioned non-admin', async () => {
       : null });
 });
 
+test('admin can restore enabled dedicated-bot webhooks without exposing bot tokens', async () => {
+  const webhookCalls = [];
+  const db = {
+    async listBots() {
+      return [
+        { id: 'active-bot', enabled: true, webhook_secret: 'active-secret' },
+        { id: 'disabled-bot', enabled: false, webhook_secret: 'disabled-secret' },
+      ];
+    },
+  };
+  const telegram = {
+    async setWebhook(id, url, secret) {
+      webhookCalls.push({ id, url, secret });
+    },
+  };
+  const server = createServer(db, telegram, {
+    appUrl: 'https://example.test/',
+    requireAdminAuth: true,
+    verifyUser: async (req) => req.headers.authorization === 'Bearer admin'
+      ? { id: 'admin-1', telegram_user_id: '1002', role: 'admin', bot_id: null }
+      : req.headers.authorization === 'Bearer user'
+        ? { id: 'user-1', telegram_user_id: '1001', role: 'user', bot_id: null }
+        : null,
+  }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const rejected = await fetch(`${baseUrl}/api/admin/bots/webhooks/restore`, {
+      method: 'POST', headers: { Authorization: 'Bearer user' },
+    });
+    assert.equal(rejected.status, 403);
+
+    const response = await fetch(`${baseUrl}/api/admin/bots/webhooks/restore`, {
+      method: 'POST', headers: { Authorization: 'Bearer admin' },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(await response.json(), {
+      restored: [{ id: 'active-bot', url: 'https://example.test/api/telegram/active-bot' }],
+      failures: [],
+    });
+    assert.deepEqual(webhookCalls, [{
+      id: 'active-bot',
+      url: 'https://example.test/api/telegram/active-bot',
+      secret: 'active-secret',
+    }]);
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
+});
+
 test('admin impersonation endpoint issues an effective-user session through the auth service', async () => {
   const calls = [];
   await withServer(async ({ baseUrl }) => {
