@@ -13,6 +13,7 @@ const editUserBotName = document.getElementById('edit-user-bot-name');
 const editUserBotHandle = document.getElementById('edit-user-bot-handle');
 const editUserStatus = document.getElementById('edit-user-status');
 const removeUserBotButton = document.getElementById('remove-user-bot');
+const restoreBotWebhooksButton = document.getElementById('restore-bot-webhooks');
 let currentUsers = new Map();
 let editingUserHasBot = false;
 
@@ -230,6 +231,30 @@ if (removeUserBotButton) {
 }
 
 document.getElementById('cancel-edit-user').addEventListener('click', () => editUserDialog.close());
+restoreBotWebhooksButton?.addEventListener('click', async () => {
+  if (!window.confirm('Re-register Telegram webhooks for every enabled bot? This restores vote delivery but does not recreate any missed poll responses.')) {
+    return;
+  }
+  restoreBotWebhooksButton.disabled = true;
+  setStatus('Restoring Telegram webhooks...');
+  try {
+    const response = await fetch('/api/admin/bots/webhooks/restore', { method: 'POST' });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const failed = result.failures?.map((entry) => entry.id).join(', ');
+      throw new Error(result.error || (failed ? `Could not restore: ${failed}` : 'Unable to restore webhooks'));
+    }
+    setStatus(
+      `${result.restored.length} ${result.restored.length === 1 ? 'bot webhook restored' : 'bot webhooks restored'}. Use Verify bot for the affected group.`,
+      'success'
+    );
+  } catch (error) {
+    setStatus(`Error: ${error.message}`, 'error');
+  } finally {
+    restoreBotWebhooksButton.disabled = false;
+  }
+});
+
 document.getElementById('refresh-bot-identities').addEventListener('click', async () => {
   setStatus('Refreshing user and bot identities from Telegram...');
   const outcome = await loadUsers({ refresh: true });

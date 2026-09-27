@@ -205,11 +205,16 @@
     <section class="card">
       <div class="card-header">
         <h2>Users and bots</h2>
-        <button type="button" id="refresh-bot-identities" class="secondary">
-          <i data-lucide="refresh-cw" aria-hidden="true"></i> Refresh from Telegram
-        </button>
+        <span class="row-actions">
+          <button type="button" id="restore-bot-webhooks" class="secondary">
+            <i data-lucide="webhook" aria-hidden="true"></i> Restore bot webhooks
+          </button>
+          <button type="button" id="refresh-bot-identities" class="secondary">
+            <i data-lucide="refresh-cw" aria-hidden="true"></i> Refresh from Telegram
+          </button>
+        </span>
       </div>
-      <p class="hint">Bot details refresh here. A user's Telegram handle is verified and synchronized when they open Login_bot and press Start.</p>
+      <p class="hint">Restore bot webhooks if votes are no longer reaching Poll Details. Refresh updates cached Telegram identities. A user's Telegram handle is verified and synchronized when they open Login_bot and press Start.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Telegram account</th><th>Role</th><th>Bot</th><th>Bot handle</th><th>Status</th><th></th></tr></thead>
