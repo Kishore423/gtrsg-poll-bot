@@ -680,7 +680,7 @@ function createServer(db, telegram, options = {}) {
   // the deployed app: the encrypted BotFather tokens and per-bot webhook
   // secrets never need to leave the production environment.
   app.post('/api/admin/bots/webhooks/restore', wrap(async (req, res) => {
-    if (!db.listBots) {
+    if (!db.listBots || !db.getBot) {
       return res.status(501).json({ error: 'Supabase production database is required' });
     }
     if (!options.appUrl) {
@@ -694,7 +694,11 @@ function createServer(db, telegram, options = {}) {
     const restored = [];
     const failures = [];
     const bots = (await db.listBots()).filter((bot) => bot.enabled !== false);
-    for (const bot of bots) {
+    for (const listedBot of bots) {
+      // listBots intentionally returns a redacted, browser-safe representation.
+      // Fetch the full row only inside this admin-protected server operation.
+      const bot = await db.getBot(listedBot.id);
+      if (!bot || bot.enabled === false) continue;
       if (!bot.webhook_secret) {
         failures.push({ id: bot.id, error: 'Bot has no webhook secret' });
         continue;

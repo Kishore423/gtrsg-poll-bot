@@ -75,9 +75,14 @@ test('admin can restore enabled dedicated-bot webhooks without exposing bot toke
   const db = {
     async listBots() {
       return [
-        { id: 'active-bot', enabled: true, webhook_secret: 'active-secret' },
-        { id: 'disabled-bot', enabled: false, webhook_secret: 'disabled-secret' },
+        { id: 'active-bot', enabled: true },
+        { id: 'disabled-bot', enabled: false },
       ];
+    },
+    async getBot(id) {
+      return id === 'active-bot'
+        ? { id, enabled: true, webhook_secret: 'active-secret' }
+        : { id, enabled: false, webhook_secret: 'disabled-secret' };
     },
   };
   const telegram = {
@@ -125,9 +130,16 @@ test('admin webhook restoration reports a partial Telegram failure without hidin
   const db = {
     async listBots() {
       return [
-        { id: 'working-bot', enabled: true, webhook_secret: 'working-secret' },
-        { id: 'failed-bot', enabled: true, webhook_secret: 'failed-secret' },
+        { id: 'working-bot', enabled: true },
+        { id: 'failed-bot', enabled: true },
       ];
+    },
+    async getBot(id) {
+      return {
+        id,
+        enabled: true,
+        webhook_secret: id === 'working-bot' ? 'working-secret' : 'failed-secret',
+      };
     },
   };
   const telegram = {
