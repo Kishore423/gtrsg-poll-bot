@@ -704,12 +704,17 @@ function createServer(db, telegram, options = {}) {
         await telegram.setWebhook(bot.id, url, bot.webhook_secret);
         restored.push({ id: bot.id, url });
       } catch (error) {
-        failures.push({ id: bot.id, error: error.message || 'Telegram rejected webhook registration' });
+        const message = error.message || 'Telegram rejected webhook registration';
+        console.error(`Webhook restore failed for bot ${bot.id}:`, message);
+        failures.push({ id: bot.id, error: message });
       }
     }
 
     res.set('Cache-Control', 'no-store');
-    res.status(failures.length ? 502 : 200).json({ restored, failures });
+    // A working bot must not be reported as failed just because another bot
+    // could not be re-registered. Fetch treats 207 as successful, allowing the
+    // Admin page to show the useful per-bot outcome.
+    res.status(failures.length ? (restored.length ? 207 : 502) : 200).json({ restored, failures });
   }));
 
   app.post('/api/admin/bots/inspect-token', wrap(async (req, res) => {

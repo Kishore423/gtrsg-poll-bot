@@ -121,6 +121,39 @@ test('admin can restore enabled dedicated-bot webhooks without exposing bot toke
   }
 });
 
+test('admin webhook restoration reports a partial Telegram failure without hiding restored bots', async () => {
+  const db = {
+    async listBots() {
+      return [
+        { id: 'working-bot', enabled: true, webhook_secret: 'working-secret' },
+        { id: 'failed-bot', enabled: true, webhook_secret: 'failed-secret' },
+      ];
+    },
+  };
+  const telegram = {
+    async setWebhook(id) {
+      if (id === 'failed-bot') throw new Error('Telegram rejected this token');
+    },
+  };
+  const server = createServer(db, telegram, {
+    appUrl: 'https://example.test',
+    requireAdminAuth: true,
+    verifyUser: async () => ({ id: 'admin-1', telegram_user_id: '1002', role: 'admin', bot_id: null }),
+  }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const response = await fetch(`${baseUrl}/api/admin/bots/webhooks/restore`, { method: 'POST' });
+    assert.equal(response.status, 207);
+    assert.deepEqual(await response.json(), {
+      restored: [{ id: 'working-bot', url: 'https://example.test/api/telegram/working-bot' }],
+      failures: [{ id: 'failed-bot', error: 'Telegram rejected this token' }],
+    });
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
+});
+
 test('admin impersonation endpoint issues an effective-user session through the auth service', async () => {
   const calls = [];
   await withServer(async ({ baseUrl }) => {

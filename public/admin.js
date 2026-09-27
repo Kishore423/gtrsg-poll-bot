@@ -238,12 +238,16 @@ restoreBotWebhooksButton?.addEventListener('click', async () => {
     const response = await fetch('/api/admin/bots/webhooks/restore', { method: 'POST' });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const failed = result.failures?.map((entry) => entry.id).join(', ');
-      throw new Error(result.error || (failed ? `Could not restore: ${failed}` : 'Unable to restore webhooks'));
+      const failed = result.failures?.map((entry) => `${entry.id}: ${entry.error}`).join('; ');
+      throw new Error(result.error || (failed ? `Could not restore webhooks — ${failed}` : 'Unable to restore webhooks'));
     }
+    const failures = result.failures || [];
+    const failedSummary = failures.length
+      ? ` ${failures.length === 1 ? 'One bot could not be restored' : `${failures.length} bots could not be restored`}: ${failures.map((entry) => entry.id).join(', ')}.`
+      : '';
     setStatus(
-      `${result.restored.length} ${result.restored.length === 1 ? 'bot webhook restored' : 'bot webhooks restored'}. Use Verify bot for the affected group.`,
-      'success'
+      `${result.restored.length} ${result.restored.length === 1 ? 'bot webhook restored' : 'bot webhooks restored'}. Use Verify bot for the affected group.${failedSummary}`,
+      failures.length ? 'error' : 'success'
     );
   } catch (error) {
     setStatus(`Error: ${error.message}`, 'error');
