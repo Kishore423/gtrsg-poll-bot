@@ -232,9 +232,6 @@ if (removeUserBotButton) {
 
 document.getElementById('cancel-edit-user').addEventListener('click', () => editUserDialog.close());
 restoreBotWebhooksButton?.addEventListener('click', async () => {
-  if (!window.confirm('Re-register Telegram webhooks for every enabled bot? This restores vote delivery but does not recreate any missed poll responses.')) {
-    return;
-  }
   restoreBotWebhooksButton.disabled = true;
   setStatus('Restoring Telegram webhooks...');
   try {
