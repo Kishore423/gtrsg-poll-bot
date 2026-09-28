@@ -47,7 +47,16 @@ function confirmationDateTimeForEvent(eventDate, {
     : fallback;
 }
 
-function testingConfirmationDateTime(releaseDate, releaseTime, confirmationTime) {
+function testingConfirmationDateTime(releaseDate, releaseTime, confirmationTime, sameDay = false) {
+  if (sameDay) {
+    const [hours, minutes] = String(releaseTime || '').slice(0, 5).split(':').map(Number);
+    const totalMinutes = hours * 60 + minutes + 5;
+    if (!Number.isInteger(hours) || !Number.isInteger(minutes) || totalMinutes >= 24 * 60) {
+      throw new RangeError('Same-day testing needs a release time before 23:55');
+    }
+    const time = `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
+    return `${releaseDate}T${time}`;
+  }
   const time = String(confirmationTime || '').slice(0, 5) || '08:00';
   const release = String(releaseTime || '').slice(0, 5);
   const confirmationDate = time > release ? releaseDate : addLocalDays(releaseDate, 1);

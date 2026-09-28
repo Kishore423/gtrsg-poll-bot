@@ -44,6 +44,7 @@ const adminManagedUserSummary = document.getElementById('admin-managed-user-summ
 const confirmationDayField = document.getElementById('confirmation-day-field');
 const confirmationDaysBeforeField = document.getElementById('confirmation-days-before-field');
 const weeklyTestingMode = document.getElementById('weekly-testing-mode');
+const testingSameDay = document.getElementById('testing-same-day');
 const weeklyTestingStatus = document.getElementById('weekly-testing-status');
 const weeklyDisarmTesting = document.getElementById('weekly-disarm-testing');
 
@@ -437,6 +438,7 @@ function managedTemplateFormSchedule() {
     gap_weeks: Number(managedScheduleForm.elements.gap_weeks.value || 0),
     confirmation_send_type: managedScheduleForm.elements.confirmation_send_type.value || 'weekly_summary',
     confirmation_days_before_event: Number(managedScheduleForm.elements.confirmation_days_before_event.value || 1),
+    testing_same_day: Boolean(testingSameDay?.checked),
   };
 }
 
@@ -490,8 +492,15 @@ function testingArmConfirmationMessage(schedule, releaseDate, eventDates) {
     ? pollDates.map((date) => `- ${formatLocalDate(date)}`).join('\n')
     : '- No poll dates; every date in this batch is skipped.';
   const confirmationTime = String(schedule.confirmation_time || '').slice(0, 5);
-  const confirmationLine = schedule.confirmation_send_type === 'per_event_day'
-    ? `Confirmation time: ${confirmationTime}\nLater Testing confirmations: every 5 minutes`
+  const sameDayTime = (() => {
+    const [hours, minutes] = String(schedule.poll_release_time || '').slice(0, 5).split(':').map(Number);
+    const total = hours * 60 + minutes + 5;
+    return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+  })();
+  const confirmationLine = schedule.testing_same_day
+    ? `Same-day Testing confirmation: ${formatLocalDate(releaseDate)} at ${sameDayTime}\n${schedule.confirmation_send_type === 'per_event_day' ? 'Later Testing confirmations: every 5 minutes' : ''}`
+    : schedule.confirmation_send_type === 'per_event_day'
+      ? `Confirmation time: ${confirmationTime}\nLater Testing confirmations: every 5 minutes`
     : (() => {
       const confirmationAt = confirmationDateTimeForEvent(eventDates[0], schedule, '');
       const [confirmationDate, time] = confirmationAt.split('T');
@@ -911,6 +920,7 @@ function syncWeeklyTemplateFormFromSavedSchedule(telegramGroupId) {
   managedScheduleForm.elements.gap_weeks.value = String(schedule.gap_weeks ?? 0);
   managedScheduleForm.elements.confirmation_send_type.value = schedule.confirmation_send_type || 'weekly_summary';
   managedScheduleForm.elements.confirmation_days_before_event.value = String(schedule.confirmation_days_before_event ?? 1);
+  if (testingSameDay) testingSameDay.checked = Boolean(schedule.testing_same_day);
   syncConfirmationTypeFields();
   if (weeklyTestingMode) {
     weeklyTestingMode.checked = Boolean(storedSchedule?.testing_mode);
@@ -1213,6 +1223,9 @@ weeklyTestingMode?.addEventListener('change', () => {
   updateTemplateTimingPreview();
   updateTemplatePollPreview();
 });
+testingSameDay?.addEventListener('change', () => {
+  updateTemplateTimingPreview();
+});
 weeklyShiftEditor.addEventListener('input', updateTemplatePollPreview);
 weeklyShiftEditor.addEventListener('change', updateTemplatePollPreview);
 
@@ -1449,6 +1462,7 @@ managedScheduleForm.addEventListener('submit', async (event) => {
       : null;
     body.gap_weeks = Number(body.gap_weeks);
     body.testing_mode = Boolean(weeklyTestingMode?.checked);
+    body.testing_same_day = Boolean(testingSameDay?.checked);
 
     const releaseDate = nextReleaseDateForSchedule(body);
     const eventDates = batchRangeForReleaseDate(releaseDate, body.gap_weeks);

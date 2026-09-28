@@ -727,6 +727,56 @@ test('testing mode snapshots temporary poll content and spaces daily confirmatio
   assert.equal(created[6].close_at, created[6].resolved_confirmation_at);
 });
 
+test('same-day Testing starts confirmations five minutes after the poll release', async () => {
+  const created = [];
+  const db = {
+    async listManagedWeeklySchedules() {
+      return [{
+        id: 'schedule-test', telegram_group_id: 'group-test', service: 'WHCL', enabled: true,
+        testing_mode: true, testing_status: 'armed', testing_batch_id: '11111111-1111-4111-8111-111111111111',
+        testing_override: {
+          poll_release_day_of_week: 3, poll_release_time: '17:00', confirmation_time: '08:00',
+          confirmation_send_type: 'per_event_day', confirmation_days_before_event: 1,
+          testing_same_day: true, gap_weeks: 0, timezone: 'Asia/Singapore', enabled: true,
+          shifts: [{ label: '0900-1200', start_time: '09:00', end_time: '12:00', capacity: 1 }],
+        },
+      }];
+    },
+    async getActivePollForDate() { return null; },
+    async isPollDateExcluded() { return false; },
+    async createScheduledEvent(payload) { created.push(payload); return `poll-${created.length}`; },
+    async markManagedWeeklyScheduleTestRunning() {},
+  };
+  await generateScheduledPollsFromTemplates(db, new Date('2026-08-05T09:01:00Z'));
+  assert.equal(created[0].resolved_confirmation_at, '2026-08-05T09:05:00.000Z');
+  assert.equal(created[6].resolved_confirmation_at, '2026-08-05T09:35:00.000Z');
+});
+
+test('same-day Testing keeps a one-big-confirmation batch at the accelerated time', async () => {
+  const created = [];
+  const db = {
+    async listManagedWeeklySchedules() {
+      return [{
+        id: 'schedule-test', telegram_group_id: 'group-test', service: 'PSA', enabled: true,
+        testing_mode: true, testing_status: 'armed', testing_batch_id: '11111111-1111-4111-8111-111111111111',
+        testing_override: {
+          poll_release_day_of_week: 3, poll_release_time: '17:00', confirmation_time: '08:00',
+          confirmation_send_type: 'weekly_summary', confirmation_day_of_week: 5,
+          testing_same_day: true, gap_weeks: 0, timezone: 'Asia/Singapore', enabled: true,
+          shifts: [{ label: '0900-1200', start_time: '09:00', end_time: '12:00', capacity: 1 }],
+        },
+      }];
+    },
+    async getActivePollForDate() { return null; },
+    async isPollDateExcluded() { return false; },
+    async createScheduledEvent(payload) { created.push(payload); return `poll-${created.length}`; },
+    async markManagedWeeklyScheduleTestRunning() {},
+  };
+  await generateScheduledPollsFromTemplates(db, new Date('2026-08-05T09:01:00Z'));
+  assert.equal(created[0].resolved_confirmation_at, '2026-08-05T09:05:00.000Z');
+  assert.equal(created[6].resolved_confirmation_at, '2026-08-05T09:05:00.000Z');
+});
+
 test('completed Testing mode batches are automatically removed and restored', async () => {
   const completed = [];
   const db = {

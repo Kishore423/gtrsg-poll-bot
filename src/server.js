@@ -1441,6 +1441,7 @@ function createServer(db, telegram, options = {}) {
     }
     body.timezone = body.timezone || 'Asia/Singapore';
     body.enabled = body.enabled !== false;
+    body.testing_same_day = body.testing_same_day === true;
     const shifts = Array.isArray(body.shifts) ? body.shifts : [];
     for (const shift of shifts) {
       if (!shift.label || shift.label.length > 100 || !/^\d{2}:\d{2}$/.test(shift.start_time || '') ||
@@ -1465,7 +1466,8 @@ function createServer(db, telegram, options = {}) {
         ? testingConfirmationDateTime(
           testRelease.releaseDate,
           body.poll_release_time,
-          body.confirmation_time
+          body.confirmation_time,
+          body.testing_same_day
         )
         : managedTimingForEvent({
           service,

@@ -479,6 +479,11 @@ live only in Vercel env + the local (gitignored) `.env`.
   every enabled dedicated bot's webhook URL before scheduled work; if it has
   been cleared or replaced (for example by local long-polling), it restores the
   production URL before sending polls or confirmations.
+- **Same-day template testing:** the **Same-day testing** checkbox below
+  Confirmation mode applies only to an armed Testing batch. It keeps the saved
+  production confirmation timing unchanged, but sends the first test
+  confirmation five minutes after the test poll release; per-event test
+  confirmations continue at five-minute intervals.
 
 ### Live-DB findings (2026-07-12, verified by querying the session pooler)
 

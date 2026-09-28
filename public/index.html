@@ -501,6 +501,7 @@
     }
 
     .testing-mode-toggle {
+      display: inline-flex;
       min-height: 2.75rem;
       flex-direction: row;
       align-items: center;
@@ -1033,6 +1034,11 @@
                 <option value="per_event_day">Day-by-day confirmation, one day before each poll</option>
               </select>
               <span class="field-help">Gap weeks controls the event week for both confirmation modes.</span>
+              <span class="testing-mode-toggle">
+                <input type="checkbox" id="testing-same-day" name="testing_same_day" />
+                <span>Same-day testing</span>
+              </span>
+              <span class="field-help">Testing only: starts the confirmation five minutes after the test poll release. Day-by-day tests then continue five minutes apart.</span>
             </label>
             <label id="confirmation-day-field">Weekly confirmation day
               <select name="confirmation_day_of_week" required>

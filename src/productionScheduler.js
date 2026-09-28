@@ -306,11 +306,12 @@ async function generateScheduledPollsFromTemplates(db, now = new Date()) {
     }
     const confirmationSendType = effectiveSchedule.confirmation_send_type ||
       (service === 'PSA' ? 'weekly_summary' : 'per_event_day');
-    if (testingBatchId && confirmationSendType === 'per_event_day' && payloads.length) {
+    if (testingBatchId && payloads.length) {
       const [confirmationDate, confirmationTime] = testingConfirmationDateTime(
         releaseDate,
         releaseTime,
-        effectiveSchedule.confirmation_time
+        effectiveSchedule.confirmation_time,
+        effectiveSchedule.testing_same_day === true
       ).split('T');
       const firstConfirmationAt = zonedDateTimeToUtc(
         confirmationDate,
@@ -319,7 +320,7 @@ async function generateScheduledPollsFromTemplates(db, now = new Date()) {
       );
       payloads.forEach((payload, index) => {
         payload.resolved_confirmation_at = new Date(
-          firstConfirmationAt.getTime() + index * 5 * 60 * 1000
+          firstConfirmationAt.getTime() + (confirmationSendType === 'per_event_day' ? index * 5 * 60 * 1000 : 0)
         ).toISOString();
         payload.close_at = payload.resolved_confirmation_at;
       });

@@ -101,6 +101,14 @@ test('Testing confirmation uses the next configured time after its release', () 
     testingConfirmationDateTime('2026-08-14', '17:30', '17:30'),
     '2026-08-15T17:30'
   );
+  assert.equal(
+    testingConfirmationDateTime('2026-08-14', '17:30', '08:00', true),
+    '2026-08-14T17:35'
+  );
+  assert.throws(
+    () => testingConfirmationDateTime('2026-08-14', '23:56', '08:00', true),
+    /before 23:55/
+  );
 });
 
 test('legacy release ranges are limited to one event week', () => {

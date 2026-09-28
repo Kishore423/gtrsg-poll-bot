@@ -583,6 +583,11 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   every enabled dedicated bot's webhook URL before scheduled work; if it has
   been cleared or replaced (for example by local long-polling), it restores the
   production URL before sending polls or confirmations.
+- **Same-day template testing:** the **Same-day testing** checkbox below
+  Confirmation mode applies only to an armed Testing batch. It keeps the saved
+  production confirmation timing unchanged, but sends the first test
+  confirmation five minutes after the test poll release; per-event test
+  confirmations continue at five-minute intervals.
 - **Telegram auth configuration:** the identity migration is applied and
   existing users are mapped by immutable Telegram ID. Vercel Production requires
   `APP_SESSION_SECRET`, `TELEGRAM_LOGIN_BOT_TOKEN`, and

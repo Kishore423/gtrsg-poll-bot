@@ -1668,6 +1668,7 @@ test('weekly Testing mode arms a temporary override without replacing production
       confirmation_days_before_event: 1,
       gap_weeks: 0,
       testing_mode: true,
+      testing_same_day: true,
       shifts: [{ label: 'temporary', start_time: '09:00', end_time: '12:00', capacity: 2 }],
     }));
     assert.equal(response.status, 200);
@@ -1681,7 +1682,7 @@ test('weekly Testing mode arms a temporary override without replacing production
     assert.equal(
       new Date(result.testing_first_confirmation_at).getTime() -
         new Date(result.testing_release_at).getTime(),
-      10 * 60 * 1000
+      5 * 60 * 1000
     );
     assert.equal(
       new Date(result.testing_final_confirmation_at).getTime() -
