@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
+const { join } = require('node:path');
 const {
   runScheduledPolls,
   runScheduledConfirmations,
@@ -326,6 +328,11 @@ test('scheduled poll runner drains a partially claimed batch within one schedule
   assert.deepEqual(await runScheduledPolls(db, telegram), ['poll-1', 'poll-2', 'poll-3']);
   assert.deepEqual(sent, ['Mon', 'Tue', 'Wed']);
   assert.deepEqual(claimCalls, [10, 9, 8, 7]);
+});
+
+test('due scheduled polls are claimed before stale failed retries', () => {
+  const postgresSource = readFileSync(join(__dirname, '..', 'src', 'db', 'postgres.js'), 'utf8');
+  assert.match(postgresSource, /order by case when sp\.status = 'scheduled' then 0 else 1 end,\s*sp\.resolved_release_at, e\.event_date, sp\.id/);
 });
 
 test('confirmation edits the existing message', async () => {

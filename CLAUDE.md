@@ -316,6 +316,8 @@ The app currently ships BOTH, selected at runtime:
   weekly release cannot leave later due polls behind when a claim returns only
   part of the batch. `claim_due_confirmations` requires a stored Telegram poll
   ID, preventing an unsent poll from producing an empty confirmation.
+  Due-poll claims prioritize fresh `scheduled` rows before stale `failed`
+  retries, preventing unrelated historical failures from blocking a new batch.
 - Allocation is capacity-bound, strictly first-come-first-served by vote arrival
   (`voted_at_ms`); a voter's original arrival survives edits; a retraction (empty
   `option_ids`) removes them.

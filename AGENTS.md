@@ -532,6 +532,8 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   due polls in a weekly test release together even if a database claim returns
   only part of that batch. Confirmation claims require a successfully stored
   Telegram poll ID; an unsent poll can never produce an empty confirmation.
+  The shared due-poll claim prioritizes fresh `scheduled` rows over stale
+  `failed` retries, so a past failure in one workflow cannot starve a new batch.
   Before arming Testing, the browser confirmation lists the resolved release
   date/time and each non-skipped poll date. Weekly-summary mode also lists its
   confirmation date/time; per-event mode lists only its confirmation time.

@@ -163,7 +163,11 @@ function createPostgresDb({ sql = createSql(), readOnly = false } = {}) {
             and (sp.claimed_at is null or sp.claimed_at < now() - interval '10 minutes')
             and (w.id is null or not w.testing_mode or
               ('template-testing:' || w.testing_batch_id::text)=any(e.operational_tags))
-          order by e.event_date, sp.resolved_release_at, sp.id
+          -- A stale failed poll must not consume the entire claim window and
+          -- delay a newly scheduled weekly release (including a seven-day test
+          -- batch). Retry failures after fresh scheduled polls instead.
+          order by case when sp.status = 'scheduled' then 0 else 1 end,
+            sp.resolved_release_at, e.event_date, sp.id
           for update of sp skip locked limit greatest(1, least(p_limit, 50))
         ), claimed as (
           update scheduled_polls sp set status='sending', claim_token=gen_random_uuid(),
