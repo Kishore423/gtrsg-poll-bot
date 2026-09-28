@@ -471,6 +471,40 @@ function createServer(db, telegram, options = {}) {
     return url;
   }
 
+  // Production owns the polling-bot webhook. Local long-polling deliberately
+  // removes it, and Telegram permits only one update delivery method per bot.
+  // The minute scheduler therefore repairs any URL drift before it releases
+  // polls or posts confirmations. This is intentionally best-effort: a
+  // temporary Telegram API failure must not stop unrelated scheduler work.
+  async function repairDedicatedBotWebhookDrift() {
+    if (!options.appUrl || !db.listBots || !db.getBot ||
+        !telegram.getWebhookInfo || !telegram.setWebhook) {
+      return { restored: [], failures: [] };
+    }
+    const baseUrl = String(options.appUrl).replace(/\/$/, '');
+    const restored = [];
+    const failures = [];
+    const listedBots = (await db.listBots()).filter((bot) => bot.enabled !== false);
+    for (const listedBot of listedBots) {
+      const bot = await db.getBot(listedBot.id);
+      if (!bot || bot.enabled === false) continue;
+      const url = `${baseUrl}/api/telegram/${bot.id}`;
+      try {
+        const info = await telegram.getWebhookInfo(bot.id);
+        if (info?.url === url) continue;
+        if (!bot.webhook_secret) throw new Error('Bot has no webhook secret');
+        await telegram.setWebhook(bot.id, url, bot.webhook_secret);
+        restored.push(bot.id);
+        console.warn(`Repaired Telegram webhook drift for bot ${bot.id}`);
+      } catch (error) {
+        const message = error.message || 'Telegram webhook check failed';
+        failures.push({ id: bot.id, error: message });
+        console.error(`Telegram webhook health check failed for bot ${bot.id}:`, message);
+      }
+    }
+    return { restored, failures };
+  }
+
   function telegramClientForToken(token) {
     return options.createTelegramClientForToken
       ? options.createTelegramClientForToken(token)
@@ -1828,10 +1862,11 @@ function createServer(db, telegram, options = {}) {
 
   app.all('/api/cron/scheduler', wrap(async (req, res) => {
     if (!cronGuard(req, res)) return;
+    const webhooks = await repairDedicatedBotWebhookDrift();
     const polls = await runScheduledPolls(db, telegram);
     const closures = await runScheduledClosures(db, telegram);
     const confirmations = await runScheduledConfirmations(db, telegram);
-    res.json({ polls: polls.length, closures: closures.length, confirmations: confirmations.length });
+    res.json({ polls: polls.length, closures: closures.length, confirmations: confirmations.length, webhooks });
   }));
 
   return app;

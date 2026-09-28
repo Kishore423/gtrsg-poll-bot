@@ -121,6 +121,10 @@ function createTelegramClient({ tokens = {}, resolveToken = null, fetchImpl = fe
     });
   }
 
+  async function getWebhookInfo(botKey) {
+    return call(botKey, 'getWebhookInfo');
+  }
+
   async function getMe(botKey) {
     return call(botKey, 'getMe');
   }
@@ -146,6 +150,7 @@ function createTelegramClient({ tokens = {}, resolveToken = null, fetchImpl = fe
     deleteMessages,
     setWebhook,
     deleteWebhook,
+    getWebhookInfo,
     getMe,
     getChat,
     getMyName,

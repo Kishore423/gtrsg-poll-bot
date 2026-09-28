@@ -579,7 +579,10 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   uses encrypted database tokens and per-bot webhook secrets without exposing
   either to the browser or local environment. The Admin roster exposes this as
   **Restore bot webhooks**. Use **Verify bot** afterwards to confirm the bot can
-  still post to the intended group.
+  still post to the intended group. The production minute scheduler also checks
+  every enabled dedicated bot's webhook URL before scheduled work; if it has
+  been cleared or replaced (for example by local long-polling), it restores the
+  production URL before sending polls or confirmations.
 - **Telegram auth configuration:** the identity migration is applied and
   existing users are mapped by immutable Telegram ID. Vercel Production requires
   `APP_SESSION_SECRET`, `TELEGRAM_LOGIN_BOT_TOKEN`, and

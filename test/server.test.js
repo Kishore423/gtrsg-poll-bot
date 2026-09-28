@@ -126,6 +126,33 @@ test('admin can restore enabled dedicated-bot webhooks without exposing bot toke
   }
 });
 
+test('production scheduler repairs a dedicated bot webhook that no longer points to production', async () => {
+  const calls = [];
+  const db = {
+    async listBots() { return [{ id: 'wheelchair-bot', enabled: true }]; },
+    async getBot() { return { id: 'wheelchair-bot', enabled: true, webhook_secret: 'secret' }; },
+  };
+  const telegram = {
+    async getWebhookInfo() { return { url: 'https://local-tunnel.test/api/telegram/wheelchair-bot' }; },
+    async setWebhook(...args) { calls.push(args); },
+  };
+  const server = createServer(db, telegram, { appUrl: 'https://gtrsg-poll-bot.vercel.app' }).listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/cron/scheduler`);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.deepEqual(body.webhooks, { restored: ['wheelchair-bot'], failures: [] });
+    assert.deepEqual(calls, [[
+      'wheelchair-bot',
+      'https://gtrsg-poll-bot.vercel.app/api/telegram/wheelchair-bot',
+      'secret',
+    ]]);
+  } finally {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
 test('admin webhook restoration reports a partial Telegram failure without hiding restored bots', async () => {
   const db = {
     async listBots() {
