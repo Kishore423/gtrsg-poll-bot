@@ -528,6 +528,10 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   messages are deleted manually. Polls has no testing cleanup/reset button and
   refreshes every 15 seconds. Legacy rehearsal/reset endpoints remain only for
   compatibility and are not part of the primary UI.
+  The scheduled-poll runner drains partial claims up to its batch cap, so all
+  due polls in a weekly test release together even if a database claim returns
+  only part of that batch. Confirmation claims require a successfully stored
+  Telegram poll ID; an unsent poll can never produce an empty confirmation.
   Before arming Testing, the browser confirmation lists the resolved release
   date/time and each non-skipped poll date. Weekly-summary mode also lists its
   confirmation date/time; per-event mode lists only its confirmation time.

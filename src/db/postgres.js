@@ -194,6 +194,10 @@ function createPostgresDb({ sql = createSql(), readOnly = false } = {}) {
           join events e on e.id=sp.event_id
           left join weekly_poll_schedules w on w.id=sp.weekly_schedule_id
           where cm.status in ('scheduled','failed') and cm.resolved_send_at <= now()
+            -- Never announce an event whose Telegram poll was not successfully
+            -- posted. A failed or delayed poll stays eligible for its normal
+            -- send retry instead of producing an empty confirmation message.
+            and sp.telegram_poll_id is not null
             and (cm.claimed_at is null or cm.claimed_at < now() - interval '10 minutes')
             and (w.id is null or not w.testing_mode or
               ('template-testing:' || w.testing_batch_id::text)=any(e.operational_tags))

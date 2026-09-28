@@ -363,17 +363,30 @@ async function runScheduledPolls(db, telegram, limit = 10) {
   if (!db.claimDuePolls) return [];
   await generateScheduledPollsFromTemplates(db);
   const completed = await runDueTemplateRehearsalStarts(db, telegram);
-  for (const poll of sortClaimedPollsForSending(await db.claimDuePolls(limit))) {
-    try {
-      const result = await telegram.sendPoll(poll.service, poll.telegram_chat_id,
-        poll.poll_question, poll.poll_options);
-      if (!await db.completePollSend(poll.id, poll.claim_token, result.poll_id, result.message_id)) {
-        throw new Error('Poll claim was no longer valid after Telegram send');
+  // A weekly test batch creates up to seven polls at one release time. Drain the
+  // due queue up to the requested cap rather than assuming a single claim call
+  // always returns the whole batch. This also tolerates a concurrent scheduler
+  // worker claiming only part of the batch first.
+  let remaining = Math.max(1, Math.min(Number(limit) || 10, 50));
+  const processedPollIds = new Set();
+  while (remaining > 0) {
+    const claimed = sortClaimedPollsForSending(await db.claimDuePolls(remaining))
+      .filter((poll) => !processedPollIds.has(poll.id));
+    if (!claimed.length) break;
+    for (const poll of claimed) {
+      processedPollIds.add(poll.id);
+      try {
+        const result = await telegram.sendPoll(poll.service, poll.telegram_chat_id,
+          poll.poll_question, poll.poll_options);
+        if (!await db.completePollSend(poll.id, poll.claim_token, result.poll_id, result.message_id)) {
+          throw new Error('Poll claim was no longer valid after Telegram send');
+        }
+        completed.push(poll.id);
+      } catch (error) {
+        await db.failPollSend(poll.id, poll.claim_token, error.message);
       }
-      completed.push(poll.id);
-    } catch (error) {
-      await db.failPollSend(poll.id, poll.claim_token, error.message);
     }
+    remaining -= claimed.length;
   }
   return completed;
 }

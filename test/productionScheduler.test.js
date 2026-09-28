@@ -300,6 +300,34 @@ test('scheduled poll sends claimed rows in event-date order even when the databa
   assert.deepEqual(sent.map((question) => question.slice(0, 10)), ['Mon, 20Jul', 'Tue, 21Jul', 'Thu, 23Jul']);
 });
 
+test('scheduled poll runner drains a partially claimed batch within one scheduler run', async () => {
+  const sent = [];
+  const claimCalls = [];
+  const rows = [
+    { id: 'poll-1', claim_token: 'claim-1', service: 'bot-1', telegram_chat_id: '-1', poll_question: 'Mon', poll_options: ['A'] },
+    { id: 'poll-2', claim_token: 'claim-2', service: 'bot-1', telegram_chat_id: '-1', poll_question: 'Tue', poll_options: ['A'] },
+    { id: 'poll-3', claim_token: 'claim-3', service: 'bot-1', telegram_chat_id: '-1', poll_question: 'Wed', poll_options: ['A'] },
+  ];
+  const db = {
+    async claimDuePolls(limit) {
+      claimCalls.push(limit);
+      return rows.length ? [rows.shift()] : [];
+    },
+    async completePollSend() { return true; },
+    async failPollSend() { throw new Error('unexpected failure'); },
+  };
+  const telegram = {
+    async sendPoll(_service, _chatId, question) {
+      sent.push(question);
+      return { poll_id: question, message_id: sent.length };
+    },
+  };
+
+  assert.deepEqual(await runScheduledPolls(db, telegram), ['poll-1', 'poll-2', 'poll-3']);
+  assert.deepEqual(sent, ['Mon', 'Tue', 'Wed']);
+  assert.deepEqual(claimCalls, [10, 9, 8, 7]);
+});
+
 test('confirmation edits the existing message', async () => {
   const completed = [];
   const db = {
