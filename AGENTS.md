@@ -534,6 +534,10 @@ Supabase ref `flbcgncbwoavqtrlpnfq`. No secrets in this file (Vercel env + local
   Telegram poll ID; an unsent poll can never produce an empty confirmation.
   The shared due-poll claim prioritizes fresh `scheduled` rows over stale
   `failed` retries, so a past failure in one workflow cannot starve a new batch.
+  Keep the startup SQL declarations aligned with the versioned Supabase
+  functions—`claim_due_confirmations` returns `confirmation_send_type` before
+  its claim token. Versioned migrations are the reliable production path when a
+  server startup patch cannot obtain a database connection.
   Before arming Testing, the browser confirmation lists the resolved release
   date/time and each non-skipped poll date. Weekly-summary mode also lists its
   confirmation date/time; per-event mode lists only its confirmation time.

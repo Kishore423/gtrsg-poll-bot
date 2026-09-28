@@ -333,6 +333,7 @@ test('scheduled poll runner drains a partially claimed batch within one schedule
 test('due scheduled polls are claimed before stale failed retries', () => {
   const postgresSource = readFileSync(join(__dirname, '..', 'src', 'db', 'postgres.js'), 'utf8');
   assert.match(postgresSource, /order by case when sp\.status = 'scheduled' then 0 else 1 end,\s*sp\.resolved_release_at, e\.event_date, sp\.id/);
+  assert.match(postgresSource, /show_empty_shifts boolean, confirmation_send_type text, claim_token uuid/);
 });
 
 test('confirmation edits the existing message', async () => {

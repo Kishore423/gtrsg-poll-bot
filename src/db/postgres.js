@@ -188,7 +188,7 @@ function createPostgresDb({ sql = createSql(), readOnly = false } = {}) {
       returns table (
         id uuid, event_id uuid, scheduled_poll_id uuid, service text, telegram_chat_id bigint,
         telegram_message_id bigint, header_text text, footer_text text, resolved_send_at timestamptz,
-        show_waiting_list boolean, show_empty_shifts boolean, claim_token uuid
+        show_waiting_list boolean, show_empty_shifts boolean, confirmation_send_type text, claim_token uuid
       ) language plpgsql security definer set search_path=public as $$
       begin
         return query
@@ -214,7 +214,7 @@ function createPostgresDb({ sql = createSql(), readOnly = false } = {}) {
         )
         select c.id, c.event_id, c.scheduled_poll_id, coalesce(g.bot_ref::text, g.bot_id),
           g.telegram_chat_id, c.telegram_message_id, c.header_text, c.footer_text, c.resolved_send_at,
-          c.show_waiting_list, c.show_empty_shifts, c.claim_token
+          c.show_waiting_list, c.show_empty_shifts, c.confirmation_send_type, c.claim_token
         from claimed c join telegram_groups g on g.id=c.telegram_group_id and g.enabled;
       end $$;
     `;
