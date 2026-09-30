@@ -310,6 +310,13 @@ Vercel Cron** for hosting/scheduling.
   webhooks to start Telegram long-polling.
 - After every code change, review both `CLAUDE.md` and `AGENTS.md` and keep them
   aligned. No artificial changelog entries.
+- **Git and CI/CD:** feature/fix branches start from and open pull requests into
+  `dev`; only `dev` may open a pull request into protected `main`. GitHub Actions
+  gates both branches with branch-policy validation, JavaScript syntax checks,
+  unit tests with coverage thresholds, dependency auditing,
+  and CodeQL. Dependabot targets `dev`. Vercel Git integration treats `main` as
+  the production branch and automatically deploys each protected merge; other
+  branches remain preview deployments.
 
 ## 2026-08-05 fixes (multi-tenant bugs + deployment sheet)
 

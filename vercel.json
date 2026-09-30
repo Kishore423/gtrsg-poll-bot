@@ -17,8 +17,5 @@
   ],
   "crons": [
     { "path": "/api/cron/scheduler", "schedule": "0 0 * * *" }
-  ],
-  "git": {
-    "deploymentEnabled": { "main": false }
-  }
+  ]
 }
