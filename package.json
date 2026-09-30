@@ -20,7 +20,8 @@
     "build": "npm run check",
     "lint": "npm run check",
     "verify:migration": "node scripts/verify-migration.js",
-    "test": "node --test"
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-lines=80 --test-coverage-branches=65 --test-coverage-functions=80"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.2",

@@ -428,6 +428,13 @@ The app currently ships BOTH, selected at runtime:
 - Manual human steps: create the BotFather bots (done — tokens provided),
   provision Supabase, set env vars, deploy on Vercel, add each bot to its group.
 - After every code change, review `CLAUDE.md` and `AGENTS.md` and update both.
+- **Git and CI/CD:** feature/fix branches start from and open pull requests into
+  `dev`; only `dev` may open a pull request into protected `main`. GitHub Actions
+  gates both branches with branch-policy validation, JavaScript syntax checks,
+  unit tests with coverage thresholds, dependency auditing,
+  and CodeQL. Dependabot targets `dev`. Vercel Git integration treats `main` as
+  the production branch and automatically deploys each protected merge; other
+  branches remain preview deployments.
  
 ## Deployment (Vercel + Supabase) — current runbook
 
